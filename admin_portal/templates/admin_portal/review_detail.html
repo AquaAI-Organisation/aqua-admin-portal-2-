@@ -1,0 +1,226 @@
+{% extends 'admin_portal/base.html' %}
+{% load portal_tags %}
+{% block title %}Review {{ review.id|truncatechars:12 }} · {{ APP_NAME }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Review Detail</h1>
+    <p class="page-subtitle">{{ review.subject_type|title }}: {{ review.subject_display_name|default:review.subject_user_email }}</p>
+  </div>
+  <div class="page-actions">
+    <span class="badge {{ review.badge_class }}" style="font-size:0.9rem;padding:6px 14px;">
+      <span class="badge-dot"></span> {{ review.decision|upper }}
+    </span>
+    {% if IS_SUPER_ADMIN %}
+    <form method="post" action="{% url 'admin_portal:review_rerun' review.id %}" style="display:inline;">{% csrf_token %}
+      <button class="btn btn-sm">⟳ Re-run AI</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+{% if review.manually_overridden %}
+<div class="override-banner">
+  <span class="override-icon">⚡</span>
+  <div>
+    <strong style="color:var(--purple);">Manually overridden</strong>
+    <span style="color:var(--text-muted);font-size:0.85rem;">
+      by {{ review.overridden_by.email|default:"system" }}
+      — original decision was <strong>{{ review.original_decision }}</strong>
+    </span>
+    {% if review.override_reason %}
+    <div style="color:var(--text-secondary);font-size:0.85rem;margin-top:2px;">{{ review.override_reason }}</div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{% if review.error %}
+<div class="message error">{{ review.error }}</div>
+{% endif %}
+
+<!-- Key details -->
+<div class="card">
+  <div class="kv-grid">
+    <div class="kv-label">Role</div>
+    <div class="kv-value"><span class="badge {{ review.subject_type }}">{{ review.subject_type }}</span></div>
+    <div class="kv-label">Display name</div>
+    <div class="kv-value">{{ review.subject_display_name|default:'-' }}</div>
+    <div class="kv-label">Email</div>
+    <div class="kv-value">{{ review.subject_user_email|default:'-' }}</div>
+    <div class="kv-label">Confidence</div>
+    <div class="kv-value">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div class="confidence-bar" style="max-width:200px;">
+          <div class="confidence-fill {{ review.confidence_level }}" style="width:{{ review.confidence_percent }}%;"></div>
+        </div>
+        <span style="font-family:var(--font-mono);font-weight:700;">{{ review.confidence|floatformat:3 }}</span>
+        <span class="badge {{ review.confidence_level }}" style="font-size:0.7rem;">{{ review.confidence_level }}</span>
+      </div>
+    </div>
+    <div class="kv-label">AI Model</div>
+    <div class="kv-value" style="font-family:var(--font-mono);font-size:0.82rem;">{{ review.ai_model|default:'-' }}</div>
+    <div class="kv-label">Created</div>
+    <div class="kv-value">{{ review.created_at|date:'d M Y H:i:s' }}</div>
+    <div class="kv-label">Decided at</div>
+    <div class="kv-value">{{ review.decided_at|date:'d M Y H:i:s'|default:'-' }}</div>
+  </div>
+</div>
+
+<!-- Rationale -->
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">AI Rationale</div>
+  </div>
+  <p style="color:var(--text-secondary);line-height:1.7;">{{ review.rationale|default:'No rationale provided.' }}</p>
+</div>
+
+<!-- Scores -->
+{% if review.evidence.scores %}
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">Dimension Scores</div>
+  </div>
+  <div class="score-row">
+    {% for key, val in review.evidence.scores.items %}
+    <div class="score-pill">
+      <div class="score-bar"><div class="score-fill" style="width:{% widthratio val 1 100 %}%;"></div></div>
+      <span class="score-label">{{ key }}</span>
+      <span class="score-val">{{ val|floatformat:2 }}</span>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- Evidence & Actions side by side -->
+<div class="grid-2-equal">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Evidence</div>
+    </div>
+    {% if review.evidence.bullets %}
+      {% for bullet in review.evidence.bullets %}
+        <div style="padding:6px 0;border-bottom:1px solid var(--border-subtle);font-size:0.85rem;color:var(--text-secondary);">
+          <span style="color:var(--aqua);margin-right:6px;">›</span> {{ bullet }}
+        </div>
+      {% endfor %}
+    {% else %}
+      <pre class="json">{{ review.evidence|jsonify }}</pre>
+    {% endif %}
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Actions</div>
+    </div>
+    <div style="margin-bottom:12px;">
+      <div class="card-subtitle" style="margin-bottom:6px;">Recommended</div>
+      <pre class="json">{{ review.recommended_actions|jsonify }}</pre>
+    </div>
+    <div>
+      <div class="card-subtitle" style="margin-bottom:6px;">Applied</div>
+      <pre class="json">{{ review.applied_actions|jsonify }}</pre>
+    </div>
+  </div>
+</div>
+
+<!-- External profile data -->
+{% if external_user %}
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">External User Profile</div>
+  </div>
+  <div class="kv-grid">
+    <div class="kv-label">Name</div>
+    <div class="kv-value">{{ external_user.name|default:"-" }} ({{ external_user.first_name }} {{ external_user.last_name }})</div>
+    <div class="kv-label">Email</div>
+    <div class="kv-value">{{ external_user.email }}</div>
+    <div class="kv-label">Phone</div>
+    <div class="kv-value">{{ external_user.phone|default:"-" }}</div>
+    <div class="kv-label">Role</div>
+    <div class="kv-value">{{ external_user.role }}</div>
+    <div class="kv-label">Verified</div>
+    <div class="kv-value">{{ external_user.is_verified|yesno:"Yes,No" }}</div>
+    <div class="kv-label">Trust Score</div>
+    <div class="kv-value">{{ external_user.current_trust_score|default:"-" }}</div>
+    <div class="kv-label">At Risk</div>
+    <div class="kv-value">{{ external_user.is_at_risk|yesno:"Yes,No" }}</div>
+    <div class="kv-label">Joined</div>
+    <div class="kv-value">{{ external_user.date_joined|date:'d M Y H:i'|default:"-" }}</div>
+  </div>
+</div>
+{% endif %}
+
+{% if profile %}
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">{{ review.subject_type|title }} Profile Details</div>
+  </div>
+  <div class="kv-grid">
+    <div class="kv-label">Company</div>
+    <div class="kv-value">{{ profile.company_name|default:"-" }}</div>
+    <div class="kv-label">Bio</div>
+    <div class="kv-value">{{ profile.bio|default:"-"|truncatechars:300 }}</div>
+    <div class="kv-label">Website</div>
+    <div class="kv-value">{% if profile.website %}<a href="{{ profile.website }}" target="_blank">{{ profile.website }}</a>{% else %}-{% endif %}</div>
+    <div class="kv-label">Business Phone</div>
+    <div class="kv-value">{{ profile.business_phone|default:"-" }}</div>
+    <div class="kv-label">Business Address</div>
+    <div class="kv-value">{{ profile.business_address|default:"-" }}</div>
+    <div class="kv-label">Verification Level</div>
+    <div class="kv-value">{{ profile.verification_level|default:"none" }}</div>
+    <div class="kv-label">Active</div>
+    <div class="kv-value">{{ profile.is_active|yesno:"Yes,No" }}</div>
+    <div class="kv-label">Verified</div>
+    <div class="kv-value">{{ profile.is_verified|yesno:"Yes,No" }}</div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Flags -->
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">Flags linked to this review</div>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <tr><th>Severity</th><th>Reason</th><th>Status</th><th></th></tr>
+      {% for f in flags %}
+      <tr>
+        <td><span class="badge {{ f.severity }}"><span class="badge-dot"></span>{{ f.severity }}</span></td>
+        <td style="font-size:0.85rem;">{{ f.reason|truncatechars:120 }}</td>
+        <td>{% if f.resolved %}<span class="badge ok">resolved</span>{% else %}<span class="badge warn">open</span>{% endif %}</td>
+        <td><a href="{% url 'admin_portal:flag_detail' f.id %}" class="btn btn-sm">Open</a></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="4" style="color:var(--text-muted);padding:16px;text-align:center;">No flags for this review.</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+
+<!-- Manual Override (super admins only) -->
+{% if IS_SUPER_ADMIN and not review.manually_overridden and review.decision != 'pending' %}
+<div class="override-panel">
+  <h3>⚡ Manual Override</h3>
+  <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:14px;">
+    Override the AI's decision. This will immediately apply the new decision to the external account.
+  </p>
+  <form method="post" action="{% url 'admin_portal:review_override' review.id %}">
+    {% csrf_token %}
+    <div class="radio-group">
+      <label class="radio-option">
+        <input type="radio" name="new_decision" value="approved" required>
+        <span style="color:var(--green);">✓ Approve</span>
+      </label>
+      <label class="radio-option">
+        <input type="radio" name="new_decision" value="rejected">
+        <span style="color:var(--red);">✕ Reject</span>
+      </label>
+    </div>
+    <textarea name="reason" rows="3" placeholder="Explain why you are overriding this decision (min 10 chars)..." required minlength="10" style="width:100%;margin-bottom:10px;"></textarea>
+    <button type="submit" class="btn-primary">Apply Override</button>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,123 @@
+{% extends 'admin_portal/base.html' %}
+{% block title %}Team Access · {{ APP_NAME }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Team Access Control</h1>
+    <p class="page-subtitle">Only super-admins (Steven &amp; Ben) can manage team access and roles</p>
+  </div>
+</div>
+
+<!-- Role legend -->
+<div class="card" style="padding:14px 18px;">
+  <div style="display:flex;gap:20px;flex-wrap:wrap;font-size:0.85rem;align-items:center;">
+    <strong style="color:var(--text-muted);">Roles:</strong>
+    <span><span class="badge ok">Super Admin</span> Full control — Steven &amp; Ben only</span>
+    <span><span class="badge info">Developer</span> Read + write — updates notify super-admins</span>
+    <span><span class="badge muted">Guest</span> Read-only access</span>
+  </div>
+</div>
+
+<!-- Invite form with role selector -->
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">Invite New Admin</div>
+  </div>
+  <form method="post" action="{% url 'admin_portal:admin_user_invite' %}" class="form-row">
+    {% csrf_token %}
+    <input type="email" name="email" placeholder="new.admin@example.com" required style="flex:1;min-width:200px;">
+    <input type="text" name="full_name" placeholder="Full name (optional)">
+    <select name="role">
+      <option value="guest">Guest (read-only)</option>
+      <option value="developer">Developer (read + write)</option>
+    </select>
+    <button class="btn-primary" type="submit">⊕ Send Invite</button>
+  </form>
+</div>
+
+<!-- Current users -->
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">Current Admin Users</div>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <tr><th>Email</th><th>Name</th><th>Role</th><th>Status</th><th>Last Login</th><th>Actions</th></tr>
+      {% for u in users %}
+      <tr>
+        <td>
+          <div class="cell-name">{{ u.email }}</div>
+        </td>
+        <td>{{ u.full_name|default:'-' }}</td>
+        <td>
+          {% if u.is_super_admin %}
+            <span class="badge ok">Super Admin</span>
+          {% elif u.role == 'developer' %}
+            <span class="badge info">Developer</span>
+          {% else %}
+            <span class="badge muted">Guest</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if u.is_active %}
+            <span class="status-dot active"></span> Active
+          {% else %}
+            <span class="status-dot inactive"></span> Inactive
+          {% endif %}
+        </td>
+        <td style="font-size:0.82rem;color:var(--text-muted);">{{ u.last_login|date:'d M Y H:i'|default:'Never' }}</td>
+        <td>
+          {% if not u.is_super_admin and u.id != request.user.id %}
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+            <!-- Role change -->
+            <form method="post" action="{% url 'admin_portal:change_user_role' u.id %}" style="display:inline-flex;gap:4px;align-items:center;">
+              {% csrf_token %}
+              <select name="role" style="padding:4px 8px;font-size:0.78rem;">
+                <option value="guest" {% if u.role == 'guest' %}selected{% endif %}>Guest</option>
+                <option value="developer" {% if u.role == 'developer' %}selected{% endif %}>Developer</option>
+              </select>
+              <button class="btn btn-sm" type="submit">Set</button>
+            </form>
+            <!-- Revoke -->
+            <form method="post" action="{% url 'admin_portal:admin_user_revoke' u.id %}" style="display:inline;">
+              {% csrf_token %}
+              <button class="btn-danger btn-sm" type="submit" onclick="return confirm('Revoke access for {{ u.email }}?')">Revoke</button>
+            </form>
+          </div>
+          {% else %}
+            <span style="color:var(--text-dim);font-size:0.8rem;">—</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+
+<!-- Pending invites -->
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">Pending Invites</div>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <tr><th>Email</th><th>Expires</th><th>Sent By</th><th></th></tr>
+      {% for i in invites %}
+      <tr>
+        <td class="cell-name">{{ i.email }}</td>
+        <td style="font-size:0.82rem;color:var(--text-muted);">{{ i.expires_at|date:'d M Y H:i' }}</td>
+        <td>{{ i.created_by.email }}</td>
+        <td>
+          <form method="post" action="{% url 'admin_portal:invite_cancel' i.id %}" style="display:inline;">
+            {% csrf_token %}
+            <button class="btn-warn btn-sm">Cancel</button>
+          </form>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="4" style="color:var(--text-muted);padding:16px;text-align:center;">No pending invites.</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}

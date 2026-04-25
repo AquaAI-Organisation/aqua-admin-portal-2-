@@ -1,0 +1,201 @@
+{% extends 'admin_portal/base.html' %}
+{% load portal_tags %}
+{% block title %}Dashboard · {{ APP_NAME }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>AI Governance Dashboard</h1>
+    <p class="page-subtitle">Automated review pipeline for breeder &amp; consultant onboarding</p>
+  </div>
+  <div class="page-actions">
+    {% if IS_SUPER_ADMIN %}
+    <form method="post" action="{% url 'admin_portal:process_now' %}">{% csrf_token %}
+      <button class="btn-primary" type="submit">⟳ Run AI Scan Now</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<!-- System Status -->
+<div class="card" style="margin-bottom:20px;padding:14px 18px;">
+  <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;font-size:0.85rem;">
+    <span>
+      {% if ai_key_set %}
+        <span class="status-dot configured"></span> <strong>GPT-4</strong> <span style="color:var(--green);">Connected</span>
+      {% else %}
+        <span class="status-dot missing"></span> <strong>GPT-4</strong> <span style="color:var(--red);">Key Missing</span>
+        <span style="color:var(--text-dim);margin-left:4px;">— set OPENAI_API_KEY in .env</span>
+      {% endif %}
+    </span>
+    <span style="color:var(--border);">│</span>
+    <span style="color:var(--text-muted);">
+      Breeders: <strong style="color:var(--aqua);">{{ breeder_count }}</strong>
+    </span>
+    <span style="color:var(--text-muted);">
+      Consultants: <strong style="color:var(--blue);">{{ consultant_count }}</strong>
+    </span>
+  </div>
+</div>
+
+<!-- Metrics -->
+<div class="metrics-grid">
+  <div class="metric-card mc-total">
+    <div class="metric-label">Total Reviews</div>
+    <div class="metric-value">{{ counts.total }}</div>
+    <div class="metric-today">Today: <span>{{ today_counts.total }}</span></div>
+  </div>
+  <div class="metric-card mc-approved">
+    <div class="metric-label">Approved</div>
+    <div class="metric-value">{{ counts.approved }}</div>
+    <div class="metric-today">Today: <span>{{ today_counts.approved }}</span></div>
+  </div>
+  <div class="metric-card mc-rejected">
+    <div class="metric-label">Rejected</div>
+    <div class="metric-value">{{ counts.rejected }}</div>
+    <div class="metric-today">Today: <span>{{ today_counts.rejected }}</span></div>
+  </div>
+  <div class="metric-card mc-flagged">
+    <div class="metric-label">Flagged</div>
+    <div class="metric-value">{{ counts.flagged }}</div>
+    <div class="metric-today">Today: <span>{{ today_counts.flagged }}</span></div>
+  </div>
+  <div class="metric-card mc-pending">
+    <div class="metric-label">Pending</div>
+    <div class="metric-value">{{ counts.pending }}</div>
+    <div class="metric-today">Today: <span>{{ today_counts.pending }}</span></div>
+  </div>
+  <div class="metric-card mc-override">
+    <div class="metric-label">Overrides</div>
+    <div class="metric-value">{{ counts.overrides }}</div>
+  </div>
+</div>
+
+<!-- Weekly chart + content -->
+<div class="grid-2">
+  <!-- Chart -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">7-Day Review Trend</div>
+    </div>
+    <canvas id="weekChart" height="200"></canvas>
+  </div>
+
+  <!-- Open flags -->
+  <div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">Open Flags</div>
+        <a href="{% url 'admin_portal:flag_list' %}" class="btn btn-sm">View All →</a>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <tr><th>Severity</th><th>Reason</th></tr>
+          {% for f in open_flags %}
+          <tr>
+            <td><span class="badge {{ f.severity }}"><span class="badge-dot"></span>{{ f.severity }}</span></td>
+            <td><a href="{% url 'admin_portal:flag_detail' f.id %}">{{ f.reason|truncatechars:80 }}</a></td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="2" class="empty-state" style="padding:20px;">No unresolved flags</td></tr>
+          {% endfor %}
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Recent reviews + reports -->
+<div class="grid-2">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Recent AI Reviews</div>
+      <a href="{% url 'admin_portal:review_list' %}" class="btn btn-sm">View All →</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <tr><th>Time</th><th>Subject</th><th>Decision</th><th></th></tr>
+        {% for r in recent_reviews %}
+        <tr>
+          <td style="white-space:nowrap;color:var(--text-muted);font-size:0.8rem;">{{ r.created_at|date:'d M H:i' }}</td>
+          <td>
+            <span class="badge {{ r.subject_type }}">{{ r.subject_type }}</span>
+            <div class="cell-name" style="margin-top:3px;">{{ r.subject_display_name|default:r.subject_user_email }}</div>
+          </td>
+          <td>
+            <span class="badge {{ r.badge_class }}"><span class="badge-dot"></span>{{ r.decision }}</span>
+            {% if r.manually_overridden %}<span class="badge override" style="margin-left:4px;">override</span>{% endif %}
+          </td>
+          <td><a href="{% url 'admin_portal:review_detail' r.id %}" class="btn btn-sm">Open</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4" class="empty-state" style="padding:30px;">
+          <div class="empty-icon">⬡</div>
+          No reviews yet — run your first AI scan.
+        </td></tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Recent Reports</div>
+      <div>
+        {% if IS_SUPER_ADMIN %}
+        <form method="post" action="{% url 'admin_portal:daily_report_run_now' %}" style="display:inline;">{% csrf_token %}
+          <button class="btn btn-sm">Generate Now</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <tr><th>Date</th><th>Reviewed</th><th></th></tr>
+        {% for d in last_reports %}
+        <tr>
+          <td style="font-weight:600;">{{ d.report_date }}</td>
+          <td>
+            <span style="color:var(--green);">{{ d.approved_count }}✓</span>
+            <span style="color:var(--red);margin-left:6px;">{{ d.rejected_count }}✕</span>
+            <span style="color:var(--amber);margin-left:6px;">{{ d.flagged_count }}⚑</span>
+          </td>
+          <td><a href="{% url 'admin_portal:daily_report_detail' d.id %}" class="btn btn-sm">Open</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="3" class="empty-state" style="padding:20px;">No reports generated yet.</td></tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+const weekData = {{ week_data|safe }};
+const ctx = document.getElementById('weekChart');
+if (ctx) {
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: weekData.map(d => d.date),
+      datasets: [
+        { label: 'Approved', data: weekData.map(d => d.approved), backgroundColor: 'rgba(57,217,138,0.7)', borderRadius: 4, barPercentage: 0.6 },
+        { label: 'Rejected', data: weekData.map(d => d.rejected), backgroundColor: 'rgba(255,107,122,0.7)', borderRadius: 4, barPercentage: 0.6 },
+        { label: 'Flagged', data: weekData.map(d => d.flagged), backgroundColor: 'rgba(255,184,77,0.7)', borderRadius: 4, barPercentage: 0.6 },
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { color: '#8da4cc', font: { family: "'Plus Jakarta Sans'", size: 11 }, boxWidth: 10, padding: 16 } } },
+      scales: {
+        x: { stacked: true, grid: { display: false }, ticks: { color: '#5b7099', font: { family: "'Plus Jakarta Sans'" } } },
+        y: { stacked: true, grid: { color: 'rgba(26,45,77,0.5)' }, ticks: { color: '#5b7099', font: { family: "'Plus Jakarta Sans'" }, stepSize: 1 } }
+      }
+    }
+  });
+}
+</script>
+{% endblock %}

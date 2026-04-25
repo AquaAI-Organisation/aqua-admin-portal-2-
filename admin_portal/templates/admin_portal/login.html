@@ -1,0 +1,32 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Login · {{ APP_NAME }}</title>
+  <link rel="stylesheet" href="{% static 'admin_portal/styles.css' %}">
+</head>
+<body>
+  <div class="login-page">
+    <div class="login-card">
+      <div class="brand-logo" style="margin-bottom:16px;">
+        <div class="brand-icon">A</div>
+        <div class="brand-name">{{ APP_NAME }}</div>
+      </div>
+      <p class="login-sub">Sign in to the AI-driven approval control plane.</p>
+      {% if messages %}
+        {% for message in messages %}
+          <div class="message {{ message.tags }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+      <form method="post">
+        {% csrf_token %}
+        <input type="email" name="username" placeholder="admin@humara.io" required autofocus>
+        <input type="password" name="password" placeholder="Password" required>
+        <button class="btn-primary" type="submit">Sign In</button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>

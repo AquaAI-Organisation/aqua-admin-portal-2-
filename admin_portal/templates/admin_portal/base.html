@@ -1,0 +1,79 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ APP_NAME }}{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'admin_portal/styles.css' %}">
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+  <div class="wrapper">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-logo">
+          <div class="brand-icon">A</div>
+          <div class="brand-name">{{ APP_NAME }}</div>
+        </div>
+        <div class="brand-tagline">{{ APP_TAGLINE }}</div>
+      </div>
+
+      <nav class="nav">
+        <div class="nav-section">Overview</div>
+        <a href="{% url 'admin_portal:dashboard' %}" class="{% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
+          <span class="nav-icon">◉</span> Dashboard
+        </a>
+
+        <div class="nav-section">AI Engine</div>
+        <a href="{% url 'admin_portal:review_list' %}" class="{% if 'review' in request.resolver_match.url_name %}active{% endif %}">
+          <span class="nav-icon">⬡</span> AI Reviews
+        </a>
+        <a href="{% url 'admin_portal:flag_list' %}" class="{% if 'flag' in request.resolver_match.url_name %}active{% endif %}">
+          <span class="nav-icon">⚑</span> Flags
+          {% if open_flag_count %}<span class="nav-badge">{{ open_flag_count }}</span>{% endif %}
+        </a>
+        <a href="{% url 'admin_portal:daily_report_list' %}" class="{% if 'report' in request.resolver_match.url_name %}active{% endif %}">
+          <span class="nav-icon">◫</span> Daily Reports
+        </a>
+
+        {% if IS_SUPER_ADMIN %}
+        <div class="nav-section">Administration</div>
+        <a href="{% url 'admin_portal:admin_user_list' %}" class="{% if 'admin_user' in request.resolver_match.url_name %}active{% endif %}">
+          <span class="nav-icon">⊕</span> Team Access
+        </a>
+        <a href="{% url 'admin_portal:audit_log' %}" class="{% if 'audit' in request.resolver_match.url_name %}active{% endif %}">
+          <span class="nav-icon">◎</span> Audit Log
+        </a>
+        {% endif %}
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-user">
+          <div class="sidebar-avatar">{{ request.user.email.0|upper }}</div>
+          <div class="sidebar-user-info">
+            <div class="sidebar-user-name">{{ request.user.full_name|default:request.user.email }}</div>
+            <div class="sidebar-user-role">{{ request.user.role_display }}</div>
+          </div>
+        </div>
+        <div style="padding:8px 8px 0;display:flex;gap:12px;">
+          <a href="{% url 'admin_portal:change_password' %}" style="font-size:0.8rem;color:var(--text-dim);">Change password</a>
+          <a href="{% url 'admin_portal:logout' %}" style="font-size:0.8rem;color:var(--text-dim);">Sign out →</a>
+        </div>
+      </div>
+    </aside>
+
+    <main class="content">
+      {% if messages %}
+      <div class="messages">
+        {% for message in messages %}
+          <div class="message {{ message.tags }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>
