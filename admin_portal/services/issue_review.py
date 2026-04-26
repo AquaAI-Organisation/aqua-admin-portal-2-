@@ -111,6 +111,7 @@ def build_warning_dossier(warning, user, consultant_profile=None) -> dict[str, A
             "status": warning.status,
             "metadata": warning.metadata or {},
             "created_at": warning.created_at.isoformat() if warning.created_at else None,
+            "resolved_at": warning.resolved_at.isoformat() if warning.resolved_at else None,
         },
     }
 
@@ -125,11 +126,30 @@ def _profile_snapshot(profile) -> dict[str, Any]:
         "verification_level": getattr(profile, "verification_level", "") or "",
         "business_address": getattr(profile, "business_address", "") or "",
         "business_phone": getattr(profile, "business_phone", "") or "",
+        "rating": getattr(profile, "rating", None),
+        "reviews_count": getattr(profile, "reviews_count", None),
         "metadata": getattr(profile, "metadata", {}) or {},
     }
     if hasattr(profile, "admin_status"):
         data["admin_status"] = profile.admin_status
         data["admin_notes"] = profile.admin_notes or ""
+        data["completion_rate"] = getattr(profile, "completion_rate", None)
+        data["cancellation_rate"] = getattr(profile, "cancellation_rate", None)
+        data["complaint_count"] = getattr(profile, "complaint_count", None)
+        data["total_bookings"] = getattr(profile, "total_bookings", None)
+        data["completed_bookings"] = getattr(profile, "completed_bookings", None)
+        data["cancelled_bookings"] = getattr(profile, "cancelled_bookings", None)
+        data["average_response_time_hours"] = getattr(profile, "average_response_time_hours", None)
+        data["overall_score"] = getattr(profile, "overall_score", None)
+    else:
+        data["total_sales"] = getattr(profile, "total_sales", None)
+        data["successful_sales"] = getattr(profile, "successful_sales", None)
+        data["returned_stock_count"] = getattr(profile, "returned_stock_count", None)
+        data["species_count"] = getattr(profile, "species_count", None)
+        data["healthy_stock_rate"] = getattr(profile, "healthy_stock_rate", None)
+        data["stock_mortality_rate"] = getattr(profile, "stock_mortality_rate", None)
+        data["disease_reported_rate"] = getattr(profile, "disease_reported_rate", None)
+        data["local_trust_score"] = getattr(profile, "local_trust_score", None)
     return data
 
 

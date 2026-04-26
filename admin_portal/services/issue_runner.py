@@ -73,6 +73,8 @@ def discover_pending_consultant_warnings(limit: int = 50):
         source_id = str(warning.id)
         if source_id in seen:
             continue
+        if warning.resolved_at:
+            continue
         status = (warning.status or "").strip().lower()
         if status not in WARNING_OPEN_STATUSES:
             continue
@@ -175,7 +177,11 @@ def _apply_issue_actions(issue: AIFlaggedIssue, *, profile=None, user=None, warn
                 value = str(action.get("value", "")).strip()
                 if value:
                     warning.status = value
-                    warning.save(update_fields=["status"])
+                    update_fields = ["status"]
+                    if value.lower() in {"resolved", "closed"}:
+                        warning.resolved_at = timezone.now()
+                        update_fields.append("resolved_at")
+                    warning.save(update_fields=update_fields)
                     applied.append({"action": name, "value": value, "status": "applied"})
         except Exception:
             logger.exception("Failed applying issue action %s", action)
