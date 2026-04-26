@@ -14,7 +14,7 @@
       <button class="btn-primary" type="submit">Run full AI scan</button>
     </form>
     {% endif %}
-    <a class="btn" href="{% url 'admin_portal:review_list' %}?decision=pending">View pending accounts</a>
+    <a class="btn" href="{% url 'admin_portal:intake_list' %}">View pending accounts</a>
   </div>
 </div>
 
@@ -40,14 +40,14 @@
     <div class="metric-hint">Awaiting analysis or manual follow-up</div>
   </div>
   <div class="metric-card">
+    <div class="metric-label">Pending Intake</div>
+    <div class="metric-value">{{ pending_breeder_count|add:pending_consultant_count }}</div>
+    <div class="metric-hint">Breeders: {{ pending_breeder_count }} | Consultants: {{ pending_consultant_count }}</div>
+  </div>
+  <div class="metric-card">
     <div class="metric-label">Open Issues</div>
     <div class="metric-value">{{ issue_counts.open }}</div>
     <div class="metric-hint">Critical: {{ issue_counts.critical }}</div>
-  </div>
-  <div class="metric-card">
-    <div class="metric-label">Overrides</div>
-    <div class="metric-value">{{ counts.overrides }}</div>
-    <div class="metric-hint">Resolved issues: {{ issue_counts.resolved }}</div>
   </div>
 </div>
 

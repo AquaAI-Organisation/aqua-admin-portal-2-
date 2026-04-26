@@ -24,6 +24,9 @@
         <a href="{% url 'admin_portal:dashboard' %}" class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
           <span>Dashboard</span>
         </a>
+        <a href="{% url 'admin_portal:intake_list' %}" class="nav-link {% if 'intake' in request.resolver_match.url_name %}active{% endif %}">
+          <span>Pending Intake</span>
+        </a>
         <a href="{% url 'admin_portal:review_list' %}" class="nav-link {% if 'review' in request.resolver_match.url_name %}active{% endif %}">
           <span>Pending Reviews</span>
         </a>

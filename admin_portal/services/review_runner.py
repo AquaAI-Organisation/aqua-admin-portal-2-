@@ -31,6 +31,7 @@ def _already_reviewed_ids(subject_type: str) -> set:
     return set(
         AIAccountReview.objects
         .filter(subject_type=subject_type)
+        .exclude(decision__in=["error", "pending"])
         .values_list("subject_id", flat=True)
     )
 

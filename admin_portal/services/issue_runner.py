@@ -28,7 +28,10 @@ WARNING_OPEN_STATUSES = {"open", "pending", "active", "unresolved", "new", ""}
 
 def _already_triaged_ids(source_type: str) -> set[str]:
     return set(
-        AIFlaggedIssue.objects.filter(source_type=source_type).values_list("source_id", flat=True)
+        AIFlaggedIssue.objects
+        .filter(source_type=source_type)
+        .exclude(status="error")
+        .values_list("source_id", flat=True)
     )
 
 

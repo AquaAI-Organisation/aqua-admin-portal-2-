@@ -136,8 +136,142 @@ def dashboard(request):
         "health_snapshot": health_snapshot,
         "breeder_count": reviews.filter(subject_type="breeder").count(),
         "consultant_count": reviews.filter(subject_type="consultant").count(),
+        "pending_breeder_count": ExternalBreederProfile.objects.filter(is_verified=False).count(),
+        "pending_consultant_count": ExternalConsultantProfile.objects.filter(admin_status="pending").count(),
     }
     return render(request, "admin_portal/dashboard.html", context)
+
+
+@admin_required
+def intake_list(request):
+    role = request.GET.get("role", "").strip()
+    ai_state = request.GET.get("ai_state", "").strip()
+    q = (request.GET.get("q") or "").strip()
+
+    breeder_qs = (
+        ExternalBreederProfile.objects
+        .filter(is_verified=False)
+        .select_related("user")
+        .order_by("-created_at")
+    )
+    consultant_qs = (
+        ExternalConsultantProfile.objects
+        .filter(admin_status="pending")
+        .select_related("user")
+        .order_by("-created_at")
+    )
+
+    if q:
+        breeder_qs = breeder_qs.filter(
+            Q(company_name__icontains=q)
+            | Q(user__email__icontains=q)
+            | Q(user__username__icontains=q)
+            | Q(user__name__icontains=q)
+        )
+        consultant_qs = consultant_qs.filter(
+            Q(company_name__icontains=q)
+            | Q(user__email__icontains=q)
+            | Q(user__username__icontains=q)
+            | Q(user__name__icontains=q)
+        )
+
+    breeders = list(breeder_qs if role in {"", "breeder"} else [])
+    consultants = list(consultant_qs if role in {"", "consultant"} else [])
+
+    breeder_reviews = {
+        review.subject_id: review
+        for review in AIAccountReview.objects.filter(
+            subject_type="breeder",
+            subject_id__in=[profile.id for profile in breeders],
+        )
+    }
+    consultant_reviews = {
+        review.subject_id: review
+        for review in AIAccountReview.objects.filter(
+            subject_type="consultant",
+            subject_id__in=[profile.id for profile in consultants],
+        )
+    }
+
+    rows = []
+    for profile in breeders:
+        review = breeder_reviews.get(profile.id)
+        review_state = review.decision if review else "not_scanned"
+        rows.append(
+            {
+                "role": "breeder",
+                "created_at": profile.created_at,
+                "company_name": profile.company_name or "",
+                "display_name": profile.company_name or profile.user.name or profile.user.username or profile.user.email,
+                "user_email": profile.user.email,
+                "username": profile.user.username,
+                "source_status": "Pending verification",
+                "source_detail": f"Verified: {'Yes' if profile.is_verified else 'No'} | Active: {'Yes' if profile.is_active else 'No'}",
+                "review": review,
+                "ai_state": review_state,
+                "ai_label": "Not scanned" if review_state == "not_scanned" else review_state.replace("_", " "),
+                "ai_badge_class": {
+                    "not_scanned": "muted",
+                    "pending": "pending",
+                    "approved": "ok",
+                    "rejected": "danger",
+                    "flagged": "warn",
+                    "error": "danger",
+                }.get(review_state, "muted"),
+            }
+        )
+
+    for profile in consultants:
+        review = consultant_reviews.get(profile.id)
+        review_state = review.decision if review else "not_scanned"
+        rows.append(
+            {
+                "role": "consultant",
+                "created_at": profile.created_at,
+                "company_name": profile.company_name or "",
+                "display_name": profile.company_name or profile.user.name or profile.user.username or profile.user.email,
+                "user_email": profile.user.email,
+                "username": profile.user.username,
+                "source_status": "Pending admin approval",
+                "source_detail": f"Admin status: {profile.admin_status or 'pending'} | Active: {'Yes' if profile.is_active else 'No'}",
+                "review": review,
+                "ai_state": review_state,
+                "ai_label": "Not scanned" if review_state == "not_scanned" else review_state.replace("_", " "),
+                "ai_badge_class": {
+                    "not_scanned": "muted",
+                    "pending": "pending",
+                    "approved": "ok",
+                    "rejected": "danger",
+                    "flagged": "warn",
+                    "error": "danger",
+                }.get(review_state, "muted"),
+            }
+        )
+
+    if ai_state in {"not_scanned", "pending", "approved", "rejected", "flagged", "error"}:
+        rows = [row for row in rows if row["ai_state"] == ai_state]
+
+    oldest_fallback = timezone.now() - timedelta(days=36500)
+    rows.sort(key=lambda row: row["created_at"] or oldest_fallback, reverse=True)
+    page = Paginator(rows, 25).get_page(request.GET.get("page"))
+    summary = {
+        "total": len(rows),
+        "breeders": sum(1 for row in rows if row["role"] == "breeder"),
+        "consultants": sum(1 for row in rows if row["role"] == "consultant"),
+        "not_scanned": sum(1 for row in rows if row["ai_state"] == "not_scanned"),
+        "error": sum(1 for row in rows if row["ai_state"] == "error"),
+    }
+    return render(
+        request,
+        "admin_portal/intake_list.html",
+        {
+            "page": page,
+            "role": role,
+            "ai_state": ai_state,
+            "q": q,
+            "summary": summary,
+        },
+    )
 
 
 @admin_required

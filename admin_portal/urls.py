@@ -9,6 +9,9 @@ urlpatterns = [
     path("login/", views.login_view, name="login"),
     path("logout/", views.logout_view, name="logout"),
 
+    # Raw pending intake from source-of-truth backend tables
+    path("intake/", views.intake_list, name="intake_list"),
+
     # AI reviews
     path("reviews/", views.review_list, name="review_list"),
     path("reviews/<uuid:review_id>/", views.review_detail, name="review_detail"),

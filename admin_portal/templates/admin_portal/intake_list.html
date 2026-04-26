@@ -1,0 +1,103 @@
+{% extends "admin_portal/base.html" %}
+{% block title %}Pending Intake | {{ APP_NAME }}{% endblock %}
+{% block topbar_title %}Pending Intake{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Source-of-truth pending requests</h1>
+    <p class="page-subtitle">This queue reads directly from the breeder and consultant tables in the shared backend, then shows the current AI review state beside each request.</p>
+  </div>
+  <div class="page-actions">
+    <span class="inline-chip">Total: {{ summary.total }}</span>
+    <span class="inline-chip">Breeders: {{ summary.breeders }}</span>
+    <span class="inline-chip">Consultants: {{ summary.consultants }}</span>
+    <span class="inline-chip">Not scanned: {{ summary.not_scanned }}</span>
+    <span class="inline-chip">Scan errors: {{ summary.error }}</span>
+  </div>
+</div>
+
+<div class="card">
+  <form method="get" class="filter-row">
+    <div class="form-group" style="flex:1;">
+      <label for="id_q">Search</label>
+      <input id="id_q" name="q" value="{{ q }}" placeholder="Search by company, email, or username">
+    </div>
+    <div class="form-group">
+      <label for="id_role">Role</label>
+      <select id="id_role" name="role">
+        <option value="">All roles</option>
+        <option value="breeder" {% if role == "breeder" %}selected{% endif %}>Breeder</option>
+        <option value="consultant" {% if role == "consultant" %}selected{% endif %}>Consultant</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="id_ai_state">AI State</label>
+      <select id="id_ai_state" name="ai_state">
+        <option value="">All states</option>
+        <option value="not_scanned" {% if ai_state == "not_scanned" %}selected{% endif %}>Not scanned</option>
+        <option value="pending" {% if ai_state == "pending" %}selected{% endif %}>Pending</option>
+        <option value="approved" {% if ai_state == "approved" %}selected{% endif %}>Approved</option>
+        <option value="rejected" {% if ai_state == "rejected" %}selected{% endif %}>Rejected</option>
+        <option value="flagged" {% if ai_state == "flagged" %}selected{% endif %}>Flagged</option>
+        <option value="error" {% if ai_state == "error" %}selected{% endif %}>Error</option>
+      </select>
+    </div>
+    <button type="submit">Apply filters</button>
+  </form>
+</div>
+
+<div class="card">
+  <div class="table-wrap">
+    <table class="table">
+      <tr>
+        <th>Created</th>
+        <th>Role</th>
+        <th>Account</th>
+        <th>Source Status</th>
+        <th>AI State</th>
+        <th></th>
+      </tr>
+      {% for row in page.object_list %}
+      <tr>
+        <td class="mono">{{ row.created_at|date:"d M Y H:i" }}</td>
+        <td><span class="badge {{ row.role }}">{{ row.role }}</span></td>
+        <td>
+          <div class="cell-name">{{ row.display_name }}</div>
+          <div class="cell-sub">{{ row.user_email }}</div>
+          <div class="cell-sub mono">{{ row.username }}</div>
+        </td>
+        <td>
+          <div class="cell-name">{{ row.source_status }}</div>
+          <div class="cell-sub">{{ row.source_detail }}</div>
+        </td>
+        <td>
+          <span class="badge {{ row.ai_badge_class }}">{{ row.ai_label }}</span>
+          {% if row.review and row.review.manually_overridden %}<span class="badge override">override</span>{% endif %}
+          {% if row.review %}
+          <div class="cell-sub mono">{{ row.review.confidence|floatformat:2 }}</div>
+          {% endif %}
+        </td>
+        <td>
+          {% if row.review %}
+          <a class="btn btn-sm" href="{% url 'admin_portal:review_detail' row.review.id %}">Open review</a>
+          {% else %}
+          <span class="helper-text">Awaiting scan</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="6" class="empty-state">No pending source-table requests match the current filters.</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% if page.paginator.num_pages > 1 %}
+  <div class="pager">
+    {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}&role={{ role }}&ai_state={{ ai_state }}&q={{ q }}">Previous</a>{% endif %}
+    <span>Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
+    {% if page.has_next %}<a href="?page={{ page.next_page_number }}&role={{ role }}&ai_state={{ ai_state }}&q={{ q }}">Next</a>{% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
