@@ -142,36 +142,6 @@ class Migration(migrations.Migration):
                 ('objects', admin_portal.managers.AdminUserManager()),
             ],
         ),
-        migrations.RenameIndex(
-            model_name='adminauditlog',
-            new_name='admin_porta_created_ecf84d_idx',
-            old_name='admin_porta_created_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='aiaccountreview',
-            new_name='admin_porta_subject_a6e3ab_idx',
-            old_name='admin_porta_subject_type_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='aiaccountreview',
-            new_name='admin_porta_decisio_5b43e0_idx',
-            old_name='admin_porta_decision_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='aiflaggedissue',
-            new_name='admin_porta_source__a77b55_idx',
-            old_name='admin_porta_source__idx',
-        ),
-        migrations.RenameIndex(
-            model_name='aiflaggedissue',
-            new_name='admin_porta_status_14df33_idx',
-            old_name='admin_porta_status__idx',
-        ),
-        migrations.RenameIndex(
-            model_name='aiflaggedissue',
-            new_name='admin_porta_severit_5572bd_idx',
-            old_name='admin_porta_severity_idx',
-        ),
         migrations.AlterField(
             model_name='adminuser',
             name='groups',

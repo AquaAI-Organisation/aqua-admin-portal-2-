@@ -327,8 +327,8 @@ class AIAccountReview(models.Model):
     class Meta:
         ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=["subject_type", "subject_id"]),
-            models.Index(fields=["decision", "-created_at"]),
+            models.Index(fields=["subject_type", "subject_id"], name="admin_porta_subject_type_idx"),
+            models.Index(fields=["decision", "-created_at"], name="admin_porta_decision_idx"),
         ]
         constraints = [
             models.UniqueConstraint(
@@ -420,9 +420,9 @@ class AIFlaggedIssue(models.Model):
     class Meta:
         ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=["source_type", "source_id"]),
-            models.Index(fields=["status", "-created_at"]),
-            models.Index(fields=["severity", "-created_at"]),
+            models.Index(fields=["source_type", "source_id"], name="admin_porta_source__idx"),
+            models.Index(fields=["status", "-created_at"], name="admin_porta_status__idx"),
+            models.Index(fields=["severity", "-created_at"], name="admin_porta_severity_idx"),
         ]
         constraints = [
             models.UniqueConstraint(
@@ -487,7 +487,7 @@ class AdminAuditLog(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
-        indexes = [models.Index(fields=["-created_at"])]
+        indexes = [models.Index(fields=["-created_at"], name="admin_porta_created_idx")]
 
     def __str__(self):
         return f"{self.action} by {self.actor_id or 'system'}"
