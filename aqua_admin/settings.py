@@ -6,17 +6,31 @@ import dj_database_url
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load .env locally; on Heroku the env vars are set as Config Vars and the
+# .env file does not exist, which is fine.
 load_dotenv(BASE_DIR / ".env")
 
 SECRET_KEY = os.getenv("SECRET_KEY", "dev-insecure-change-me")
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 
-# ALLOWED_HOSTS: accept anything if '*' or empty, otherwise split on comma
-_hosts = os.getenv("ALLOWED_HOSTS", "*")
-if _hosts.strip() == "*" or not _hosts.strip():
+
+def _split_csv(value: str) -> list[str]:
+    return [item.strip() for item in (value or "").split(",") if item.strip()]
+
+
+# ---------------------------------------------------------------------------
+# Hosts
+# ---------------------------------------------------------------------------
+_hosts_raw = os.getenv("ALLOWED_HOSTS", "*").strip()
+if _hosts_raw == "*" or not _hosts_raw:
     ALLOWED_HOSTS = ["*"]
 else:
-    ALLOWED_HOSTS = [h.strip() for h in _hosts.split(",") if h.strip()]
+    ALLOWED_HOSTS = _split_csv(_hosts_raw)
+    # Always tolerate Heroku-style hostnames so a fresh deploy just works.
+    if not any(h == ".herokuapp.com" or h.endswith(".herokuapp.com") for h in ALLOWED_HOSTS):
+        ALLOWED_HOSTS.append(".herokuapp.com")
+
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -62,18 +76,20 @@ TEMPLATES = [
 WSGI_APPLICATION = "aqua_admin.wsgi.application"
 ASGI_APPLICATION = "aqua_admin.asgi.application"
 
-# Database — use DATABASE_URL from environment (Heroku sets this automatically
-# for Heroku Postgres; we set it manually for Supabase).
+# ---------------------------------------------------------------------------
+# Database
+# ---------------------------------------------------------------------------
+# DATABASE_URL is set automatically by Heroku for Heroku Postgres; we set it
+# manually for Supabase. Always require SSL when speaking to a remote DB.
 _db_url = os.getenv("DATABASE_URL", "sqlite:///" + str(BASE_DIR / "db.sqlite3"))
 DATABASES = {
     "default": dj_database_url.parse(
         _db_url,
         conn_max_age=60,
+        conn_health_checks=True,
+        ssl_require=_db_url.startswith("postgres"),
     )
 }
-# Force SSL for Postgres connections (Supabase requires it)
-if _db_url.startswith("postgres"):
-    DATABASES["default"]["OPTIONS"] = {"sslmode": "require"}
 
 AUTH_USER_MODEL = "admin_portal.AdminUser"
 
@@ -90,14 +106,20 @@ TIME_ZONE = "UTC"
 USE_I18N = True
 USE_TZ = True
 
-# Static files — WhiteNoise serves them on Heroku
-STATIC_URL = "static/"
+# ---------------------------------------------------------------------------
+# Static files
+# ---------------------------------------------------------------------------
+# WhiteNoise serves static files in production. We rely on Django's
+# AppDirectoriesFinder to pick up admin_portal/static/* — adding it to
+# STATICFILES_DIRS would create duplicates and break `collectstatic`.
+STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
-STATICFILES_DIRS = [BASE_DIR / "admin_portal" / "static"]
 
-# Use WhiteNoise for static file serving (works on Heroku out of the box)
+# CompressedStaticFilesStorage (not the *Manifest* variant) is more forgiving
+# on Heroku: it won't crash a release if a referenced asset is missing.
 WHITENOISE_USE_FINDERS = True
 STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
     "staticfiles": {
         "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
     },
@@ -105,6 +127,9 @@ STORAGES = {
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# ---------------------------------------------------------------------------
+# Auth / sessions
+# ---------------------------------------------------------------------------
 LOGIN_URL = "/admin-portal/login/"
 LOGIN_REDIRECT_URL = "/admin-portal/"
 LOGOUT_REDIRECT_URL = "/admin-portal/login/"
@@ -113,18 +138,49 @@ SESSION_COOKIE_AGE = 60 * 60 * 8
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
-CSRF_TRUSTED_ORIGINS = [
-    f"https://{h}" for h in ALLOWED_HOSTS if h != "*"
-]
 
-# --- Control-plane specific -------------------------------------------------
+# ---------------------------------------------------------------------------
+# HTTPS behind Heroku's router
+# ---------------------------------------------------------------------------
+# Heroku terminates TLS at the router and forwards plain HTTP. Tell Django to
+# trust the X-Forwarded-Proto header so request.is_secure() returns True.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+USE_X_FORWARDED_HOST = True
 
+# ---------------------------------------------------------------------------
+# CSRF trusted origins
+# ---------------------------------------------------------------------------
+# Build https://<host> for every concrete ALLOWED_HOST, plus *.herokuapp.com,
+# plus anything the operator wants to add via the CSRF_TRUSTED_ORIGINS env.
+def _build_csrf_origins() -> list[str]:
+    origins: set[str] = set()
+    for host in ALLOWED_HOSTS:
+        if not host or host == "*":
+            continue
+        if host.startswith("."):
+            origins.add(f"https://*{host}")
+        else:
+            origins.add(f"https://{host}")
+    origins.add("https://*.herokuapp.com")
+    for extra in _split_csv(os.getenv("CSRF_TRUSTED_ORIGINS", "")):
+        origins.add(extra if "://" in extra else f"https://{extra}")
+    return sorted(origins)
+
+
+CSRF_TRUSTED_ORIGINS = _build_csrf_origins()
+
+# ---------------------------------------------------------------------------
+# Control-plane specific
+# ---------------------------------------------------------------------------
 SUPERADMIN_EMAILS = [
     e.strip().lower()
     for e in os.getenv("SUPERADMIN_EMAILS", "steven@humara.io,ben@humara.io").split(",")
     if e.strip()
 ]
 
+# Paste your real OpenAI key into the OPENAI_API_KEY env var. Until you do,
+# the dashboard shows a "GPT-4 key missing" indicator and the AI engine
+# returns a clear error rather than silently failing.
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "sk-REPLACE-WITH-YOUR-GPT-4-KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
 AI_APPROVE_THRESHOLD = float(os.getenv("AI_APPROVE_THRESHOLD", "0.80"))
