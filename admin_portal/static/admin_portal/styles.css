@@ -667,6 +667,13 @@ pre.json {
   margin-bottom: 8px;
 }
 
+.chart-shell {
+  position: relative;
+  min-height: 320px;
+  height: 320px;
+  width: 100%;
+}
+
 .muted {
   color: var(--muted);
 }
@@ -682,7 +689,9 @@ details summary {
 
 canvas {
   width: 100%;
-  min-height: 260px;
+  height: 100% !important;
+  min-height: 0;
+  display: block;
 }
 
 @media (max-width: 1200px) {

@@ -38,10 +38,16 @@ def _already_reviewed_ids(subject_type: str) -> set:
 def discover_pending_breeders(limit: int = 50):
     seen = _already_reviewed_ids("breeder")
     qs = (ExternalBreederProfile.objects
-          .filter(is_active=True, is_verified=False)
+          .filter(is_verified=False)
           .order_by("-created_at"))
     for profile in qs[: limit * 4]:
         if profile.id in seen:
+            continue
+        metadata = profile.metadata or {}
+        application_status = str(metadata.get("application_status", "")).strip().lower()
+        if profile.is_verified:
+            continue
+        if profile.is_active and application_status not in {"", "pending", "under_review"}:
             continue
         try:
             user = ExternalUser.objects.get(pk=profile.user_id)
@@ -53,11 +59,13 @@ def discover_pending_breeders(limit: int = 50):
 def discover_pending_consultants(limit: int = 50):
     seen = _already_reviewed_ids("consultant")
     qs = (ExternalConsultantProfile.objects
-          .filter(is_active=True)
           .exclude(admin_status="approved")
           .order_by("-created_at"))
     for profile in qs[: limit * 4]:
         if profile.id in seen:
+            continue
+        status = str(profile.admin_status or "").strip().lower()
+        if status and status not in {"pending", "under_review", "needs_info", "needs_review"}:
             continue
         try:
             user = ExternalUser.objects.get(pk=profile.user_id)
@@ -216,16 +224,33 @@ def _apply_actions(subject_type: str, profile, user, review) -> list[dict]:
 
 def _approve(subject_type, profile, user):
     now = timezone.now()
+    user.is_active = True
     user.is_verified = True
     user.verified_at = now
-    user.save(update_fields=["is_verified", "verified_at"])
+    user.save(update_fields=["is_active", "is_verified", "verified_at"])
     profile.is_verified = True
     profile.verified_at = now
     if subject_type == "consultant":
+        profile.is_active = True
         profile.admin_status = "approved"
-        profile.save(update_fields=["is_verified", "verified_at", "admin_status"])
+        metadata = dict(profile.metadata or {})
+        metadata.update({
+            "application_status": "approved",
+            "approval_date": now.isoformat(),
+            "requires_admin_approval": False,
+        })
+        profile.metadata = metadata
+        profile.save(update_fields=["is_active", "is_verified", "verified_at", "admin_status", "metadata"])
     else:
-        profile.save(update_fields=["is_verified", "verified_at"])
+        profile.is_active = True
+        metadata = dict(profile.metadata or {})
+        metadata.update({
+            "application_status": "approved",
+            "approval_date": now.isoformat(),
+            "requires_admin_approval": False,
+        })
+        profile.metadata = metadata
+        profile.save(update_fields=["is_active", "is_verified", "verified_at", "metadata"])
 
 
 def _deactivate(subject_type, profile, user, *, reason: str):
@@ -233,9 +258,23 @@ def _deactivate(subject_type, profile, user, *, reason: str):
     if subject_type == "consultant":
         profile.admin_status = "rejected"
         profile.admin_notes = (profile.admin_notes or "") + f"\n[AI] {reason}"
-        profile.save(update_fields=["is_active", "admin_status", "admin_notes"])
+        metadata = dict(profile.metadata or {})
+        metadata.update({
+            "application_status": "rejected",
+            "rejection_reason": reason,
+            "requires_admin_approval": False,
+        })
+        profile.metadata = metadata
+        profile.save(update_fields=["is_active", "admin_status", "admin_notes", "metadata"])
     else:
-        profile.save(update_fields=["is_active"])
+        metadata = dict(profile.metadata or {})
+        metadata.update({
+            "application_status": "rejected",
+            "rejection_reason": reason,
+            "requires_admin_approval": False,
+        })
+        profile.metadata = metadata
+        profile.save(update_fields=["is_active", "metadata"])
 
 
 # ---------------------------------------------------------------------------

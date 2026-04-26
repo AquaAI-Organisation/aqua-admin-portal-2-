@@ -559,26 +559,30 @@ def invite_accept(request, token):
 @super_admin_required
 def process_now(request):
     if request.method == "POST":
-        review_counts = process_pending(limit_per_type=25)
-        issue_counts = process_pending_issues(limit_per_type=25)
-        audit.record_write(
-            request.user,
-            "ai.process_now",
-            request=request,
-            summary=(
-                f"Processed {review_counts['breeder']} breeders, {review_counts['consultant']} consultants, "
-                f"{issue_counts['incident']} incidents, and {issue_counts['consultant_warning']} consultant warnings."
-            ),
-            **review_counts,
-            **issue_counts,
-        )
-        messages.success(
-            request,
-            (
-                f"Processed {review_counts['breeder']} breeders, {review_counts['consultant']} consultants, "
-                f"{issue_counts['incident']} incidents, and {issue_counts['consultant_warning']} consultant warnings."
-            ),
-        )
+        try:
+            review_counts = process_pending(limit_per_type=25)
+            issue_counts = process_pending_issues(limit_per_type=25)
+        except Exception as exc:
+            messages.error(request, f"AI scan failed: {exc}")
+        else:
+            audit.record_write(
+                request.user,
+                "ai.process_now",
+                request=request,
+                summary=(
+                    f"Processed {review_counts['breeder']} breeders, {review_counts['consultant']} consultants, "
+                    f"{issue_counts['incident']} incidents, and {issue_counts['consultant_warning']} consultant warnings."
+                ),
+                **review_counts,
+                **issue_counts,
+            )
+            messages.success(
+                request,
+                (
+                    f"Processed {review_counts['breeder']} breeders, {review_counts['consultant']} consultants, "
+                    f"{issue_counts['incident']} incidents, and {issue_counts['consultant_warning']} consultant warnings."
+                ),
+            )
     return redirect("admin_portal:dashboard")
 
 

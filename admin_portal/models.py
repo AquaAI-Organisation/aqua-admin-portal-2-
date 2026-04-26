@@ -284,7 +284,6 @@ class ExternalConsultantWarning(models.Model):
     status = models.CharField(max_length=32, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(null=True, blank=True)
-    updated_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         managed = False
