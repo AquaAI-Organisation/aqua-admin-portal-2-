@@ -1,0 +1,207 @@
+"""OpenAI-backed triage for external incidents and consultant warnings."""
+from __future__ import annotations
+
+import json
+import logging
+from dataclasses import dataclass, field
+from typing import Any
+
+from django.conf import settings
+
+logger = logging.getLogger(__name__)
+
+
+ISSUE_SYSTEM_PROMPT = """You are the Aqua AI issue-triage intelligence.
+
+Your job: analyse an existing platform issue involving a breeder or consultant
+and produce a safe, evidence-based severity assessment plus recommended actions.
+
+Rules:
+- Base the answer only on the dossier provided.
+- Never invent facts.
+- Prefer conservative actions. If facts are weak or conflicting, escalate rather
+  than taking irreversible action.
+- Only recommend automatic actions that are safe:
+  - "notify_super_admins"
+  - "request_manual_review"
+  - "deactivate_account_pending_review"
+  - "set_warning_status"
+
+Return STRICT JSON ONLY with this shape:
+{
+  "severity": "info" | "warning" | "critical",
+  "summary": "<1-2 sentence summary>",
+  "rationale": "<short paragraph>",
+  "evidence": ["<bullet>", "<bullet>"],
+  "recommended_actions": [
+    {"action": "notify_super_admins"},
+    {"action": "request_manual_review"},
+    {"action": "deactivate_account_pending_review", "reason": "<reason>"},
+    {"action": "set_warning_status", "value": "<status>"}
+  ]
+}
+"""
+
+
+@dataclass
+class IssueReviewOutcome:
+    severity: str
+    summary: str
+    rationale: str
+    evidence: dict[str, Any]
+    recommended_actions: list[dict[str, Any]]
+    raw: dict[str, Any] = field(default_factory=dict)
+    model: str = ""
+    error: str = ""
+
+
+def _is_placeholder_key(key: str) -> bool:
+    return not key or "REPLACE" in key.upper() or key == "sk-REPLACE-WITH-YOUR-GPT-4-KEY"
+
+
+def build_incident_dossier(incident, user, profile=None) -> dict[str, Any]:
+    return {
+        "source_type": "incident",
+        "source_id": str(incident.id),
+        "subject": {
+            "user_id": str(user.id),
+            "email": user.email,
+            "name": user.name or f"{user.first_name} {user.last_name}".strip(),
+            "role": user.role,
+            "is_verified": user.is_verified,
+            "is_at_risk": user.is_at_risk,
+            "trust_score": user.current_trust_score,
+            "regulatory_tier": user.current_regulatory_tier,
+        },
+        "profile": _profile_snapshot(profile),
+        "incident": {
+            "incident_code": incident.incident_code,
+            "severity_level": incident.severity_level,
+            "penalty_points": incident.penalty_points,
+            "description": incident.description,
+            "evidence": incident.evidence or {},
+            "related_entity_type": incident.related_entity_type,
+            "related_entity_id": incident.related_entity_id,
+            "occurred_at": incident.occurred_at.isoformat() if incident.occurred_at else None,
+            "is_cleared": incident.is_cleared,
+            "created_by": incident.created_by,
+        },
+    }
+
+
+def build_warning_dossier(warning, user, consultant_profile=None) -> dict[str, Any]:
+    return {
+        "source_type": "consultant_warning",
+        "source_id": str(warning.id),
+        "subject": {
+            "user_id": str(user.id),
+            "email": user.email,
+            "name": user.name or f"{user.first_name} {user.last_name}".strip(),
+            "role": user.role,
+            "is_verified": user.is_verified,
+            "is_at_risk": user.is_at_risk,
+            "trust_score": user.current_trust_score,
+            "regulatory_tier": user.current_regulatory_tier,
+        },
+        "profile": _profile_snapshot(consultant_profile),
+        "warning": {
+            "title": warning.title,
+            "message": warning.message,
+            "severity": warning.severity,
+            "status": warning.status,
+            "metadata": warning.metadata or {},
+            "created_at": warning.created_at.isoformat() if warning.created_at else None,
+        },
+    }
+
+
+def _profile_snapshot(profile) -> dict[str, Any]:
+    if not profile:
+        return {}
+    data = {
+        "company_name": getattr(profile, "company_name", "") or "",
+        "is_active": getattr(profile, "is_active", False),
+        "is_verified": getattr(profile, "is_verified", False),
+        "verification_level": getattr(profile, "verification_level", "") or "",
+        "business_address": getattr(profile, "business_address", "") or "",
+        "business_phone": getattr(profile, "business_phone", "") or "",
+        "metadata": getattr(profile, "metadata", {}) or {},
+    }
+    if hasattr(profile, "admin_status"):
+        data["admin_status"] = profile.admin_status
+        data["admin_notes"] = profile.admin_notes or ""
+    return data
+
+
+def call_issue_gpt(dossier: dict[str, Any]) -> IssueReviewOutcome:
+    api_key = getattr(settings, "OPENAI_API_KEY", "")
+    model = getattr(settings, "OPENAI_MODEL", "gpt-4o")
+
+    if _is_placeholder_key(api_key):
+        return IssueReviewOutcome(
+            severity="warning",
+            summary="OpenAI key missing.",
+            rationale="Issue triage could not run because OPENAI_API_KEY is not configured.",
+            evidence={"bullets": []},
+            recommended_actions=[{"action": "notify_super_admins"}],
+            model=model,
+            error="OPENAI_API_KEY is not set. Paste your real GPT-4 key into .env.",
+        )
+
+    try:
+        from openai import OpenAI
+    except ImportError:
+        return IssueReviewOutcome(
+            severity="warning",
+            summary="OpenAI package missing.",
+            rationale="Issue triage could not run because the openai package is not installed.",
+            evidence={"bullets": []},
+            recommended_actions=[{"action": "notify_super_admins"}],
+            model=model,
+            error="openai package not installed. Run: pip install -r requirements.txt",
+        )
+
+    client = OpenAI(api_key=api_key)
+
+    try:
+        completion = client.chat.completions.create(
+            model=model,
+            response_format={"type": "json_object"},
+            temperature=0.1,
+            messages=[
+                {"role": "system", "content": ISSUE_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": "Triage this Aqua AI issue and return the JSON result:\n"
+                    + json.dumps(dossier, default=str),
+                },
+            ],
+        )
+        content = completion.choices[0].message.content or "{}"
+        raw = json.loads(content)
+    except Exception as exc:
+        logger.exception("Issue triage OpenAI call failed")
+        return IssueReviewOutcome(
+            severity="warning",
+            summary="AI triage failed.",
+            rationale="The issue could not be triaged automatically because the OpenAI request failed.",
+            evidence={"bullets": []},
+            recommended_actions=[{"action": "notify_super_admins"}],
+            model=model,
+            error=str(exc),
+        )
+
+    severity = str(raw.get("severity", "warning")).lower()
+    if severity not in {"info", "warning", "critical"}:
+        severity = "warning"
+
+    return IssueReviewOutcome(
+        severity=severity,
+        summary=str(raw.get("summary", "")),
+        rationale=str(raw.get("rationale", "")),
+        evidence={"bullets": raw.get("evidence", [])},
+        recommended_actions=list(raw.get("recommended_actions", [])),
+        raw=raw,
+        model=model,
+        error="",
+    )

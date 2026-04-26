@@ -16,6 +16,11 @@ urlpatterns = [
     path("reviews/<uuid:review_id>/override/", views.review_override, name="review_override"),
     path("reviews/process-now/", views.process_now, name="process_now"),
 
+    # Flagged issues (post-signup monitoring)
+    path("issues/", views.issue_list, name="issue_list"),
+    path("issues/<uuid:issue_id>/", views.issue_detail, name="issue_detail"),
+    path("issues/<uuid:issue_id>/resolve/", views.issue_resolve, name="issue_resolve"),
+
     # Flags
     path("flags/", views.flag_list, name="flag_list"),
     path("flags/<int:flag_id>/", views.flag_detail, name="flag_detail"),

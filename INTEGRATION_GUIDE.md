@@ -1,162 +1,85 @@
-# Integration & Lockdown Guide
+# Integration and Lockdown Guide
 
-## 1. Where to place your OpenAI Key
+## 1. OpenAI key placement
 
-Open (or create) the `.env` file in the root of this project (same folder as `manage.py`):
+Set the key in the root `.env` file for this project:
 
-```bash
-cp .env.example .env
+```env
+OPENAI_API_KEY=sk-proj-your-real-key
+OPENAI_MODEL=gpt-4o
 ```
 
-Then edit `.env` and replace the placeholder:
+The dashboard will show whether the key is missing or still using a placeholder.
 
-```
-OPENAI_API_KEY=sk-proj-YOUR-ACTUAL-KEY-HERE
-```
+## 2. What the control plane monitors
 
-That's it. The AI engine reads this on every review scan.
+Signup review sources:
 
+- `user_auth_user`
+- `breeders_breederprofile`
+- `consultant_consultantprofile`
 
-## 2. What Tables the AI Monitors
+Post-signup issue sources:
 
-The AI monitors these tables from your **main backend** database (`backend_aqua_ai-1-s3_optimized`):
+- `badges_incidentlog`
+- `consultant_consultantwarning`
 
-| Mirror Model in Control Plane        | Actual Table in Main DB              | What it checks                                    |
-|---------------------------------------|--------------------------------------|---------------------------------------------------|
-| `ExternalUser`                        | `user_auth_user`                     | email, name, phone, is_verified, trust_score, is_at_risk, verification_documents |
-| `ExternalBreederProfile`              | `breeders_breederprofile`            | company, bio, website, lineage, mortality/disease rates, verification_level |
-| `ExternalConsultantProfile`           | `consultant_consultantprofile`       | company, bio, credentials, specializations, admin_status |
+Safe automatic actions:
 
-**Discovery logic:**
-- **Breeders:** Finds rows where `is_active=True` AND `is_verified=False` (new signups not yet verified)
-- **Consultants:** Finds rows where `is_active=True` AND `admin_status != 'approved'` (pending approval)
+- approve account
+- reject account
+- verify account
+- deactivate account pending review
+- set safe verification levels
+- set consultant warning status when the source warning model is available
 
-When the AI approves an account, it sets `is_verified=True` and `verified_at=now()` on both the user and profile.
-When it rejects, it sets `is_active=False` (and `admin_status='rejected'` for consultants).
+## 3. Make the control plane the main entry point
 
+In the main backend repo, `/admin/` should redirect to the control plane and the old Django admin should stay at a hidden internal path.
 
-## 3. How to Lock Down the Old Django Admin
+Environment variables used by the paired main backend change:
 
-This control plane is a **separate Django project** that connects to the **same database**. 
-It does NOT replace the old admin — it runs alongside it. Here's how to restrict the old one:
-
-### Option A: Password-protect the old admin URL (recommended for now)
-
-In your **main backend** (`backend_aqua_ai-1-s3_optimized`), edit the main `urls.py`:
-
-```python
-# In your main backend's urls.py (NOT this project)
-from django.contrib import admin
-from django.urls import path, include
-from django.http import HttpResponseRedirect
-
-# Redirect /admin/ to the new control plane
-def admin_redirect(request):
-    return HttpResponseRedirect("https://admin-control.aquaai.uk/admin-portal/")
-
-urlpatterns = [
-    # Redirect the old admin to the new control plane
-    path("admin/", admin_redirect),
-    
-    # Keep the old admin at a hidden URL only the developer knows
-    path("django-internal-admin-8x7k/", admin.site.urls),
-    
-    # ... rest of your URLs
-]
+```env
+CONTROL_PLANE_ADMIN_URL=https://admin-control.aquaai.uk/admin-portal/
+CONTROL_PLANE_INTERNAL_ADMIN_PATH=django-internal-admin-8x7k/
 ```
 
-This way:
-- Anyone going to `http://api.aquaai.uk/admin/` gets redirected to your new control plane
-- The developer can still access Django admin at a secret URL if needed during transition
-- After full migration, remove the secret URL entirely
+The included local backend repo has already been updated to do this in `aquaai/urls.py`.
 
-### Option B: Restrict old admin by IP (Nginx)
+## 4. Control-plane environment variables
 
-If using Nginx in front of the main backend, add to your server block:
+Keep these in the control-plane deployment environment:
 
-```nginx
-location /admin/ {
-    # Redirect to new control plane
-    return 301 https://admin-control.aquaai.uk/admin-portal/;
-}
+```env
+DATABASE_URL=postgres://...
+OPENAI_API_KEY=sk-proj-your-real-key
+OPENAI_MODEL=gpt-4o
+SLACK_BOT_TOKEN=xoxb-...
+SLACK_CHANNEL=#aqua-admin-alerts
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USE_TLS=True
+EMAIL_HOST_USER=admin@humara.io
+EMAIL_HOST_PASSWORD=your-app-password
+DEFAULT_FROM_EMAIL=Aqua Admin <admin@humara.io>
+SUPERADMIN_EMAILS=steven@humara.io,ben@humara.io
+LEGACY_ADMIN_REDIRECT_URL=https://admin-control.aquaai.uk
+LEGACY_ADMIN_INTERNAL_PATH=/django-internal-admin-8x7k/
 ```
 
-### Option C: Disable old admin entirely (after full migration)
+## 5. Heroku deployment notes
 
-In your main backend's `settings.py`, remove `django.contrib.admin` from `INSTALLED_APPS` 
-and remove the admin URL pattern. Only do this once you're 100% on the new control plane.
+- `Procfile` release now runs migrations and static collection
+- After deploy, run `bootstrap_superadmins`
+- Add a scheduler for:
+  - `python manage.py process_pending_reviews --limit 25`
+  - `python manage.py generate_daily_report`
 
+## 6. Verification checklist
 
-## 4. Deployment Architecture
-
-```
-┌─────────────────────────────────────────────┐
-│                SHARED POSTGRES               │
-│  (same DATABASE_URL for both projects)       │
-│                                              │
-│  Tables owned by main backend:               │
-│  - user_auth_user                            │
-│  - breeders_breederprofile                   │
-│  - consultant_consultantprofile              │
-│  - ... all other main app tables             │
-│                                              │
-│  Tables owned by control plane:              │
-│  - admin_portal_adminuser                    │
-│  - admin_portal_aiaccountreview              │
-│  - admin_portal_aiflag                       │
-│  - admin_portal_dailyreport                  │
-│  - admin_portal_adminauditlog                │
-│  - admin_portal_admininvite                  │
-└──────────────┬──────────────┬────────────────┘
-               │              │
-    ┌──────────┴──┐    ┌──────┴──────────┐
-    │ Main Backend│    │ Control Plane   │
-    │ api.aquaai  │    │ admin.aquaai    │
-    │ .uk         │    │ .uk             │
-    │ Port: 8000  │    │ Port: 8001      │
-    │             │    │                 │
-    │ Existing    │    │ NEW: AI-driven  │
-    │ Django app  │    │ review + UI     │
-    └─────────────┘    └─────────────────┘
-```
-
-Both point at the same Postgres. The control plane only creates its own `admin_portal_*` tables.
-
-
-## 5. Role System
-
-| Role         | Can View | Can Edit | Notifications | Who assigns |
-|-------------|----------|----------|---------------|-------------|
-| Guest       | ✓        | ✗        | —             | Steven/Ben  |
-| Developer   | ✓        | ✓        | Every write action notifies Steven & Ben via email+Slack | Steven/Ben |
-| Super Admin | ✓        | ✓        | Full control  | Hardcoded: steven@humara.io, ben@humara.io only |
-
-
-## 6. Quick Start Commands
-
-```bash
-# 1. Setup
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
-
-# 2. Edit .env with your real values:
-#    DATABASE_URL=postgres://user:pass@host:5432/aquaai?sslmode=require
-#    OPENAI_API_KEY=sk-proj-your-key-here
-#    SLACK_BOT_TOKEN=xoxb-your-token
-#    EMAIL_HOST_USER=admin@humara.io
-#    EMAIL_HOST_PASSWORD=your-app-password
-
-# 3. Run migrations (only creates admin_portal_* tables, never touches main backend tables)
-python manage.py migrate
-
-# 4. Create super-admin accounts
-python manage.py bootstrap_superadmins --password 'YourSecurePassword123!'
-
-# 5. Start the server
-python manage.py runserver 0.0.0.0:8001
-
-# 6. Set up cron jobs:
-# Every 5 minutes:  python manage.py process_pending_reviews
-# Daily at 23:55:   python manage.py generate_daily_report
-```
+- Confirm Steven and Ben can sign in
+- Confirm guest users cannot mutate data
+- Confirm developer writes trigger email and Slack notifications
+- Confirm `/admin/` redirects to the control plane
+- Confirm the hidden internal admin path still loads the legacy Django admin
+- Confirm the dashboard health cards are green for database, OpenAI, Slack, email, and legacy-admin routing

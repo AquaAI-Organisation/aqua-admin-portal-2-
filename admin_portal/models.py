@@ -22,6 +22,10 @@ ROLE_CHOICES = [
     ("developer", "Developer"),
     ("guest", "Guest"),
 ]
+INVITE_ROLE_CHOICES = [
+    ("developer", "Developer"),
+    ("guest", "Guest"),
+]
 
 SUBJECT_CHOICES = [("consultant", "Consultant"), ("breeder", "Breeder")]
 DECISION_CHOICES = [
@@ -32,6 +36,15 @@ DECISION_CHOICES = [
     ("error", "Error"),
 ]
 SEVERITY_CHOICES = [("info", "Info"), ("warning", "Warning"), ("critical", "Critical")]
+ISSUE_SOURCE_CHOICES = [
+    ("incident", "Incident"),
+    ("consultant_warning", "Consultant Warning"),
+]
+ISSUE_STATUS_CHOICES = [
+    ("open", "Open"),
+    ("resolved", "Resolved"),
+    ("error", "Error"),
+]
 
 
 # ---------------------------------------------------------------------------
@@ -113,6 +126,7 @@ class AdminInvite(models.Model):
     email = models.EmailField()
     token = models.CharField(max_length=64, unique=True)
     full_name = models.CharField(max_length=200, blank=True)
+    role = models.CharField(max_length=20, choices=INVITE_ROLE_CHOICES, default="guest")
     created_by = models.ForeignKey(AdminUser, on_delete=models.CASCADE, related_name="invites_sent")
     created_at = models.DateTimeField(default=timezone.now)
     expires_at = models.DateTimeField()
@@ -232,6 +246,54 @@ class ExternalBreederProfile(models.Model):
         return self.company_name or str(self.user)
 
 
+class ExternalIncidentLog(models.Model):
+    id = models.UUIDField(primary_key=True)
+    user = models.ForeignKey(
+        ExternalUser, on_delete=models.DO_NOTHING, db_column="user_id", related_name="+"
+    )
+    incident_code = models.CharField(max_length=50)
+    severity_level = models.CharField(max_length=5)
+    penalty_points = models.IntegerField(default=0)
+    description = models.TextField()
+    evidence = models.JSONField(default=dict, blank=True, null=True)
+    related_entity_type = models.CharField(max_length=50, blank=True)
+    related_entity_id = models.CharField(max_length=255, blank=True, null=True)
+    occurred_at = models.DateTimeField(null=True, blank=True)
+    is_cleared = models.BooleanField(default=False)
+    cleared_at = models.DateTimeField(null=True, blank=True)
+    decay_percentage = models.IntegerField(default=0)
+    created_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.CharField(max_length=100, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "badges_incidentlog"
+
+    def __str__(self):
+        return f"{self.incident_code} ({self.severity_level})"
+
+
+class ExternalConsultantWarning(models.Model):
+    id = models.UUIDField(primary_key=True)
+    consultant = models.ForeignKey(
+        ExternalConsultantProfile, on_delete=models.DO_NOTHING, db_column="consultant_id", related_name="+"
+    )
+    title = models.CharField(max_length=255)
+    message = models.TextField()
+    severity = models.CharField(max_length=32, blank=True)
+    status = models.CharField(max_length=32, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "consultant_consultantwarning"
+
+    def __str__(self):
+        return self.title
+
+
 # ---------------------------------------------------------------------------
 # AI decision record, flags, analytics, audit
 # ---------------------------------------------------------------------------
@@ -323,6 +385,67 @@ class AIFlag(models.Model):
         return f"{self.severity.upper()} on {self.review_id}"
 
 
+class AIFlaggedIssue(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    source_type = models.CharField(max_length=32, choices=ISSUE_SOURCE_CHOICES)
+    source_id = models.CharField(max_length=64)
+    subject_type = models.CharField(max_length=16, choices=SUBJECT_CHOICES, blank=True)
+    subject_user_id = models.UUIDField(null=True, blank=True)
+    subject_user_email = models.EmailField(blank=True)
+    subject_display_name = models.CharField(max_length=255, blank=True)
+    title = models.CharField(max_length=255, blank=True)
+    severity = models.CharField(max_length=20, choices=SEVERITY_CHOICES, default="warning")
+    status = models.CharField(max_length=20, choices=ISSUE_STATUS_CHOICES, default="open")
+    summary = models.TextField(blank=True)
+    rationale = models.TextField(blank=True)
+    evidence = models.JSONField(default=dict, blank=True)
+    recommended_actions = models.JSONField(default=list, blank=True)
+    applied_actions = models.JSONField(default=list, blank=True)
+    source_payload = models.JSONField(default=dict, blank=True)
+    openai_raw = models.JSONField(default=dict, blank=True)
+    ai_model = models.CharField(max_length=80, blank=True)
+    error = models.TextField(blank=True)
+    notified_emails = models.JSONField(default=list, blank=True)
+    notified_slack = models.BooleanField(default=False)
+    resolved = models.BooleanField(default=False)
+    resolved_by = models.ForeignKey(
+        AdminUser, null=True, blank=True, on_delete=models.SET_NULL, related_name="resolved_issues"
+    )
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    resolution_notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    triaged_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["source_type", "source_id"]),
+            models.Index(fields=["status", "-created_at"]),
+            models.Index(fields=["severity", "-created_at"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["source_type", "source_id"], name="one_triage_record_per_external_issue"
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.source_type}:{self.source_id} -> {self.severity}/{self.status}"
+
+    @property
+    def badge_class(self):
+        return {
+            "critical": "danger",
+            "warning": "warn",
+            "info": "info",
+        }.get(self.severity, "muted")
+
+    @property
+    def source_label(self):
+        return dict(ISSUE_SOURCE_CHOICES).get(self.source_type, self.source_type)
+
+
 class DailyReport(models.Model):
     report_date = models.DateField(unique=True)
     approved_count = models.PositiveIntegerField(default=0)
@@ -332,6 +455,8 @@ class DailyReport(models.Model):
     breeder_count = models.PositiveIntegerField(default=0)
     consultant_count = models.PositiveIntegerField(default=0)
     manual_override_count = models.PositiveIntegerField(default=0)
+    issue_count = models.PositiveIntegerField(default=0)
+    critical_issue_count = models.PositiveIntegerField(default=0)
     summary = models.TextField(blank=True)
     details = models.JSONField(default=dict, blank=True)
     delivered_email = models.BooleanField(default=False)

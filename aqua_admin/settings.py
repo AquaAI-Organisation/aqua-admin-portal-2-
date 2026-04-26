@@ -124,6 +124,8 @@ SUPERADMIN_EMAILS = [
     for e in os.getenv("SUPERADMIN_EMAILS", "steven@humara.io,ben@humara.io").split(",")
     if e.strip()
 ]
+LEGACY_ADMIN_REDIRECT_URL = os.getenv("LEGACY_ADMIN_REDIRECT_URL", "https://admin-control.aquaai.uk")
+LEGACY_ADMIN_INTERNAL_PATH = os.getenv("LEGACY_ADMIN_INTERNAL_PATH", "/django-internal-admin-8x7k/")
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "sk-REPLACE-WITH-YOUR-GPT-4-KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")

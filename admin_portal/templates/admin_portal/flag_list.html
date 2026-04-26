@@ -1,58 +1,66 @@
-{% extends 'admin_portal/base.html' %}
-{% block title %}Flags · {{ APP_NAME }}{% endblock %}
+{% extends "admin_portal/base.html" %}
+{% block title %}Signup Review Flags | {{ APP_NAME }}{% endblock %}
+{% block topbar_title %}Signup Review Flags{% endblock %}
 {% block content %}
 <div class="page-header">
   <div>
-    <h1>AI Flags</h1>
-    <p class="page-subtitle">Issues flagged by the AI engine for human attention</p>
+    <h1>Signup review flags</h1>
+    <p class="page-subtitle">Flags raised during onboarding reviews. Use the main Flagged Issues queue for post-signup incidents and consultant warnings.</p>
   </div>
 </div>
 
-<div class="card" style="padding:14px 18px;">
-  <form method="get" class="form-row">
-    <select name="severity">
-      <option value="">All severity</option>
-      <option value="info" {% if severity == 'info' %}selected{% endif %}>Info</option>
-      <option value="warning" {% if severity == 'warning' %}selected{% endif %}>Warning</option>
-      <option value="critical" {% if severity == 'critical' %}selected{% endif %}>Critical</option>
-    </select>
-    <label style="display:flex;align-items:center;gap:6px;color:var(--text-muted);font-size:0.85rem;">
-      <input type="checkbox" name="resolved" value="1" {% if show_resolved %}checked{% endif %}> Include resolved
-    </label>
-    <button type="submit">Filter</button>
+<div class="card">
+  <form method="get" class="filter-row">
+    <div class="form-group">
+      <label for="id_severity">Severity</label>
+      <select id="id_severity" name="severity">
+        <option value="">All severities</option>
+        <option value="info" {% if severity == "info" %}selected{% endif %}>Info</option>
+        <option value="warning" {% if severity == "warning" %}selected{% endif %}>Warning</option>
+        <option value="critical" {% if severity == "critical" %}selected{% endif %}>Critical</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="id_resolved">Include resolved</label>
+      <select id="id_resolved" name="resolved">
+        <option value="" {% if not show_resolved %}selected{% endif %}>Open only</option>
+        <option value="1" {% if show_resolved %}selected{% endif %}>Open and resolved</option>
+      </select>
+    </div>
+    <button type="submit">Apply filters</button>
   </form>
 </div>
 
 <div class="card">
   <div class="table-wrap">
     <table class="table">
-      <tr><th>Created</th><th>Severity</th><th>Review</th><th>Reason</th><th>Status</th></tr>
-      {% for f in page.object_list %}
       <tr>
-        <td style="white-space:nowrap;font-size:0.8rem;color:var(--text-muted);">{{ f.created_at|date:'d M H:i' }}</td>
-        <td><span class="badge {{ f.severity }}"><span class="badge-dot"></span>{{ f.severity }}</span></td>
-        <td>
-          <a href="{% url 'admin_portal:review_detail' f.review.id %}">
-            <span class="badge {{ f.review.subject_type }}" style="font-size:0.7rem;">{{ f.review.subject_type }}</span>
-            {{ f.review.subject_display_name|default:f.review.subject_user_email|truncatechars:30 }}
-          </a>
-        </td>
-        <td><a href="{% url 'admin_portal:flag_detail' f.id %}" style="color:var(--text-secondary);">{{ f.reason|truncatechars:100 }}</a></td>
-        <td>{% if f.resolved %}<span class="badge ok">resolved</span>{% else %}<span class="badge warn">open</span>{% endif %}</td>
+        <th>Created</th>
+        <th>Severity</th>
+        <th>Review</th>
+        <th>Reason</th>
+        <th>Status</th>
+      </tr>
+      {% for flag in page.object_list %}
+      <tr>
+        <td class="mono">{{ flag.created_at|date:"d M H:i" }}</td>
+        <td><span class="badge {{ flag.severity }}">{{ flag.severity }}</span></td>
+        <td><a href="{% url 'admin_portal:review_detail' flag.review.id %}">{{ flag.review.subject_display_name|default:flag.review.subject_user_email }}</a></td>
+        <td><a href="{% url 'admin_portal:flag_detail' flag.id %}">{{ flag.reason|truncatechars:100 }}</a></td>
+        <td>{% if flag.resolved %}<span class="badge ok">resolved</span>{% else %}<span class="badge warn">open</span>{% endif %}</td>
       </tr>
       {% empty %}
-      <tr><td colspan="5" class="empty-state" style="padding:40px;">
-        <div class="empty-icon">⚑</div>
-        No flags match your filters.
-      </td></tr>
+      <tr>
+        <td colspan="5" class="empty-state">No signup review flags match the current filters.</td>
+      </tr>
       {% endfor %}
     </table>
   </div>
   {% if page.paginator.num_pages > 1 %}
   <div class="pager">
-    {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}&severity={{ severity }}&resolved={% if show_resolved %}1{% endif %}">← Previous</a>{% endif %}
+    {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}&severity={{ severity }}&resolved={% if show_resolved %}1{% endif %}">Previous</a>{% endif %}
     <span>Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
-    {% if page.has_next %}<a href="?page={{ page.next_page_number }}&severity={{ severity }}&resolved={% if show_resolved %}1{% endif %}">Next →</a>{% endif %}
+    {% if page.has_next %}<a href="?page={{ page.next_page_number }}&severity={{ severity }}&resolved={% if show_resolved %}1{% endif %}">Next</a>{% endif %}
   </div>
   {% endif %}
 </div>

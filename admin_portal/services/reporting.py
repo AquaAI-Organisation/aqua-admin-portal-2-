@@ -6,7 +6,7 @@ from datetime import date, datetime, time, timedelta
 from django.db.models import Count, Q
 from django.utils import timezone
 
-from ..models import AIAccountReview, DailyReport
+from ..models import AIAccountReview, AIFlaggedIssue, DailyReport
 from .notifier import notify_daily_report
 
 
@@ -32,6 +32,9 @@ def build_report_for(d: date | None = None) -> DailyReport:
         consultant=Count("id", filter=Q(subject_type="consultant")),
     )
     override_count = qs.filter(manually_overridden=True).count()
+    issue_qs = AIFlaggedIssue.objects.filter(created_at__range=(start, end))
+    issue_count = issue_qs.count()
+    critical_issue_count = issue_qs.filter(severity="critical").count()
 
     summary_lines = []
     if by_decision["approved"]:
@@ -42,6 +45,10 @@ def build_report_for(d: date | None = None) -> DailyReport:
         summary_lines.append(f"{by_decision['flagged']} flagged for human review.")
     if by_decision["pending"]:
         summary_lines.append(f"{by_decision['pending']} still pending.")
+    if issue_count:
+        summary_lines.append(f"{issue_count} external issues triaged.")
+    if critical_issue_count:
+        summary_lines.append(f"{critical_issue_count} of those were critical.")
     if override_count:
         summary_lines.append(f"{override_count} manually overridden by admins.")
     summary = " ".join(summary_lines) or "No new reviews today."
@@ -56,6 +63,13 @@ def build_report_for(d: date | None = None) -> DailyReport:
                 "override_reason"
             )
         ),
+        "issue_ids": list(map(str, issue_qs.values_list("id", flat=True))),
+        "issues": list(
+            issue_qs.values(
+                "id", "source_type", "subject_display_name", "severity", "status",
+                "summary", "resolution_notes"
+            )
+        ),
     }
 
     report, _ = DailyReport.objects.update_or_create(
@@ -68,6 +82,8 @@ def build_report_for(d: date | None = None) -> DailyReport:
             breeder_count=by_subject["breeder"] or 0,
             consultant_count=by_subject["consultant"] or 0,
             manual_override_count=override_count,
+            issue_count=issue_count,
+            critical_issue_count=critical_issue_count,
             summary=summary,
             details=details,
         ),

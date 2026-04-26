@@ -1,4 +1,5 @@
 from ..models import AdminAuditLog
+from .notifier import notify_developer_action
 
 
 def get_client_ip(request):
@@ -20,3 +21,17 @@ def record(actor, action: str, *, target_type: str = "", target_id: str = "",
         details=details,
         ip_address=ip,
     )
+
+
+def record_write(actor, action: str, *, summary: str, target_type: str = "", target_id: str = "",
+                 request=None, **details):
+    record(
+        actor,
+        action,
+        target_type=target_type,
+        target_id=target_id,
+        request=request,
+        **details,
+    )
+    if getattr(actor, "is_developer", False):
+        notify_developer_action(actor, action, summary)

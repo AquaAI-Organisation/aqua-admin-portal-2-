@@ -23,7 +23,7 @@ class AdminInviteForm(forms.ModelForm):
 
     class Meta:
         model = AdminInvite
-        fields = ["email", "full_name"]
+        fields = ["email", "full_name", "role"]
         widgets = {
             "email": forms.EmailInput(attrs={"placeholder": "new.admin@example.com"}),
             "full_name": forms.TextInput(attrs={"placeholder": "Full name (optional)"}),

@@ -1,86 +1,109 @@
-{% extends 'admin_portal/base.html' %}
-{% block title %}Report {{ report.report_date }} · {{ APP_NAME }}{% endblock %}
+{% extends "admin_portal/base.html" %}
+{% block title %}Daily Report Detail | {{ APP_NAME }}{% endblock %}
+{% block topbar_title %}Daily Report Detail{% endblock %}
 {% block content %}
 <div class="page-header">
   <div>
-    <h1>Daily Report — {{ report.report_date }}</h1>
+    <h1>Report for {{ report.report_date }}</h1>
     <p class="page-subtitle">{{ report.summary }}</p>
+  </div>
+  <div class="page-actions">
+    <span class="badge {% if report.delivered_email %}ok{% else %}muted{% endif %}">email</span>
+    <span class="badge {% if report.delivered_slack %}ok{% else %}muted{% endif %}">slack</span>
   </div>
 </div>
 
 <div class="metrics-grid">
-  <div class="metric-card mc-approved">
+  <div class="metric-card">
     <div class="metric-label">Approved</div>
     <div class="metric-value">{{ report.approved_count }}</div>
   </div>
-  <div class="metric-card mc-rejected">
+  <div class="metric-card">
     <div class="metric-label">Rejected</div>
     <div class="metric-value">{{ report.rejected_count }}</div>
   </div>
-  <div class="metric-card mc-flagged">
-    <div class="metric-label">Flagged</div>
+  <div class="metric-card">
+    <div class="metric-label">Signup Flags</div>
     <div class="metric-value">{{ report.flagged_count }}</div>
   </div>
-  <div class="metric-card mc-pending">
+  <div class="metric-card">
     <div class="metric-label">Pending</div>
     <div class="metric-value">{{ report.pending_count }}</div>
   </div>
-  <div class="metric-card mc-override">
+  <div class="metric-card">
+    <div class="metric-label">Issues</div>
+    <div class="metric-value">{{ report.issue_count }}</div>
+  </div>
+  <div class="metric-card">
     <div class="metric-label">Overrides</div>
     <div class="metric-value">{{ report.manual_override_count }}</div>
   </div>
 </div>
 
-<div class="grid-2-equal" style="margin-bottom:16px;">
+<div class="grid-2-equal">
   <div class="card">
-    <div class="card-header"><div class="card-title">Breakdown by Role</div></div>
-    <div style="display:flex;gap:20px;font-size:0.95rem;">
-      <div>
-        <span class="badge breeder">Breeders</span>
-        <strong style="margin-left:6px;">{{ report.breeder_count }}</strong>
-      </div>
-      <div>
-        <span class="badge consultant">Consultants</span>
-        <strong style="margin-left:6px;">{{ report.consultant_count }}</strong>
-      </div>
+    <div class="card-header">
+      <div class="card-title">Review decisions included</div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <tr>
+          <th>Account</th>
+          <th>Decision</th>
+          <th>Confidence</th>
+          <th></th>
+        </tr>
+        {% for review in reviews %}
+        <tr>
+          <td>
+            <div class="cell-name">{{ review.subject_display_name|default:review.subject_user_email }}</div>
+            <div class="cell-sub">{{ review.subject_type }} | {{ review.created_at|date:"H:i" }}</div>
+          </td>
+          <td>
+            <span class="badge {{ review.badge_class }}">{{ review.decision }}</span>
+            {% if review.manually_overridden %}<span class="badge override">override</span>{% endif %}
+          </td>
+          <td class="mono">{{ review.confidence|floatformat:2 }}</td>
+          <td><a class="btn btn-sm" href="{% url 'admin_portal:review_detail' review.id %}">Open</a></td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="4" class="empty-state">No account reviews were included in this report.</td>
+        </tr>
+        {% endfor %}
+      </table>
     </div>
   </div>
-  <div class="card">
-    <div class="card-header"><div class="card-title">Delivery Status</div></div>
-    <div style="font-size:0.9rem;">
-      {% if report.delivered_email %}<span style="color:var(--green);">✓ Email delivered</span>{% else %}<span style="color:var(--red);">✕ Email not sent</span>{% endif %}
-      <br>
-      {% if report.delivered_slack %}<span style="color:var(--green);">✓ Slack delivered</span>{% else %}<span style="color:var(--red);">✕ Slack not sent</span>{% endif %}
-    </div>
-  </div>
-</div>
 
-<div class="card">
-  <div class="card-header">
-    <div class="card-title">Reviewed Accounts</div>
-    <div class="card-subtitle">Click any row for full AI reasoning</div>
-  </div>
-  <div class="table-wrap">
-    <table class="table">
-      <tr><th>Time</th><th>Role</th><th>Account</th><th>Decision</th><th>Confidence</th><th></th></tr>
-      {% for r in reviews %}
-      <tr>
-        <td style="white-space:nowrap;font-size:0.8rem;color:var(--text-muted);">{{ r.created_at|date:'H:i' }}</td>
-        <td><span class="badge {{ r.subject_type }}">{{ r.subject_type }}</span></td>
-        <td>
-          <div class="cell-name">{{ r.subject_display_name|default:r.subject_user_email }}</div>
-        </td>
-        <td>
-          <span class="badge {{ r.badge_class }}"><span class="badge-dot"></span>{{ r.decision }}</span>
-          {% if r.manually_overridden %}<span class="badge override" style="margin-left:4px;">override</span>{% endif %}
-        </td>
-        <td style="font-family:var(--font-mono);font-size:0.82rem;">{{ r.confidence|floatformat:2 }}</td>
-        <td><a href="{% url 'admin_portal:review_detail' r.id %}" class="btn btn-sm">Details</a></td>
-      </tr>
-      {% empty %}
-      <tr><td colspan="6" class="empty-state" style="padding:30px;">No records in this report.</td></tr>
-      {% endfor %}
-    </table>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Issues included</div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <tr>
+          <th>Source</th>
+          <th>Severity</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+        {% for issue in issues %}
+        <tr>
+          <td>
+            <div class="cell-name">{{ issue.source_label }}</div>
+            <div class="cell-sub">{{ issue.subject_display_name|default:issue.subject_user_email }}</div>
+          </td>
+          <td><span class="badge {{ issue.badge_class }}">{{ issue.severity }}</span></td>
+          <td>{% if issue.resolved %}<span class="badge ok">resolved</span>{% else %}<span class="badge warn">open</span>{% endif %}</td>
+          <td><a class="btn btn-sm" href="{% url 'admin_portal:issue_detail' issue.id %}">Open</a></td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="4" class="empty-state">No issues were included in this report.</td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
   </div>
 </div>
 {% endblock %}

@@ -1,14 +1,16 @@
-{% extends 'admin_portal/base.html' %}
-{% block title %}Daily Reports · {{ APP_NAME }}{% endblock %}
+{% extends "admin_portal/base.html" %}
+{% block title %}Daily Reports | {{ APP_NAME }}{% endblock %}
+{% block topbar_title %}Daily Reports{% endblock %}
 {% block content %}
 <div class="page-header">
   <div>
-    <h1>Daily AI Reports</h1>
-    <p class="page-subtitle">End-of-day summaries with full drill-down</p>
+    <h1>Daily AI summary reports</h1>
+    <p class="page-subtitle">Each report captures the day's account approvals, rejections, signup flags, issue triage, and override activity.</p>
   </div>
   {% if IS_SUPER_ADMIN %}
-  <form method="post" action="{% url 'admin_portal:daily_report_run_now' %}">{% csrf_token %}
-    <button class="btn-primary">Generate Report Now</button>
+  <form method="post" action="{% url 'admin_portal:daily_report_run_now' %}">
+    {% csrf_token %}
+    <button class="btn-primary" type="submit">Generate report now</button>
   </form>
   {% endif %}
 </div>
@@ -16,34 +18,40 @@
 <div class="card">
   <div class="table-wrap">
     <table class="table">
-      <tr><th>Date</th><th>Approved</th><th>Rejected</th><th>Flagged</th><th>Pending</th><th>Overrides</th><th>Delivery</th><th></th></tr>
-      {% for r in page.object_list %}
       <tr>
-        <td style="font-weight:600;">{{ r.report_date }}</td>
-        <td style="color:var(--green);font-weight:600;">{{ r.approved_count }}</td>
-        <td style="color:var(--red);font-weight:600;">{{ r.rejected_count }}</td>
-        <td style="color:var(--amber);font-weight:600;">{{ r.flagged_count }}</td>
-        <td style="color:var(--text-muted);">{{ r.pending_count }}</td>
-        <td style="color:var(--purple);">{{ r.manual_override_count }}</td>
-        <td style="font-size:0.8rem;color:var(--text-muted);">
-          {% if r.delivered_email %}<span style="color:var(--green);">✓ Email</span>{% else %}<span>✕ Email</span>{% endif %}
-          {% if r.delivered_slack %}<span style="color:var(--green);margin-left:6px;">✓ Slack</span>{% else %}<span style="margin-left:6px;">✕ Slack</span>{% endif %}
+        <th>Date</th>
+        <th>Approvals</th>
+        <th>Rejected</th>
+        <th>Signup flags</th>
+        <th>Issues</th>
+        <th>Delivery</th>
+        <th></th>
+      </tr>
+      {% for report in page.object_list %}
+      <tr>
+        <td class="cell-name">{{ report.report_date }}</td>
+        <td>{{ report.approved_count }}</td>
+        <td>{{ report.rejected_count }}</td>
+        <td>{{ report.flagged_count }}</td>
+        <td>{{ report.issue_count }} {% if report.critical_issue_count %}<span class="cell-sub">critical: {{ report.critical_issue_count }}</span>{% endif %}</td>
+        <td>
+          <span class="badge {% if report.delivered_email %}ok{% else %}muted{% endif %}">email</span>
+          <span class="badge {% if report.delivered_slack %}ok{% else %}muted{% endif %}">slack</span>
         </td>
-        <td><a href="{% url 'admin_portal:daily_report_detail' r.id %}" class="btn btn-sm">Open</a></td>
+        <td><a class="btn btn-sm" href="{% url 'admin_portal:daily_report_detail' report.id %}">Open</a></td>
       </tr>
       {% empty %}
-      <tr><td colspan="8" class="empty-state" style="padding:40px;">
-        <div class="empty-icon">◫</div>
-        No reports generated yet.
-      </td></tr>
+      <tr>
+        <td colspan="7" class="empty-state">No reports have been generated yet.</td>
+      </tr>
       {% endfor %}
     </table>
   </div>
   {% if page.paginator.num_pages > 1 %}
   <div class="pager">
-    {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}">← Previous</a>{% endif %}
+    {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}">Previous</a>{% endif %}
     <span>Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
-    {% if page.has_next %}<a href="?page={{ page.next_page_number }}">Next →</a>{% endif %}
+    {% if page.has_next %}<a href="?page={{ page.next_page_number }}">Next</a>{% endif %}
   </div>
   {% endif %}
 </div>

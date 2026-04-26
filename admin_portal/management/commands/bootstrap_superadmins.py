@@ -39,6 +39,7 @@ class Command(BaseCommand):
                     "is_active": True,
                     "is_superuser": True,
                     "is_platform_super_admin": True,
+                    "role": "super_admin",
                 },
             )
             changed = []
@@ -50,6 +51,8 @@ class Command(BaseCommand):
                 user.is_staff = True; changed.append("is_staff")
             if not user.is_active:
                 user.is_active = True; changed.append("is_active")
+            if user.role != "super_admin":
+                user.role = "super_admin"; changed.append("role")
 
             if created or options["reset_password"]:
                 final_pw = password or secrets.token_urlsafe(16)

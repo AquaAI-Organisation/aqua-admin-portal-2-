@@ -1,152 +1,154 @@
-{% extends 'admin_portal/base.html' %}
+{% extends "admin_portal/base.html" %}
 {% load portal_tags %}
-{% block title %}Review {{ review.id|truncatechars:12 }} · {{ APP_NAME }}{% endblock %}
+{% block title %}Review Detail | {{ APP_NAME }}{% endblock %}
+{% block topbar_title %}Review Detail{% endblock %}
 {% block content %}
 <div class="page-header">
   <div>
-    <h1>Review Detail</h1>
-    <p class="page-subtitle">{{ review.subject_type|title }}: {{ review.subject_display_name|default:review.subject_user_email }}</p>
+    <h1>{{ review.subject_display_name|default:review.subject_user_email }}</h1>
+    <p class="page-subtitle">{{ review.subject_type|title }} account review created on {{ review.created_at|date:"d M Y H:i" }}</p>
   </div>
   <div class="page-actions">
-    <span class="badge {{ review.badge_class }}" style="font-size:0.9rem;padding:6px 14px;">
-      <span class="badge-dot"></span> {{ review.decision|upper }}
-    </span>
+    <span class="badge {{ review.badge_class }}">{{ review.decision }}</span>
+    {% if review.manually_overridden %}<span class="badge override">manual override</span>{% endif %}
     {% if IS_SUPER_ADMIN %}
-    <form method="post" action="{% url 'admin_portal:review_rerun' review.id %}" style="display:inline;">{% csrf_token %}
-      <button class="btn btn-sm">⟳ Re-run AI</button>
+    <form method="post" action="{% url 'admin_portal:review_rerun' review.id %}">
+      {% csrf_token %}
+      <button class="btn" type="submit">Re-run AI</button>
     </form>
     {% endif %}
   </div>
 </div>
 
-{% if review.manually_overridden %}
-<div class="override-banner">
-  <span class="override-icon">⚡</span>
-  <div>
-    <strong style="color:var(--purple);">Manually overridden</strong>
-    <span style="color:var(--text-muted);font-size:0.85rem;">
-      by {{ review.overridden_by.email|default:"system" }}
-      — original decision was <strong>{{ review.original_decision }}</strong>
-    </span>
-    {% if review.override_reason %}
-    <div style="color:var(--text-secondary);font-size:0.85rem;margin-top:2px;">{{ review.override_reason }}</div>
-    {% endif %}
-  </div>
-</div>
-{% endif %}
-
 {% if review.error %}
 <div class="message error">{{ review.error }}</div>
 {% endif %}
 
-<!-- Key details -->
-<div class="card">
-  <div class="kv-grid">
-    <div class="kv-label">Role</div>
-    <div class="kv-value"><span class="badge {{ review.subject_type }}">{{ review.subject_type }}</span></div>
-    <div class="kv-label">Display name</div>
-    <div class="kv-value">{{ review.subject_display_name|default:'-' }}</div>
-    <div class="kv-label">Email</div>
-    <div class="kv-value">{{ review.subject_user_email|default:'-' }}</div>
-    <div class="kv-label">Confidence</div>
-    <div class="kv-value">
-      <div style="display:flex;align-items:center;gap:10px;">
-        <div class="confidence-bar" style="max-width:200px;">
+<div class="grid-2-equal">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Decision summary</div>
+    </div>
+    <div class="detail-list">
+      <div class="detail-item">
+        <strong>Rationale</strong>
+        <div class="helper-text" style="margin-top:8px;">{{ review.rationale|default:"No rationale provided." }}</div>
+      </div>
+      <div class="detail-item">
+        <strong>Confidence</strong>
+        <div style="margin-top:10px;" class="confidence-bar">
           <div class="confidence-fill {{ review.confidence_level }}" style="width:{{ review.confidence_percent }}%;"></div>
         </div>
-        <span style="font-family:var(--font-mono);font-weight:700;">{{ review.confidence|floatformat:3 }}</span>
-        <span class="badge {{ review.confidence_level }}" style="font-size:0.7rem;">{{ review.confidence_level }}</span>
+        <div class="cell-sub mono">{{ review.confidence|floatformat:3 }}</div>
       </div>
+      {% if review.manually_overridden %}
+      <div class="detail-item">
+        <strong>Override record</strong>
+        <div class="helper-text" style="margin-top:8px;">
+          Original decision: {{ review.original_decision }}<br>
+          Overridden by: {{ review.overridden_by.email|default:"system" }}<br>
+          Reason: {{ review.override_reason }}
+        </div>
+      </div>
+      {% endif %}
     </div>
-    <div class="kv-label">AI Model</div>
-    <div class="kv-value" style="font-family:var(--font-mono);font-size:0.82rem;">{{ review.ai_model|default:'-' }}</div>
-    <div class="kv-label">Created</div>
-    <div class="kv-value">{{ review.created_at|date:'d M Y H:i:s' }}</div>
-    <div class="kv-label">Decided at</div>
-    <div class="kv-value">{{ review.decided_at|date:'d M Y H:i:s'|default:'-' }}</div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Review metadata</div>
+    </div>
+    <div class="kv-grid">
+      <div class="kv-label">Role</div>
+      <div class="kv-value">{{ review.subject_type }}</div>
+      <div class="kv-label">Email</div>
+      <div class="kv-value">{{ review.subject_user_email|default:"-" }}</div>
+      <div class="kv-label">AI model</div>
+      <div class="kv-value mono">{{ review.ai_model|default:"-" }}</div>
+      <div class="kv-label">Decided at</div>
+      <div class="kv-value">{{ review.decided_at|date:"d M Y H:i:s"|default:"-" }}</div>
+      <div class="kv-label">Created</div>
+      <div class="kv-value">{{ review.created_at|date:"d M Y H:i:s" }}</div>
+    </div>
   </div>
 </div>
 
-<!-- Rationale -->
-<div class="card">
-  <div class="card-header">
-    <div class="card-title">AI Rationale</div>
-  </div>
-  <p style="color:var(--text-secondary);line-height:1.7;">{{ review.rationale|default:'No rationale provided.' }}</p>
-</div>
-
-<!-- Scores -->
 {% if review.evidence.scores %}
 <div class="card">
   <div class="card-header">
-    <div class="card-title">Dimension Scores</div>
+    <div class="card-title">Dimension scores</div>
   </div>
-  <div class="score-row">
+  <div class="score-grid">
     {% for key, val in review.evidence.scores.items %}
     <div class="score-pill">
-      <div class="score-bar"><div class="score-fill" style="width:{% widthratio val 1 100 %}%;"></div></div>
-      <span class="score-label">{{ key }}</span>
-      <span class="score-val">{{ val|floatformat:2 }}</span>
+      <strong>{{ key }}</strong>
+      <div class="progress-bar">
+        <div class="progress-fill" style="width:{% widthratio val 1 100 %}%;"></div>
+      </div>
+      <div class="cell-sub mono">{{ val|floatformat:2 }}</div>
     </div>
     {% endfor %}
   </div>
 </div>
 {% endif %}
 
-<!-- Evidence & Actions side by side -->
 <div class="grid-2-equal">
   <div class="card">
     <div class="card-header">
       <div class="card-title">Evidence</div>
     </div>
     {% if review.evidence.bullets %}
+    <div class="detail-list">
       {% for bullet in review.evidence.bullets %}
-        <div style="padding:6px 0;border-bottom:1px solid var(--border-subtle);font-size:0.85rem;color:var(--text-secondary);">
-          <span style="color:var(--aqua);margin-right:6px;">›</span> {{ bullet }}
-        </div>
+      <div class="detail-item">{{ bullet }}</div>
       {% endfor %}
+    </div>
     {% else %}
-      <pre class="json">{{ review.evidence|jsonify }}</pre>
+    <pre class="json">{{ review.evidence|jsonify }}</pre>
     {% endif %}
   </div>
+
   <div class="card">
     <div class="card-header">
-      <div class="card-title">Actions</div>
+      <div class="card-title">Action log</div>
     </div>
-    <div style="margin-bottom:12px;">
-      <div class="card-subtitle" style="margin-bottom:6px;">Recommended</div>
-      <pre class="json">{{ review.recommended_actions|jsonify }}</pre>
-    </div>
-    <div>
-      <div class="card-subtitle" style="margin-bottom:6px;">Applied</div>
-      <pre class="json">{{ review.applied_actions|jsonify }}</pre>
+    <div class="stack">
+      <div>
+        <div class="card-subtitle" style="margin-bottom:8px;">Recommended actions</div>
+        <pre class="json">{{ review.recommended_actions|jsonify }}</pre>
+      </div>
+      <div>
+        <div class="card-subtitle" style="margin-bottom:8px;">Applied actions</div>
+        <pre class="json">{{ review.applied_actions|jsonify }}</pre>
+      </div>
+      {% if review.manually_overridden %}
+      <div>
+        <div class="card-subtitle" style="margin-bottom:8px;">Manual override</div>
+        <pre class="json">{{ review.override_reason }}</pre>
+      </div>
+      {% endif %}
     </div>
   </div>
 </div>
 
-<!-- External profile data -->
 {% if external_user %}
 <div class="card">
   <div class="card-header">
-    <div class="card-title">External User Profile</div>
+    <div class="card-title">External user record</div>
   </div>
   <div class="kv-grid">
     <div class="kv-label">Name</div>
-    <div class="kv-value">{{ external_user.name|default:"-" }} ({{ external_user.first_name }} {{ external_user.last_name }})</div>
+    <div class="kv-value">{{ external_user.name|default:"-" }}</div>
     <div class="kv-label">Email</div>
     <div class="kv-value">{{ external_user.email }}</div>
     <div class="kv-label">Phone</div>
     <div class="kv-value">{{ external_user.phone|default:"-" }}</div>
-    <div class="kv-label">Role</div>
-    <div class="kv-value">{{ external_user.role }}</div>
     <div class="kv-label">Verified</div>
     <div class="kv-value">{{ external_user.is_verified|yesno:"Yes,No" }}</div>
-    <div class="kv-label">Trust Score</div>
+    <div class="kv-label">Trust score</div>
     <div class="kv-value">{{ external_user.current_trust_score|default:"-" }}</div>
-    <div class="kv-label">At Risk</div>
+    <div class="kv-label">At risk</div>
     <div class="kv-value">{{ external_user.is_at_risk|yesno:"Yes,No" }}</div>
-    <div class="kv-label">Joined</div>
-    <div class="kv-value">{{ external_user.date_joined|date:'d M Y H:i'|default:"-" }}</div>
   </div>
 </div>
 {% endif %}
@@ -154,72 +156,72 @@
 {% if profile %}
 <div class="card">
   <div class="card-header">
-    <div class="card-title">{{ review.subject_type|title }} Profile Details</div>
+    <div class="card-title">{{ review.subject_type|title }} profile snapshot</div>
   </div>
   <div class="kv-grid">
     <div class="kv-label">Company</div>
     <div class="kv-value">{{ profile.company_name|default:"-" }}</div>
     <div class="kv-label">Bio</div>
-    <div class="kv-value">{{ profile.bio|default:"-"|truncatechars:300 }}</div>
+    <div class="kv-value">{{ profile.bio|default:"-"|truncatechars:400 }}</div>
     <div class="kv-label">Website</div>
-    <div class="kv-value">{% if profile.website %}<a href="{{ profile.website }}" target="_blank">{{ profile.website }}</a>{% else %}-{% endif %}</div>
-    <div class="kv-label">Business Phone</div>
-    <div class="kv-value">{{ profile.business_phone|default:"-" }}</div>
-    <div class="kv-label">Business Address</div>
-    <div class="kv-value">{{ profile.business_address|default:"-" }}</div>
-    <div class="kv-label">Verification Level</div>
+    <div class="kv-value">{% if profile.website %}<a href="{{ profile.website }}" target="_blank" rel="noreferrer">{{ profile.website }}</a>{% else %}-{% endif %}</div>
+    <div class="kv-label">Verification level</div>
     <div class="kv-value">{{ profile.verification_level|default:"none" }}</div>
     <div class="kv-label">Active</div>
     <div class="kv-value">{{ profile.is_active|yesno:"Yes,No" }}</div>
     <div class="kv-label">Verified</div>
     <div class="kv-value">{{ profile.is_verified|yesno:"Yes,No" }}</div>
+    {% if review.subject_type == "consultant" %}
+    <div class="kv-label">Admin status</div>
+    <div class="kv-value">{{ profile.admin_status|default:"-" }}</div>
+    {% endif %}
   </div>
 </div>
 {% endif %}
 
-<!-- Flags -->
 <div class="card">
   <div class="card-header">
-    <div class="card-title">Flags linked to this review</div>
+    <div class="card-title">Signup review flags</div>
+    <div class="card-subtitle">These are flags raised during the onboarding review itself.</div>
   </div>
   <div class="table-wrap">
     <table class="table">
-      <tr><th>Severity</th><th>Reason</th><th>Status</th><th></th></tr>
-      {% for f in flags %}
       <tr>
-        <td><span class="badge {{ f.severity }}"><span class="badge-dot"></span>{{ f.severity }}</span></td>
-        <td style="font-size:0.85rem;">{{ f.reason|truncatechars:120 }}</td>
-        <td>{% if f.resolved %}<span class="badge ok">resolved</span>{% else %}<span class="badge warn">open</span>{% endif %}</td>
-        <td><a href="{% url 'admin_portal:flag_detail' f.id %}" class="btn btn-sm">Open</a></td>
+        <th>Severity</th>
+        <th>Reason</th>
+        <th>Status</th>
+        <th></th>
+      </tr>
+      {% for flag in flags %}
+      <tr>
+        <td><span class="badge {{ flag.severity }}">{{ flag.severity }}</span></td>
+        <td>{{ flag.reason|truncatechars:140 }}</td>
+        <td>{% if flag.resolved %}<span class="badge ok">resolved</span>{% else %}<span class="badge warn">open</span>{% endif %}</td>
+        <td><a class="btn btn-sm" href="{% url 'admin_portal:flag_detail' flag.id %}">Open</a></td>
       </tr>
       {% empty %}
-      <tr><td colspan="4" style="color:var(--text-muted);padding:16px;text-align:center;">No flags for this review.</td></tr>
+      <tr>
+        <td colspan="4" class="empty-state">No signup review flags were raised for this account.</td>
+      </tr>
       {% endfor %}
     </table>
   </div>
 </div>
 
-<!-- Manual Override (super admins only) -->
-{% if IS_SUPER_ADMIN and not review.manually_overridden and review.decision != 'pending' %}
-<div class="override-panel">
-  <h3>⚡ Manual Override</h3>
-  <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:14px;">
-    Override the AI's decision. This will immediately apply the new decision to the external account.
-  </p>
-  <form method="post" action="{% url 'admin_portal:review_override' review.id %}">
+{% if IS_SUPER_ADMIN and not review.manually_overridden and review.decision != "pending" %}
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">Manual override</div>
+    <div class="card-subtitle">Only Steven and Ben can force a different outcome.</div>
+  </div>
+  <form method="post" action="{% url 'admin_portal:review_override' review.id %}" class="stack">
     {% csrf_token %}
-    <div class="radio-group">
-      <label class="radio-option">
-        <input type="radio" name="new_decision" value="approved" required>
-        <span style="color:var(--green);">✓ Approve</span>
-      </label>
-      <label class="radio-option">
-        <input type="radio" name="new_decision" value="rejected">
-        <span style="color:var(--red);">✕ Reject</span>
-      </label>
+    <div class="filter-row">
+      <label class="inline-chip"><input type="radio" name="new_decision" value="approved" required> Approve</label>
+      <label class="inline-chip"><input type="radio" name="new_decision" value="rejected" required> Reject</label>
     </div>
-    <textarea name="reason" rows="3" placeholder="Explain why you are overriding this decision (min 10 chars)..." required minlength="10" style="width:100%;margin-bottom:10px;"></textarea>
-    <button type="submit" class="btn-primary">Apply Override</button>
+    <textarea name="reason" rows="4" placeholder="Explain why you are overriding the AI decision." required minlength="10"></textarea>
+    <button class="btn-primary" type="submit">Apply manual override</button>
   </form>
 </div>
 {% endif %}

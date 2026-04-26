@@ -4,27 +4,41 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Login · {{ APP_NAME }}</title>
+  <title>Sign In | {{ APP_NAME }}</title>
   <link rel="stylesheet" href="{% static 'admin_portal/styles.css' %}">
 </head>
 <body>
   <div class="login-page">
     <div class="login-card">
-      <div class="brand-logo" style="margin-bottom:16px;">
-        <div class="brand-icon">A</div>
-        <div class="brand-name">{{ APP_NAME }}</div>
+      <div class="brand-block" style="margin-bottom:20px;">
+        <div class="brand-mark">A</div>
+        <div>
+          <div class="brand-title">{{ APP_NAME }}</div>
+          <div class="brand-subtitle">{{ APP_TAGLINE }}</div>
+        </div>
       </div>
-      <p class="login-sub">Sign in to the AI-driven approval control plane.</p>
+      <h1>Admin sign in</h1>
+      <p class="page-subtitle">Only approved Aqua AI admins can access this control plane.</p>
+
       {% if messages %}
+      <div class="message-stack">
         {% for message in messages %}
-          <div class="message {{ message.tags }}">{{ message }}</div>
+        <div class="message {{ message.tags }}">{{ message }}</div>
         {% endfor %}
+      </div>
       {% endif %}
-      <form method="post">
+
+      <form method="post" class="login-grid">
         {% csrf_token %}
-        <input type="email" name="username" placeholder="admin@humara.io" required autofocus>
-        <input type="password" name="password" placeholder="Password" required>
-        <button class="btn-primary" type="submit">Sign In</button>
+        <div class="form-group">
+          <label for="id_username">Email</label>
+          <input id="id_username" type="email" name="username" placeholder="admin@humara.io" required autofocus>
+        </div>
+        <div class="form-group">
+          <label for="id_password">Password</label>
+          <input id="id_password" type="password" name="password" placeholder="Password" required>
+        </div>
+        <button class="btn-primary" type="submit">Sign in</button>
       </form>
     </div>
   </div>

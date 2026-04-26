@@ -4,19 +4,22 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Invite Invalid · {{ APP_NAME }}</title>
+  <title>Invite Unavailable | {{ APP_NAME }}</title>
   <link rel="stylesheet" href="{% static 'admin_portal/styles.css' %}">
 </head>
 <body>
   <div class="login-page">
-    <div class="login-card" style="text-align:center;">
-      <div class="brand-logo" style="margin-bottom:16px;justify-content:center;">
-        <div class="brand-icon">A</div>
-        <div class="brand-name">{{ APP_NAME }}</div>
+    <div class="login-card">
+      <div class="brand-block" style="margin-bottom:20px;">
+        <div class="brand-mark">A</div>
+        <div>
+          <div class="brand-title">{{ APP_NAME }}</div>
+          <div class="brand-subtitle">{{ APP_TAGLINE }}</div>
+        </div>
       </div>
-      <h2>Invite Unavailable</h2>
-      <p class="login-sub">This invite is expired, revoked, or already used.</p>
-      <a href="{% url 'admin_portal:login' %}" class="btn-primary" style="display:inline-block;padding:10px 24px;margin-top:10px;">Go to Login</a>
+      <h1>Invite unavailable</h1>
+      <p class="page-subtitle">This invite has expired, already been used, or has been revoked.</p>
+      <a class="btn btn-primary" href="{% url 'admin_portal:login' %}">Return to sign in</a>
     </div>
   </div>
 </body>

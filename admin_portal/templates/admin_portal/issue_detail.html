@@ -1,0 +1,143 @@
+{% extends "admin_portal/base.html" %}
+{% load portal_tags %}
+{% block title %}Issue Detail | {{ APP_NAME }}{% endblock %}
+{% block topbar_title %}Issue Detail{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>{{ issue.title|default:"Flagged issue" }}</h1>
+    <p class="page-subtitle">{{ issue.source_label }} for {{ issue.subject_display_name|default:issue.subject_user_email }}</p>
+  </div>
+  <div class="page-actions">
+    <span class="badge {{ issue.badge_class }}">{{ issue.severity }}</span>
+    {% if issue.resolved %}<span class="badge ok">resolved</span>{% endif %}
+  </div>
+</div>
+
+{% if issue.error %}
+<div class="message error">{{ issue.error }}</div>
+{% endif %}
+
+<div class="grid-2-equal">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Issue summary</div>
+    </div>
+    <div class="detail-list">
+      <div class="detail-item">
+        <strong>Summary</strong>
+        <div class="helper-text" style="margin-top:8px;">{{ issue.summary|default:"No summary provided." }}</div>
+      </div>
+      <div class="detail-item">
+        <strong>Rationale</strong>
+        <div class="helper-text" style="margin-top:8px;">{{ issue.rationale|default:"No rationale provided." }}</div>
+      </div>
+      <div class="detail-item split">
+        <span>Source</span>
+        <span class="stat-chip">{{ issue.source_label }}</span>
+      </div>
+      <div class="detail-item split">
+        <span>Status</span>
+        <span class="stat-chip">{{ issue.status }}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Affected account</div>
+    </div>
+    <div class="kv-grid">
+      <div class="kv-label">Display name</div>
+      <div class="kv-value">{{ issue.subject_display_name|default:"-" }}</div>
+      <div class="kv-label">Email</div>
+      <div class="kv-value">{{ issue.subject_user_email|default:"-" }}</div>
+      <div class="kv-label">Role</div>
+      <div class="kv-value">{{ issue.subject_type|default:"-" }}</div>
+      <div class="kv-label">Created</div>
+      <div class="kv-value">{{ issue.created_at|date:"d M Y H:i:s" }}</div>
+      <div class="kv-label">Triaged</div>
+      <div class="kv-value">{{ issue.triaged_at|date:"d M Y H:i:s"|default:"-" }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="grid-2-equal">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Evidence</div>
+    </div>
+    {% if issue.evidence.bullets %}
+    <div class="detail-list">
+      {% for bullet in issue.evidence.bullets %}
+      <div class="detail-item">{{ bullet }}</div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <pre class="json">{{ issue.evidence|jsonify }}</pre>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Actions</div>
+    </div>
+    <div class="stack">
+      <div>
+        <div class="card-subtitle" style="margin-bottom:8px;">Recommended actions</div>
+        <pre class="json">{{ issue.recommended_actions|jsonify }}</pre>
+      </div>
+      <div>
+        <div class="card-subtitle" style="margin-bottom:8px;">Applied actions</div>
+        <pre class="json">{{ issue.applied_actions|jsonify }}</pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="grid-2-equal">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Source payload</div>
+    </div>
+    <pre class="json">{{ issue.source_payload|jsonify }}</pre>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Delivery and resolution</div>
+    </div>
+    <div class="kv-grid">
+      <div class="kv-label">Email recipients</div>
+      <div class="kv-value">{{ issue.notified_emails|join:", "|default:"-" }}</div>
+      <div class="kv-label">Slack delivered</div>
+      <div class="kv-value">{{ issue.notified_slack|yesno:"Yes,No" }}</div>
+      <div class="kv-label">Resolved by</div>
+      <div class="kv-value">{{ issue.resolved_by.email|default:"-" }}</div>
+      <div class="kv-label">Resolved at</div>
+      <div class="kv-value">{{ issue.resolved_at|date:"d M Y H:i:s"|default:"-" }}</div>
+      <div class="kv-label">Resolution notes</div>
+      <div class="kv-value">{{ issue.resolution_notes|default:"-" }}</div>
+    </div>
+  </div>
+</div>
+
+{% if not issue.resolved %}
+  {% if CAN_WRITE %}
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Resolve issue</div>
+    </div>
+    <form method="post" action="{% url 'admin_portal:issue_resolve' issue.id %}" class="stack">
+      {% csrf_token %}
+      <textarea name="resolution_notes" rows="4" placeholder="Explain how this issue was resolved." required></textarea>
+      <button class="btn-primary" type="submit">Mark issue resolved</button>
+    </form>
+  </div>
+  {% else %}
+  <div class="card">
+    <div class="helper-text">Your role is read only. Contact Steven or Ben if this issue needs a manual resolution.</div>
+  </div>
+  {% endif %}
+{% endif %}
+{% endblock %}

@@ -1,67 +1,62 @@
-{% extends 'admin_portal/base.html' %}
-{% block title %}Flag #{{ flag.id }} · {{ APP_NAME }}{% endblock %}
+{% extends "admin_portal/base.html" %}
+{% block title %}Signup Flag Detail | {{ APP_NAME }}{% endblock %}
+{% block topbar_title %}Signup Flag Detail{% endblock %}
 {% block content %}
 <div class="page-header">
   <div>
-    <h1>Flag Detail</h1>
-    <p class="page-subtitle">Flag #{{ flag.id }} on {{ flag.review.subject_type }} review</p>
+    <h1>Review flag #{{ flag.id }}</h1>
+    <p class="page-subtitle">Raised during the onboarding review for {{ flag.review.subject_display_name|default:flag.review.subject_user_email }}</p>
   </div>
-  <span class="badge {{ flag.severity }}" style="font-size:0.9rem;padding:6px 14px;">
-    <span class="badge-dot"></span> {{ flag.severity|upper }}
-  </span>
+  <div class="page-actions">
+    <span class="badge {{ flag.severity }}">{{ flag.severity }}</span>
+    {% if flag.resolved %}<span class="badge ok">resolved</span>{% endif %}
+  </div>
 </div>
 
 <div class="card">
   <div class="kv-grid">
-    <div class="kv-label">Severity</div>
-    <div class="kv-value"><span class="badge {{ flag.severity }}"><span class="badge-dot"></span>{{ flag.severity }}</span></div>
     <div class="kv-label">Created</div>
-    <div class="kv-value">{{ flag.created_at|date:'d M Y H:i:s' }}</div>
+    <div class="kv-value">{{ flag.created_at|date:"d M Y H:i:s" }}</div>
     <div class="kv-label">Review</div>
-    <div class="kv-value"><a href="{% url 'admin_portal:review_detail' flag.review.id %}">{{ flag.review.subject_type }}: {{ flag.review.subject_display_name|default:flag.review.subject_user_email }} → {{ flag.review.decision }}</a></div>
+    <div class="kv-value"><a href="{% url 'admin_portal:review_detail' flag.review.id %}">{{ flag.review.subject_display_name|default:flag.review.subject_user_email }}</a></div>
     <div class="kv-label">Reason</div>
-    <div class="kv-value" style="line-height:1.7;">{{ flag.reason }}</div>
-    <div class="kv-label">Recommended Solution</div>
-    <div class="kv-value">{{ flag.recommended_solution|default:'-' }}</div>
-    <div class="kv-label">Applied Solution</div>
-    <div class="kv-value">{{ flag.applied_solution|default:'-' }}</div>
-    <div class="kv-label">Notified Emails</div>
-    <div class="kv-value">{{ flag.notified_emails|join:', '|default:'-' }}</div>
-    <div class="kv-label">Slack Notified</div>
-    <div class="kv-value">{{ flag.notified_slack|yesno:'Yes,No' }}</div>
+    <div class="kv-value">{{ flag.reason }}</div>
+    <div class="kv-label">Recommended solution</div>
+    <div class="kv-value">{{ flag.recommended_solution|default:"-" }}</div>
+    <div class="kv-label">Applied solution</div>
+    <div class="kv-value">{{ flag.applied_solution|default:"-" }}</div>
+    <div class="kv-label">Notified emails</div>
+    <div class="kv-value">{{ flag.notified_emails|join:", "|default:"-" }}</div>
+    <div class="kv-label">Slack delivered</div>
+    <div class="kv-value">{{ flag.notified_slack|yesno:"Yes,No" }}</div>
   </div>
 </div>
 
 {% if flag.resolved %}
-<div class="card" style="border-color:rgba(57,217,138,0.2);">
-  <div class="card-header">
-    <div class="card-title" style="color:var(--green);">✓ Resolved</div>
-  </div>
+<div class="card">
   <div class="kv-grid">
     <div class="kv-label">Resolved by</div>
-    <div class="kv-value">{{ flag.resolved_by.email|default:'system' }}</div>
+    <div class="kv-value">{{ flag.resolved_by.email|default:"system" }}</div>
     <div class="kv-label">Resolved at</div>
-    <div class="kv-value">{{ flag.resolved_at|date:'d M Y H:i:s' }}</div>
-    <div class="kv-label">Notes</div>
+    <div class="kv-value">{{ flag.resolved_at|date:"d M Y H:i:s" }}</div>
+    <div class="kv-label">Resolution notes</div>
     <div class="kv-value">{{ flag.resolution_notes }}</div>
   </div>
 </div>
-{% else %}
-{% if CAN_WRITE %}
+{% elif CAN_WRITE %}
 <div class="card">
   <div class="card-header">
     <div class="card-title">Resolve this flag</div>
   </div>
-  <form method="post" action="{% url 'admin_portal:flag_resolve' flag.id %}">
+  <form method="post" action="{% url 'admin_portal:flag_resolve' flag.id %}" class="stack">
     {% csrf_token %}
-    <textarea name="resolution_notes" rows="3" placeholder="Describe how this was resolved..." required style="width:100%;margin-bottom:10px;"></textarea>
-    <button class="btn-primary" type="submit">✓ Mark Resolved</button>
+    <textarea name="resolution_notes" rows="4" placeholder="Describe how this signup flag was resolved." required></textarea>
+    <button class="btn-primary" type="submit">Mark flag resolved</button>
   </form>
 </div>
 {% else %}
-<div class="card" style="border-color:var(--amber-dim);">
-  <p style="color:var(--amber);font-size:0.88rem;">You have read-only access. Contact a super-admin to resolve this flag.</p>
+<div class="card">
+  <div class="helper-text">Your role is read only. Contact Steven or Ben if this flag needs a resolution.</div>
 </div>
-{% endif %}
 {% endif %}
 {% endblock %}

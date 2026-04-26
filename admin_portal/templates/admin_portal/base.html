@@ -9,68 +9,82 @@
   {% block extra_head %}{% endblock %}
 </head>
 <body>
-  <div class="wrapper">
-    <aside class="sidebar" id="sidebar">
-      <div class="sidebar-brand">
-        <div class="brand-logo">
-          <div class="brand-icon">A</div>
-          <div class="brand-name">{{ APP_NAME }}</div>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a href="{% url 'admin_portal:dashboard' %}" class="brand-block">
+        <div class="brand-mark">A</div>
+        <div>
+          <div class="brand-title">{{ APP_NAME }}</div>
+          <div class="brand-subtitle">{{ APP_TAGLINE }}</div>
         </div>
-        <div class="brand-tagline">{{ APP_TAGLINE }}</div>
-      </div>
+      </a>
 
-      <nav class="nav">
-        <div class="nav-section">Overview</div>
-        <a href="{% url 'admin_portal:dashboard' %}" class="{% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
-          <span class="nav-icon">◉</span> Dashboard
+      <nav class="sidebar-nav">
+        <div class="nav-group-title">Operations</div>
+        <a href="{% url 'admin_portal:dashboard' %}" class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
+          <span>Dashboard</span>
         </a>
-
-        <div class="nav-section">AI Engine</div>
-        <a href="{% url 'admin_portal:review_list' %}" class="{% if 'review' in request.resolver_match.url_name %}active{% endif %}">
-          <span class="nav-icon">⬡</span> AI Reviews
+        <a href="{% url 'admin_portal:review_list' %}" class="nav-link {% if 'review' in request.resolver_match.url_name %}active{% endif %}">
+          <span>Pending Reviews</span>
         </a>
-        <a href="{% url 'admin_portal:flag_list' %}" class="{% if 'flag' in request.resolver_match.url_name %}active{% endif %}">
-          <span class="nav-icon">⚑</span> Flags
-          {% if open_flag_count %}<span class="nav-badge">{{ open_flag_count }}</span>{% endif %}
+        <a href="{% url 'admin_portal:issue_list' %}" class="nav-link {% if 'issue' in request.resolver_match.url_name %}active{% endif %}">
+          <span>Flagged Issues</span>
+          {% if OPEN_ISSUE_COUNT %}<span class="count-pill">{{ OPEN_ISSUE_COUNT }}</span>{% endif %}
         </a>
-        <a href="{% url 'admin_portal:daily_report_list' %}" class="{% if 'report' in request.resolver_match.url_name %}active{% endif %}">
-          <span class="nav-icon">◫</span> Daily Reports
+        <a href="{% url 'admin_portal:daily_report_list' %}" class="nav-link {% if 'report' in request.resolver_match.url_name %}active{% endif %}">
+          <span>Daily Reports</span>
         </a>
-
         {% if IS_SUPER_ADMIN %}
-        <div class="nav-section">Administration</div>
-        <a href="{% url 'admin_portal:admin_user_list' %}" class="{% if 'admin_user' in request.resolver_match.url_name %}active{% endif %}">
-          <span class="nav-icon">⊕</span> Team Access
+        <a href="{% url 'admin_portal:admin_user_list' %}" class="nav-link {% if 'admin_user' in request.resolver_match.url_name or 'change_user_role' in request.resolver_match.url_name %}active{% endif %}">
+          <span>Team Access</span>
         </a>
-        <a href="{% url 'admin_portal:audit_log' %}" class="{% if 'audit' in request.resolver_match.url_name %}active{% endif %}">
-          <span class="nav-icon">◎</span> Audit Log
+        <a href="{% url 'admin_portal:audit_log' %}" class="nav-link {% if 'audit' in request.resolver_match.url_name %}active{% endif %}">
+          <span>Audit Log</span>
         </a>
         {% endif %}
       </nav>
 
       <div class="sidebar-footer">
-        <div class="sidebar-user">
-          <div class="sidebar-avatar">{{ request.user.email.0|upper }}</div>
-          <div class="sidebar-user-info">
-            <div class="sidebar-user-name">{{ request.user.full_name|default:request.user.email }}</div>
-            <div class="sidebar-user-role">{{ request.user.role_display }}</div>
+        <div class="user-card">
+          <div class="user-avatar">{{ request.user.email.0|upper }}</div>
+          <div>
+            <div class="user-name">{{ request.user.full_name|default:request.user.email }}</div>
+            <div class="user-role">{{ request.user.role_display }}</div>
           </div>
         </div>
-        <div style="padding:8px 8px 0;display:flex;gap:12px;">
-          <a href="{% url 'admin_portal:change_password' %}" style="font-size:0.8rem;color:var(--text-dim);">Change password</a>
-          <a href="{% url 'admin_portal:logout' %}" style="font-size:0.8rem;color:var(--text-dim);">Sign out →</a>
+        <div class="sidebar-actions">
+          <a href="{% url 'admin_portal:change_password' %}">Change password</a>
+          <a href="{% url 'admin_portal:logout' %}">Sign out</a>
         </div>
       </div>
     </aside>
 
-    <main class="content">
+    <main class="main-panel">
+      <header class="topbar">
+        <div>
+          <div class="topbar-title">{% block topbar_title %}{{ APP_NAME }}{% endblock %}</div>
+          <div class="topbar-subtitle">
+            Super admins: {{ SUPERADMIN_EMAILS|join:", " }}
+          </div>
+        </div>
+        <div class="topbar-meta">
+          {% if LEGACY_ADMIN_REDIRECT_URL %}
+          <span class="inline-chip">Front door: {{ LEGACY_ADMIN_REDIRECT_URL }}</span>
+          {% endif %}
+          {% if LEGACY_ADMIN_INTERNAL_PATH and IS_SUPER_ADMIN %}
+          <span class="inline-chip">Legacy path: {{ LEGACY_ADMIN_INTERNAL_PATH }}</span>
+          {% endif %}
+        </div>
+      </header>
+
       {% if messages %}
-      <div class="messages">
+      <div class="message-stack">
         {% for message in messages %}
-          <div class="message {{ message.tags }}">{{ message }}</div>
+        <div class="message {{ message.tags }}">{{ message }}</div>
         {% endfor %}
       </div>
       {% endif %}
+
       {% block content %}{% endblock %}
     </main>
   </div>

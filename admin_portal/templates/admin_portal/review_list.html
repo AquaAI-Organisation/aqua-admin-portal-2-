@@ -1,30 +1,45 @@
-{% extends 'admin_portal/base.html' %}
-{% block title %}AI Reviews · {{ APP_NAME }}{% endblock %}
+{% extends "admin_portal/base.html" %}
+{% block title %}Pending Reviews | {{ APP_NAME }}{% endblock %}
+{% block topbar_title %}Account Reviews{% endblock %}
 {% block content %}
 <div class="page-header">
   <div>
-    <h1>AI Reviews</h1>
-    <p class="page-subtitle">All automated account reviews with AI reasoning</p>
+    <h1>Automated account reviews</h1>
+    <p class="page-subtitle">Track breeder and consultant onboarding decisions, drill into AI reasoning, and re-run or override when required.</p>
+  </div>
+  <div class="page-actions">
+    <span class="inline-chip">Total: {{ summary.total }}</span>
+    <span class="inline-chip">Pending: {{ summary.pending }}</span>
+    <span class="inline-chip">Flagged: {{ summary.flagged }}</span>
   </div>
 </div>
 
-<div class="card" style="padding:14px 18px;">
-  <form method="get" class="form-row">
-    <input name="q" value="{{ q }}" placeholder="Search email or name..." style="flex:1;min-width:200px;">
-    <select name="decision">
-      <option value="">All decisions</option>
-      <option value="approved" {% if decision == 'approved' %}selected{% endif %}>Approved</option>
-      <option value="rejected" {% if decision == 'rejected' %}selected{% endif %}>Rejected</option>
-      <option value="flagged" {% if decision == 'flagged' %}selected{% endif %}>Flagged</option>
-      <option value="pending" {% if decision == 'pending' %}selected{% endif %}>Pending</option>
-      <option value="error" {% if decision == 'error' %}selected{% endif %}>Error</option>
-    </select>
-    <select name="subject">
-      <option value="">All roles</option>
-      <option value="breeder" {% if subject == 'breeder' %}selected{% endif %}>Breeder</option>
-      <option value="consultant" {% if subject == 'consultant' %}selected{% endif %}>Consultant</option>
-    </select>
-    <button type="submit">Filter</button>
+<div class="card">
+  <form method="get" class="filter-row">
+    <div class="form-group" style="flex:1;">
+      <label for="id_q">Search</label>
+      <input id="id_q" name="q" value="{{ q }}" placeholder="Search by email or display name">
+    </div>
+    <div class="form-group">
+      <label for="id_decision">Decision</label>
+      <select id="id_decision" name="decision">
+        <option value="">All decisions</option>
+        <option value="pending" {% if decision == "pending" %}selected{% endif %}>Pending</option>
+        <option value="approved" {% if decision == "approved" %}selected{% endif %}>Approved</option>
+        <option value="rejected" {% if decision == "rejected" %}selected{% endif %}>Rejected</option>
+        <option value="flagged" {% if decision == "flagged" %}selected{% endif %}>Flagged</option>
+        <option value="error" {% if decision == "error" %}selected{% endif %}>Error</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="id_subject">Role</label>
+      <select id="id_subject" name="subject">
+        <option value="">All roles</option>
+        <option value="breeder" {% if subject == "breeder" %}selected{% endif %}>Breeder</option>
+        <option value="consultant" {% if subject == "consultant" %}selected{% endif %}>Consultant</option>
+      </select>
+    </div>
+    <button type="submit">Apply filters</button>
   </form>
 </div>
 
@@ -39,41 +54,38 @@
         <th>Confidence</th>
         <th></th>
       </tr>
-      {% for r in page.object_list %}
+      {% for review in page.object_list %}
       <tr>
-        <td style="white-space:nowrap;font-size:0.8rem;color:var(--text-muted);">{{ r.created_at|date:'d M Y H:i' }}</td>
-        <td><span class="badge {{ r.subject_type }}">{{ r.subject_type }}</span></td>
+        <td class="mono">{{ review.created_at|date:"d M Y H:i" }}</td>
+        <td><span class="badge {{ review.subject_type }}">{{ review.subject_type }}</span></td>
         <td>
-          <div class="cell-name">{{ r.subject_display_name|default:r.subject_user_email }}</div>
-          <div class="cell-sub">{{ r.subject_user_email }}</div>
+          <div class="cell-name">{{ review.subject_display_name|default:review.subject_user_email }}</div>
+          <div class="cell-sub">{{ review.subject_user_email }}</div>
         </td>
         <td>
-          <span class="badge {{ r.badge_class }}"><span class="badge-dot"></span>{{ r.decision }}</span>
-          {% if r.manually_overridden %}<span class="badge override" style="margin-left:4px;">override</span>{% endif %}
+          <span class="badge {{ review.badge_class }}">{{ review.decision }}</span>
+          {% if review.manually_overridden %}<span class="badge override">override</span>{% endif %}
         </td>
         <td>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <div class="confidence-bar">
-              <div class="confidence-fill {{ r.confidence_level }}" style="width:{{ r.confidence_percent }}%;"></div>
-            </div>
-            <span style="font-family:var(--font-mono);font-size:0.78rem;color:var(--text-secondary);">{{ r.confidence|floatformat:2 }}</span>
+          <div class="confidence-bar">
+            <div class="confidence-fill {{ review.confidence_level }}" style="width:{{ review.confidence_percent }}%;"></div>
           </div>
+          <div class="cell-sub mono">{{ review.confidence|floatformat:2 }}</div>
         </td>
-        <td><a href="{% url 'admin_portal:review_detail' r.id %}" class="btn btn-sm">Details</a></td>
+        <td><a class="btn btn-sm" href="{% url 'admin_portal:review_detail' review.id %}">Open</a></td>
       </tr>
       {% empty %}
-      <tr><td colspan="6" class="empty-state" style="padding:40px;">
-        <div class="empty-icon">⬡</div>
-        No reviews match your filters.
-      </td></tr>
+      <tr>
+        <td colspan="6" class="empty-state">No reviews match the current filters.</td>
+      </tr>
       {% endfor %}
     </table>
   </div>
   {% if page.paginator.num_pages > 1 %}
   <div class="pager">
-    {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}&decision={{ decision }}&subject={{ subject }}&q={{ q }}">← Previous</a>{% endif %}
+    {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}&decision={{ decision }}&subject={{ subject }}&q={{ q }}">Previous</a>{% endif %}
     <span>Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
-    {% if page.has_next %}<a href="?page={{ page.next_page_number }}&decision={{ decision }}&subject={{ subject }}&q={{ q }}">Next →</a>{% endif %}
+    {% if page.has_next %}<a href="?page={{ page.next_page_number }}&decision={{ decision }}&subject={{ subject }}&q={{ q }}">Next</a>{% endif %}
   </div>
   {% endif %}
 </div>

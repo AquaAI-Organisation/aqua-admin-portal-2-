@@ -7,6 +7,7 @@ from .models import (
     AdminUser,
     AIAccountReview,
     AIFlag,
+    AIFlaggedIssue,
     DailyReport,
 )
 
@@ -14,11 +15,11 @@ from .models import (
 @admin.register(AdminUser)
 class AdminUserAdmin(DjangoUserAdmin):
     ordering = ("email",)
-    list_display = ("email", "full_name", "is_platform_super_admin", "is_active", "last_login")
+    list_display = ("email", "full_name", "role", "is_platform_super_admin", "is_active", "last_login")
     search_fields = ("email", "full_name")
     fieldsets = (
         (None, {"fields": ("email", "password", "full_name")}),
-        ("Permissions", {"fields": ("is_active", "is_staff", "is_superuser", "is_platform_super_admin", "groups", "user_permissions")}),
+        ("Permissions", {"fields": ("role", "is_active", "is_staff", "is_superuser", "is_platform_super_admin", "groups", "user_permissions")}),
         ("Meta", {"fields": ("invited_by", "last_login", "created_at")}),
     )
     readonly_fields = ("created_at",)
@@ -30,5 +31,6 @@ class AdminUserAdmin(DjangoUserAdmin):
 admin.site.register(AdminInvite)
 admin.site.register(AIAccountReview)
 admin.site.register(AIFlag)
+admin.site.register(AIFlaggedIssue)
 admin.site.register(DailyReport)
 admin.site.register(AdminAuditLog)
