@@ -70,12 +70,35 @@ class ManualOverrideForm(forms.Form):
         ("approved", "Approve"),
         ("rejected", "Reject"),
     ]
+    REASON_CHOICES = [
+        ("compliance_verified", "Compliance or documents manually verified"),
+        ("false_positive", "AI false positive"),
+        ("business_confirmed", "Business legitimacy confirmed"),
+        ("policy_violation", "Policy violation confirmed"),
+        ("duplicate_or_test", "Duplicate, spam, or test account"),
+        ("insufficient_context", "AI lacked enough context"),
+        ("other", "Other reason"),
+    ]
     new_decision = forms.ChoiceField(choices=DECISION_CHOICES, widget=forms.RadioSelect)
-    reason = forms.CharField(
-        widget=forms.Textarea(attrs={"rows": 3, "placeholder": "Reason for overriding the AI decision..."}),
-        required=True,
+    reason_code = forms.ChoiceField(choices=REASON_CHOICES)
+    other_reason = forms.CharField(
+        widget=forms.Textarea(attrs={"rows": 3, "placeholder": "Add the custom reason for this override..."}),
+        required=False,
         min_length=10,
     )
+
+    def clean(self):
+        data = super().clean()
+        code = data.get("reason_code")
+        other_reason = (data.get("other_reason") or "").strip()
+        if code == "other":
+            if len(other_reason) < 10:
+                raise forms.ValidationError("Please add a fuller explanation when choosing Other reason.")
+            data["resolved_reason"] = other_reason
+            return data
+        label = dict(self.REASON_CHOICES).get(code, "")
+        data["resolved_reason"] = label
+        return data
 
 
 class AcceptInviteForm(forms.Form):

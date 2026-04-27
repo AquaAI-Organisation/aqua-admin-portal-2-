@@ -1,0 +1,94 @@
+{% extends "admin_portal/base.html" %}
+{% block title %}Account Directory | {{ APP_NAME }}{% endblock %}
+{% block topbar_title %}Account Directory{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Live account directory</h1>
+    <p class="page-subtitle">Search breeders, consultants, or platform users by email or name, then suspend or re-activate them directly from the shared backend.</p>
+  </div>
+</div>
+
+<div class="card">
+  <form method="get" class="filter-row">
+    <div class="form-group">
+      <label for="id_entity_type">Account category</label>
+      <select id="id_entity_type" name="entity_type">
+        <option value="breeder" {% if entity_type == "breeder" %}selected{% endif %}>Breeder</option>
+        <option value="consultant" {% if entity_type == "consultant" %}selected{% endif %}>Consultant</option>
+        <option value="user" {% if entity_type == "user" %}selected{% endif %}>User</option>
+      </select>
+    </div>
+    <div class="form-group" style="flex:1;">
+      <label for="id_q">Search</label>
+      <input id="id_q" name="q" value="{{ q }}" placeholder="Search by email, full name, username, or company">
+    </div>
+    <div class="form-group">
+      <label for="id_status">Status</label>
+      <select id="id_status" name="status">
+        <option value="" {% if not status %}selected{% endif %}>All statuses</option>
+        <option value="active" {% if status == "active" %}selected{% endif %}>Active</option>
+        <option value="inactive" {% if status == "inactive" %}selected{% endif %}>Inactive / suspended</option>
+      </select>
+    </div>
+    <button type="submit">Search</button>
+  </form>
+</div>
+
+<div class="card">
+  <div class="table-wrap">
+    <table class="table">
+      <tr>
+        <th>Created</th>
+        <th>Category</th>
+        <th>Account</th>
+        <th>Status</th>
+        <th></th>
+      </tr>
+      {% for row in page.object_list %}
+      <tr>
+        <td class="mono">{{ row.created_at|date:"d M Y H:i"|default:"-" }}</td>
+        <td><span class="badge {{ row.entity_type }}">{{ row.role_label }}</span></td>
+        <td>
+          <div class="cell-name">{{ row.display_name }}</div>
+          <div class="cell-sub">{{ row.email }}</div>
+          <div class="cell-sub">{{ row.name }}</div>
+        </td>
+        <td>
+          {% if row.is_active %}
+          <span class="badge ok">Active</span>
+          {% else %}
+          <span class="badge danger">Suspended</span>
+          {% endif %}
+          <div class="cell-sub">{{ row.status_detail }}</div>
+        </td>
+        <td>
+          <form method="post" action="{% url 'admin_portal:entity_status_update' row.entity_type row.entity_id %}">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            {% if row.is_active %}
+            <input type="hidden" name="action" value="suspend">
+            <button class="btn-danger btn-sm" type="submit" onclick="return confirm('Suspend or close down this account?')">Suspend / close down</button>
+            {% else %}
+            <input type="hidden" name="action" value="reactivate">
+            <button class="btn btn-sm" type="submit">Re-activate</button>
+            {% endif %}
+          </form>
+        </td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="5" class="empty-state">No accounts matched this category and search.</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% if page.paginator.num_pages > 1 %}
+  <div class="pager">
+    {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}&entity_type={{ entity_type }}&status={{ status }}&q={{ q }}">Previous</a>{% endif %}
+    <span>Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
+    {% if page.has_next %}<a href="?page={{ page.next_page_number }}&entity_type={{ entity_type }}&status={{ status }}&q={{ q }}">Next</a>{% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,16 +1,28 @@
 """Runtime health checks for dashboard visibility."""
 from __future__ import annotations
 
+import time
+
 from django.conf import settings
 from django.db import connection
+
+from ..models import AdminInvite
+from .error_classifier import classify_openai_error
+from .intelligence_adapter import get_intelligence_readiness
+from .notifier import email_config_status
+
+_OPENAI_CACHE: dict[str, object] = {
+    "checked_at": 0.0,
+    "result": None,
+}
 
 
 def _placeholder(value: str) -> bool:
     return not value or "REPLACE" in value.upper()
 
 
-def _status(ok: bool, label: str, detail: str) -> dict[str, str | bool]:
-    return {"ok": ok, "label": label, "detail": detail}
+def _status(ok: bool, label: str, detail: str, *, state: str | None = None) -> dict[str, str | bool]:
+    return {"ok": ok, "label": label, "detail": detail, "state": state or ("ok" if ok else "bad")}
 
 
 def get_health_snapshot() -> dict[str, dict[str, str | bool]]:
@@ -18,12 +30,16 @@ def get_health_snapshot() -> dict[str, dict[str, str | bool]]:
     openai_status = _check_openai()
     slack_status = _check_slack()
     email_status = _check_email()
+    invite_status = _check_invites()
+    intelligence_status = _check_intelligence()
     legacy_status = _check_legacy_redirect()
     return {
         "database": db_status,
         "openai": openai_status,
         "slack": slack_status,
         "email": email_status,
+        "invites": invite_status,
+        "intelligence": intelligence_status,
         "legacy_redirect": legacy_status,
     }
 
@@ -41,7 +57,35 @@ def _check_openai():
     model = getattr(settings, "OPENAI_MODEL", "gpt-4o")
     if _placeholder(key):
         return _status(False, "OpenAI", "OPENAI_API_KEY is missing or still using a placeholder.")
-    return _status(True, "OpenAI", f"Configured for model {model}.")
+
+    now = time.monotonic()
+    cached = _OPENAI_CACHE.get("result")
+    if cached and (now - float(_OPENAI_CACHE.get("checked_at", 0.0))) < 300:
+        return cached
+
+    try:
+        from openai import OpenAI
+    except ImportError:
+        result = _status(False, "OpenAI", "openai package is not installed in this deployment.")
+        _OPENAI_CACHE.update({"checked_at": now, "result": result})
+        return result
+
+    try:
+        client = OpenAI(api_key=key)
+        client.models.retrieve(model)
+        result = _status(True, "OpenAI", f"Authenticated successfully and can access model {model}.")
+    except Exception as exc:
+        info = classify_openai_error(str(exc))
+        state = "warn" if info["category"] == "transport_error" else "bad"
+        result = _status(
+            False,
+            "OpenAI",
+            f"{info['label']}: {info['summary']}",
+            state=state,
+        )
+
+    _OPENAI_CACHE.update({"checked_at": now, "result": result})
+    return result
 
 
 def _check_slack():
@@ -56,12 +100,38 @@ def _check_slack():
 
 
 def _check_email():
-    host = getattr(settings, "EMAIL_HOST", "")
-    user = getattr(settings, "EMAIL_HOST_USER", "")
-    password = getattr(settings, "EMAIL_HOST_PASSWORD", "")
-    if not host or not user or _placeholder(password):
-        return _status(False, "Email", "SMTP settings are incomplete.")
-    return _status(True, "Email", f"SMTP configured via {host} as {user}.")
+    status = email_config_status()
+    return _status(bool(status["configured"]), "Email", str(status["detail"]), state="ok" if status["configured"] else "bad")
+
+
+def _check_invites():
+    last_invite = AdminInvite.objects.order_by("-created_at").first()
+    if not last_invite:
+        return _status(True, "Invites", "No admin invites have been sent yet.", state="warn")
+    if last_invite.delivery_status == "email_sent":
+        return _status(
+            True,
+            "Invites",
+            f"Last invite to {last_invite.email} was emailed successfully at {last_invite.last_delivery_attempt_at:%Y-%m-%d %H:%M UTC}.",
+        )
+    if last_invite.delivery_status == "email_failed":
+        return _status(
+            False,
+            "Invites",
+            f"Last invite to {last_invite.email} failed email delivery. Fallback link is available. {last_invite.delivery_error}",
+            state="warn",
+        )
+    return _status(
+        True,
+        "Invites",
+        f"Last invite to {last_invite.email} is available through the fallback link even though email was not confirmed.",
+        state="warn",
+    )
+
+
+def _check_intelligence():
+    status = get_intelligence_readiness()
+    return _status(bool(status["ok"]), "Intelligence", str(status["detail"]), state=str(status["state"]))
 
 
 def _check_legacy_redirect():

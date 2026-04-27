@@ -116,6 +116,28 @@ def build_warning_dossier(warning, user, consultant_profile=None) -> dict[str, A
     }
 
 
+def build_signal_dossier(source_type: str, title: str, payload: dict[str, Any], user, profile=None) -> dict[str, Any]:
+    return {
+        "source_type": source_type,
+        "source_id": str(payload.get("source_id") or payload.get("message_id") or payload.get("booking_id") or payload.get("failure_id") or payload.get("snapshot_id") or ""),
+        "subject": {
+            "user_id": str(user.id),
+            "email": user.email,
+            "name": user.name or f"{user.first_name} {user.last_name}".strip(),
+            "role": user.role,
+            "is_verified": user.is_verified,
+            "is_at_risk": user.is_at_risk,
+            "trust_score": user.current_trust_score,
+            "regulatory_tier": user.current_regulatory_tier,
+        },
+        "profile": _profile_snapshot(profile),
+        "signal": {
+            "title": title,
+            "payload": payload,
+        },
+    }
+
+
 def _profile_snapshot(profile) -> dict[str, Any]:
     if not profile:
         return {}

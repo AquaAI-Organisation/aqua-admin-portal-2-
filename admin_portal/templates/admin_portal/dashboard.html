@@ -60,7 +60,7 @@
   </div>
   <div class="health-grid">
     {% for key, item in health_snapshot.items %}
-    <div class="health-card {% if item.ok %}ok{% else %}bad{% endif %}">
+    <div class="health-card {{ item.state|default:'bad' }}">
       <div class="health-label">{{ item.label }}</div>
       <div class="helper-text">{{ item.detail }}</div>
     </div>

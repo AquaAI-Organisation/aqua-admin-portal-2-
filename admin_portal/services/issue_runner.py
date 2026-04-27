@@ -13,8 +13,10 @@ from ..models import (
     ExternalIncidentLog,
     ExternalUser,
 )
+from .intelligence_adapter import discover_behavioral_issue_candidates
 from .issue_review import (
     build_incident_dossier,
+    build_signal_dossier,
     build_warning_dossier,
     call_issue_gpt,
 )
@@ -122,6 +124,24 @@ def run_warning_triage(warning, user, consultant_profile) -> AIFlaggedIssue:
     return issue
 
 
+def run_signal_triage(candidate) -> AIFlaggedIssue:
+    payload = dict(candidate.payload or {})
+    payload["source_id"] = candidate.source_id
+    dossier = build_signal_dossier(candidate.source_type, candidate.title, payload, candidate.user, candidate.profile)
+    outcome = call_issue_gpt(dossier)
+    issue = _save_issue(
+        source_type=candidate.source_type,
+        source_id=candidate.source_id,
+        subject_type=candidate.subject_type,
+        user=candidate.user,
+        title=candidate.title,
+        source_payload=dossier,
+        outcome=outcome,
+    )
+    _deliver_and_apply(issue, profile=candidate.profile, user=candidate.user, warning=None)
+    return issue
+
+
 def _save_issue(*, source_type: str, source_id: str, subject_type: str, user, title: str, source_payload: dict, outcome) -> AIFlaggedIssue:
     display_name = user.name or f"{user.first_name} {user.last_name}".strip() or user.email
     issue, _ = AIFlaggedIssue.objects.update_or_create(
@@ -192,11 +212,25 @@ def _apply_issue_actions(issue: AIFlaggedIssue, *, profile=None, user=None, warn
 
 
 def process_pending_issues(limit_per_type: int = 25) -> dict[str, int]:
-    counts = {"incident": 0, "consultant_warning": 0}
+    counts = {
+        "incident": 0,
+        "consultant_warning": 0,
+        "message_risk": 0,
+        "breeder_inquiry_risk": 0,
+        "booking_risk": 0,
+        "payment_risk": 0,
+        "trust_drop": 0,
+    }
     for incident, user, subject_type, profile in discover_pending_incidents(limit=limit_per_type):
         run_incident_triage(incident, user, subject_type, profile)
         counts["incident"] += 1
     for warning, user, consultant in discover_pending_consultant_warnings(limit=limit_per_type):
         run_warning_triage(warning, user, consultant)
         counts["consultant_warning"] += 1
+    for candidate in discover_behavioral_issue_candidates(limit_per_type=limit_per_type):
+        seen = _already_triaged_ids(candidate.source_type)
+        if candidate.source_id in seen:
+            continue
+        run_signal_triage(candidate)
+        counts[candidate.source_type] += 1
     return counts

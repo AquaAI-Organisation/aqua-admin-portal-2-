@@ -218,6 +218,7 @@ def intake_list(request):
                     "flagged": "warn",
                     "error": "danger",
                 }.get(review_state, "muted"),
+                "failure_reason": review.error_summary if review and review.error else "",
             }
         )
 
@@ -245,6 +246,7 @@ def intake_list(request):
                     "flagged": "warn",
                     "error": "danger",
                 }.get(review_state, "muted"),
+                "failure_reason": review.error_summary if review and review.error else "",
             }
         )
 
@@ -358,7 +360,7 @@ def review_override(request, review_id):
         return redirect("admin_portal:review_detail", review_id=review.id)
 
     new_decision = form.cleaned_data["new_decision"]
-    reason = form.cleaned_data["reason"]
+    reason = form.cleaned_data["resolved_reason"]
     manual_override(review, new_decision, reason, request.user)
     audit.record_write(
         request.user,
@@ -384,6 +386,148 @@ def _load_external_profile(review: AIAccountReview):
 
 
 @admin_required
+def entity_directory(request):
+    entity_type = (request.GET.get("entity_type") or "breeder").strip()
+    q = (request.GET.get("q") or "").strip()
+    status = (request.GET.get("status") or "").strip()
+
+    rows = []
+    if entity_type == "consultant":
+        qs = ExternalConsultantProfile.objects.select_related("user").order_by("-created_at")
+        if q:
+            qs = qs.filter(
+                Q(company_name__icontains=q)
+                | Q(user__email__icontains=q)
+                | Q(user__username__icontains=q)
+                | Q(user__name__icontains=q)
+                | Q(user__first_name__icontains=q)
+                | Q(user__last_name__icontains=q)
+            )
+        if status == "active":
+            qs = qs.filter(is_active=True, user__is_active=True)
+        elif status == "inactive":
+            qs = qs.filter(Q(is_active=False) | Q(user__is_active=False))
+        for profile in qs:
+            rows.append(
+                {
+                    "entity_type": "consultant",
+                    "entity_id": str(profile.id),
+                    "display_name": profile.company_name or profile.user.name or profile.user.username or profile.user.email,
+                    "email": profile.user.email,
+                    "name": profile.user.name or f"{profile.user.first_name} {profile.user.last_name}".strip() or "-",
+                    "role_label": "Consultant",
+                    "is_active": bool(profile.is_active and profile.user.is_active),
+                    "status_detail": f"Admin status: {profile.admin_status or '-'} | Verified: {'Yes' if profile.is_verified else 'No'}",
+                    "created_at": profile.created_at,
+                    "target": profile,
+                }
+            )
+    elif entity_type == "user":
+        qs = ExternalUser.objects.exclude(role__in=["breeder", "consultant"]).order_by("-created_at", "-date_joined")
+        if q:
+            qs = qs.filter(
+                Q(email__icontains=q)
+                | Q(username__icontains=q)
+                | Q(name__icontains=q)
+                | Q(first_name__icontains=q)
+                | Q(last_name__icontains=q)
+            )
+        if status == "active":
+            qs = qs.filter(is_active=True)
+        elif status == "inactive":
+            qs = qs.filter(is_active=False)
+        for user in qs:
+            rows.append(
+                {
+                    "entity_type": "user",
+                    "entity_id": str(user.id),
+                    "display_name": user.name or user.username or user.email,
+                    "email": user.email,
+                    "name": user.name or f"{user.first_name} {user.last_name}".strip() or "-",
+                    "role_label": "User",
+                    "is_active": bool(user.is_active),
+                    "status_detail": f"Role: {user.role or '-'} | Verified: {'Yes' if user.is_verified else 'No'}",
+                    "created_at": user.created_at or user.date_joined,
+                    "target": user,
+                }
+            )
+    else:
+        entity_type = "breeder"
+        qs = ExternalBreederProfile.objects.select_related("user").order_by("-created_at")
+        if q:
+            qs = qs.filter(
+                Q(company_name__icontains=q)
+                | Q(user__email__icontains=q)
+                | Q(user__username__icontains=q)
+                | Q(user__name__icontains=q)
+                | Q(user__first_name__icontains=q)
+                | Q(user__last_name__icontains=q)
+            )
+        if status == "active":
+            qs = qs.filter(is_active=True, user__is_active=True)
+        elif status == "inactive":
+            qs = qs.filter(Q(is_active=False) | Q(user__is_active=False))
+        for profile in qs:
+            rows.append(
+                {
+                    "entity_type": "breeder",
+                    "entity_id": str(profile.id),
+                    "display_name": profile.company_name or profile.user.name or profile.user.username or profile.user.email,
+                    "email": profile.user.email,
+                    "name": profile.user.name or f"{profile.user.first_name} {profile.user.last_name}".strip() or "-",
+                    "role_label": "Breeder",
+                    "is_active": bool(profile.is_active and profile.user.is_active),
+                    "status_detail": f"Verified: {'Yes' if profile.is_verified else 'No'} | Verification level: {profile.verification_level or '-'}",
+                    "created_at": profile.created_at,
+                    "target": profile,
+                }
+            )
+
+    oldest_fallback = timezone.now() - timedelta(days=36500)
+    rows.sort(key=lambda row: row["created_at"] or oldest_fallback, reverse=True)
+    page = Paginator(rows, 25).get_page(request.GET.get("page"))
+    return render(
+        request,
+        "admin_portal/entity_directory.html",
+        {
+            "page": page,
+            "entity_type": entity_type,
+            "q": q,
+            "status": status,
+        },
+    )
+
+
+@write_access_required
+def entity_status_update(request, entity_type, entity_id):
+    if request.method != "POST":
+        return redirect("admin_portal:entity_directory")
+    action = (request.POST.get("action") or "").strip()
+    next_url = request.POST.get("next") or reverse("admin_portal:entity_directory")
+    activate = action == "reactivate"
+    if action not in {"suspend", "reactivate"}:
+        messages.error(request, "Invalid account action.")
+        return redirect(next_url)
+    try:
+        summary = _set_entity_active_state(entity_type, entity_id, activate=activate, actor=request.user)
+    except ValueError as exc:
+        messages.error(request, str(exc))
+    else:
+        audit.record_write(
+            request.user,
+            "entity.reactivate" if activate else "entity.suspend",
+            target_type=entity_type,
+            target_id=entity_id,
+            request=request,
+            summary=summary,
+            entity_type=entity_type,
+            action=action,
+        )
+        messages.success(request, summary)
+    return redirect(next_url)
+
+
+@admin_required
 def issue_list(request):
     qs = AIFlaggedIssue.objects.all()
     severity = request.GET.get("severity", "").strip()
@@ -392,7 +536,7 @@ def issue_list(request):
     q = (request.GET.get("q") or "").strip()
     if severity in {"info", "warning", "critical"}:
         qs = qs.filter(severity=severity)
-    if source in {"incident", "consultant_warning"}:
+    if source in {"incident", "consultant_warning", "message_risk", "breeder_inquiry_risk", "booking_risk", "payment_risk", "trust_drop"}:
         qs = qs.filter(source_type=source)
     if not show_resolved:
         qs = qs.filter(resolved=False)
@@ -569,6 +713,8 @@ def audit_log(request):
 def admin_user_list(request):
     users = AdminUser.objects.order_by("email")
     invites = AdminInvite.objects.filter(accepted_at__isnull=True, revoked=False)
+    for invite in invites:
+        invite.accept_url = _invite_accept_url(request, invite)
     return render(
         request,
         "admin_portal/admin_user_list.html",
@@ -596,8 +742,8 @@ def admin_user_invite(request):
     invite.token = secrets.token_urlsafe(32)
     invite.expires_at = timezone.now() + timedelta(days=7)
     invite.save()
-    accept_url = request.build_absolute_uri(reverse("admin_portal:invite_accept", args=[invite.token]))
-    notify_invite(invite, accept_url)
+    accept_url = _invite_accept_url(request, invite)
+    delivery = notify_invite(invite, accept_url)
     audit.record_write(
         request.user,
         "invite.create",
@@ -607,8 +753,22 @@ def admin_user_invite(request):
         summary=f"Invited {email} with role {role}.",
         email=email,
         role=role,
+        delivery_status=delivery.get("delivery_status", "pending"),
     )
-    messages.success(request, f"Invite sent to {email} as {role}.")
+    audit.record(
+        request.user,
+        "invite.email_sent" if delivery.get("email") else "invite.email_failed",
+        target_type="invite",
+        target_id=invite.id,
+        request=request,
+        email=email,
+        delivery_status=delivery.get("delivery_status", "pending"),
+        error=delivery.get("error", ""),
+    )
+    if delivery.get("email"):
+        messages.success(request, f"Invite sent to {email} as {role}.")
+    else:
+        messages.warning(request, f"Invite created for {email}, but email delivery was not confirmed. Use the fallback link in Pending invites.")
     return redirect("admin_portal:admin_user_list")
 
 
@@ -653,6 +813,54 @@ def invite_cancel(request, invite_id):
         )
         messages.success(request, "Invite cancelled.")
     return redirect("admin_portal:admin_user_list")
+
+
+@super_admin_required
+def invite_resend(request, invite_id):
+    invite = get_object_or_404(AdminInvite, pk=invite_id, accepted_at__isnull=True, revoked=False)
+    if request.method == "POST":
+        accept_url = _invite_accept_url(request, invite)
+        delivery = notify_invite(invite, accept_url)
+        audit.record_write(
+            request.user,
+            "invite.resend",
+            target_type="invite",
+            target_id=invite.id,
+            request=request,
+            summary=f"Re-sent invite for {invite.email}.",
+            email=invite.email,
+            delivery_status=delivery.get("delivery_status", "pending"),
+        )
+        audit.record(
+            request.user,
+            "invite.email_sent" if delivery.get("email") else "invite.email_failed",
+            target_type="invite",
+            target_id=invite.id,
+            request=request,
+            email=invite.email,
+            delivery_status=delivery.get("delivery_status", "pending"),
+            error=delivery.get("error", ""),
+        )
+        if delivery.get("email"):
+            messages.success(request, f"Invite re-sent to {invite.email}.")
+        else:
+            messages.warning(request, f"Invite email still failed for {invite.email}. The fallback link remains available.")
+    return redirect("admin_portal:admin_user_list")
+
+
+@super_admin_required
+def invite_link(request, invite_id):
+    invite = get_object_or_404(AdminInvite, pk=invite_id, accepted_at__isnull=True, revoked=False)
+    accept_url = _invite_accept_url(request, invite)
+    audit.record(
+        request.user,
+        "invite.copied",
+        target_type="invite",
+        target_id=invite.id,
+        request=request,
+        email=invite.email,
+    )
+    return JsonResponse({"accept_url": accept_url})
 
 
 def invite_accept(request, token):
@@ -705,7 +913,7 @@ def process_now(request):
                 request=request,
                 summary=(
                     f"Processed {review_counts['breeder']} breeders, {review_counts['consultant']} consultants, "
-                    f"{issue_counts['incident']} incidents, and {issue_counts['consultant_warning']} consultant warnings."
+                    f"and issue sources: {_issue_count_summary(issue_counts)}."
                 ),
                 **review_counts,
                 **issue_counts,
@@ -714,7 +922,7 @@ def process_now(request):
                 request,
                 (
                     f"Processed {review_counts['breeder']} breeders, {review_counts['consultant']} consultants, "
-                    f"{issue_counts['incident']} incidents, and {issue_counts['consultant_warning']} consultant warnings."
+                    f"and issue sources: {_issue_count_summary(issue_counts)}."
                 ),
             )
     return redirect("admin_portal:dashboard")
@@ -791,3 +999,56 @@ def change_user_role(request, user_id):
             )
             messages.success(request, f"{target.email} role changed from {old_role} to {new_role}.")
     return redirect("admin_portal:admin_user_list")
+
+
+def _invite_accept_url(request, invite: AdminInvite) -> str:
+    return request.build_absolute_uri(reverse("admin_portal:invite_accept", args=[invite.token]))
+
+
+def _issue_count_summary(counts: dict[str, int]) -> str:
+    labels = {
+        "incident": "incidents",
+        "consultant_warning": "consultant warnings",
+        "message_risk": "message risks",
+        "breeder_inquiry_risk": "breeder inquiry risks",
+        "booking_risk": "booking risks",
+        "payment_risk": "payment risks",
+        "trust_drop": "trust drops",
+    }
+    parts = [f"{counts.get(key, 0)} {label}" for key, label in labels.items()]
+    return ", ".join(parts)
+
+
+def _set_entity_active_state(entity_type: str, entity_id: str, *, activate: bool, actor) -> str:
+    note = f"[Control plane:{timezone.now():%Y-%m-%d %H:%M UTC}] {'Reactivated' if activate else 'Suspended'} by {actor.email}."
+    if entity_type == "breeder":
+        profile = get_object_or_404(ExternalBreederProfile, pk=entity_id)
+        user = get_object_or_404(ExternalUser, pk=profile.user_id)
+        profile.is_active = activate
+        metadata = dict(profile.metadata or {})
+        metadata["account_status"] = "active" if activate else "suspended"
+        metadata["status_note"] = note
+        profile.metadata = metadata
+        profile.save(update_fields=["is_active", "metadata"])
+        user.is_active = activate
+        user.save(update_fields=["is_active"])
+        return f"{profile.company_name or user.email} was {'re-activated' if activate else 'suspended'}."
+    if entity_type == "consultant":
+        profile = get_object_or_404(ExternalConsultantProfile, pk=entity_id)
+        user = get_object_or_404(ExternalUser, pk=profile.user_id)
+        profile.is_active = activate
+        profile.admin_status = "approved" if activate else "suspended"
+        profile.admin_notes = ((profile.admin_notes or "").strip() + "\n" + note).strip()
+        metadata = dict(profile.metadata or {})
+        metadata["account_status"] = "active" if activate else "suspended"
+        profile.metadata = metadata
+        profile.save(update_fields=["is_active", "admin_status", "admin_notes", "metadata"])
+        user.is_active = activate
+        user.save(update_fields=["is_active"])
+        return f"{profile.company_name or user.email} was {'re-activated' if activate else 'suspended'}."
+    if entity_type == "user":
+        user = get_object_or_404(ExternalUser, pk=entity_id)
+        user.is_active = activate
+        user.save(update_fields=["is_active"])
+        return f"{user.email} was {'re-activated' if activate else 'suspended'}."
+    raise ValueError("Unknown entity type.")

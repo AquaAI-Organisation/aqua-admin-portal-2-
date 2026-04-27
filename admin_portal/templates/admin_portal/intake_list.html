@@ -75,6 +75,9 @@
           {% if row.review and row.review.manually_overridden %}<span class="badge override">override</span>{% endif %}
           {% if row.review %}
           <div class="cell-sub mono">{{ row.review.confidence|floatformat:2 }}</div>
+          {% if row.failure_reason %}
+          <div class="cell-sub text-danger">Last failed because: {{ row.failure_reason }}</div>
+          {% endif %}
           {% endif %}
         </td>
         <td>

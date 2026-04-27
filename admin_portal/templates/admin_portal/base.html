@@ -27,6 +27,9 @@
         <a href="{% url 'admin_portal:intake_list' %}" class="nav-link {% if 'intake' in request.resolver_match.url_name %}active{% endif %}">
           <span>Pending Intake</span>
         </a>
+        <a href="{% url 'admin_portal:entity_directory' %}" class="nav-link {% if 'entity_' in request.resolver_match.url_name %}active{% endif %}">
+          <span>Account Directory</span>
+        </a>
         <a href="{% url 'admin_portal:review_list' %}" class="nav-link {% if 'review' in request.resolver_match.url_name %}active{% endif %}">
           <span>Pending Reviews</span>
         </a>

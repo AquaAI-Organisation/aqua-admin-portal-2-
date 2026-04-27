@@ -608,6 +608,10 @@ pre.json {
   border-color: rgba(255, 123, 123, 0.24);
 }
 
+.health-card.warn {
+  border-color: rgba(255, 196, 107, 0.24);
+}
+
 .health-label {
   font-weight: 700;
   margin-bottom: 8px;
@@ -678,8 +682,23 @@ pre.json {
   color: var(--muted);
 }
 
+.text-danger {
+  color: var(--danger);
+}
+
 .mono {
   font-family: var(--mono);
+}
+
+.invite-link-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.invite-link-input {
+  min-width: 260px;
 }
 
 details summary {

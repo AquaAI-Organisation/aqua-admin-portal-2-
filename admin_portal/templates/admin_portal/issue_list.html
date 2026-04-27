@@ -26,6 +26,11 @@
         <option value="">All sources</option>
         <option value="incident" {% if source == "incident" %}selected{% endif %}>Incident log</option>
         <option value="consultant_warning" {% if source == "consultant_warning" %}selected{% endif %}>Consultant warning</option>
+        <option value="message_risk" {% if source == "message_risk" %}selected{% endif %}>Message risk</option>
+        <option value="breeder_inquiry_risk" {% if source == "breeder_inquiry_risk" %}selected{% endif %}>Breeder inquiry risk</option>
+        <option value="booking_risk" {% if source == "booking_risk" %}selected{% endif %}>Booking risk</option>
+        <option value="payment_risk" {% if source == "payment_risk" %}selected{% endif %}>Payment risk</option>
+        <option value="trust_drop" {% if source == "trust_drop" %}selected{% endif %}>Trust drop</option>
       </select>
     </div>
     <div class="form-group">

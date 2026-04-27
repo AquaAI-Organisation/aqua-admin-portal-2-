@@ -1,11 +1,4 @@
-"""GPT-4 powered review pipeline.
-
-Each pending breeder/consultant profile is converted into a compact JSON
-"dossier" and handed to GPT-4 with a strict JSON-output system prompt. The
-model returns a decision, confidence, rationale, list of evidence items and
-recommended actions. We then map confidence → approved / rejected / flagged
-using the AI_APPROVE_THRESHOLD / AI_REJECT_THRESHOLD settings.
-"""
+"""GPT-powered review pipeline with balanced hybrid policy enforcement."""
 from __future__ import annotations
 
 import json
@@ -14,6 +7,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from django.conf import settings
+
+from .intelligence_adapter import build_signup_intelligence
 
 logger = logging.getLogger(__name__)
 
@@ -25,16 +20,19 @@ auto-approved, auto-rejected, or flagged for human review on Aqua AI's platform.
 
 You MUST base every decision on verifiable evidence from the provided dossier.
 NEVER invent facts. If the dossier is too thin to decide, lean toward "flagged".
+Lack of history alone is NOT a rejection reason.
 
 Score each account on these dimensions (0-1 each):
   - identity_clarity: real-looking name, complete profile, valid email, no obvious test/spam patterns
   - business_legitimacy: company name, website, business address, plausible bio
   - documentation: presence and plausibility of verification_documents / credentials
   - role_fit: profile content matches the claimed role (breeder vs consultant)
-  - risk_signals: trust score, mortality rate, disease rate, is_at_risk flag, suspicious metadata
+  - trust_risk: trust score, mortality rate, disease rate, incidents, is_at_risk flag, suspicious metadata
+  - behavioural_intelligence: off-platform, payment-bypass, dispute, booking, inquiry, network, or messaging risk signals
 
-Compute overall_confidence = weighted mean (identity 0.2, business 0.25, docs 0.25, role 0.15, risk 0.15).
-Note that risk_signals contributes INVERSELY for breeders with high mortality/disease.
+Compute overall_confidence = weighted mean:
+  identity 0.18, business 0.20, docs 0.18, role 0.14, trust_risk 0.18, behavioural_intelligence 0.12.
+Note that trust_risk contributes INVERSELY for breeders with high mortality/disease and users already marked at risk.
 
 For each material concern produce a "flag" with:
   - severity: "info" | "warning" | "critical"
@@ -53,7 +51,8 @@ Return STRICT JSON ONLY, matching this schema exactly:
   "decision_hint": "approve" | "reject" | "flag",
   "overall_confidence": <float 0-1>,
   "scores": { "identity_clarity": <float>, "business_legitimacy": <float>,
-              "documentation": <float>, "role_fit": <float>, "risk_signals": <float> },
+              "documentation": <float>, "role_fit": <float>, "trust_risk": <float>,
+              "behavioural_intelligence": <float> },
   "rationale": "<short paragraph>",
   "evidence": [ "<bullet>", "<bullet>", ... ],
   "flags": [ { "severity": "...", "reason": "...", "recommended_solution": "..." }, ... ],
@@ -75,11 +74,8 @@ class AIReviewOutcome:
     error: str = ""
 
 
-# ---------------------------------------------------------------------------
-# Dossier builders (no PII beyond what's already in the platform)
-# ---------------------------------------------------------------------------
-
 def build_breeder_dossier(profile, user) -> dict[str, Any]:
+    intelligence = build_signup_intelligence("breeder", profile, user)
     return {
         "subject_type": "breeder",
         "subject_id": str(profile.id),
@@ -141,10 +137,12 @@ def build_breeder_dossier(profile, user) -> dict[str, Any]:
             "service_area": profile.service_area or "",
             "metadata": profile.metadata or {},
         },
+        "intelligence": intelligence,
     }
 
 
 def build_consultant_dossier(profile, user) -> dict[str, Any]:
+    intelligence = build_signup_intelligence("consultant", profile, user)
     return {
         "subject_type": "consultant",
         "subject_id": str(profile.id),
@@ -205,12 +203,9 @@ def build_consultant_dossier(profile, user) -> dict[str, Any]:
             "services_list": profile.services_list or [],
             "metadata": profile.metadata or {},
         },
+        "intelligence": intelligence,
     }
 
-
-# ---------------------------------------------------------------------------
-# OpenAI call
-# ---------------------------------------------------------------------------
 
 def _is_placeholder_key(key: str) -> bool:
     return not key or "REPLACE" in key.upper() or key == "sk-REPLACE-WITH-YOUR-GPT-4-KEY"
@@ -237,8 +232,14 @@ def call_gpt4(dossier: dict[str, Any]) -> AIReviewOutcome:
         from openai import OpenAI
     except ImportError:
         return AIReviewOutcome(
-            decision="error", confidence=0.0, rationale="", evidence={},
-            recommended_actions=[], flags=[], raw={}, model=model,
+            decision="error",
+            confidence=0.0,
+            rationale="",
+            evidence={},
+            recommended_actions=[],
+            flags=[],
+            raw={},
+            model=model,
             error="openai package not installed. Run: pip install -r requirements.txt",
         )
 
@@ -251,9 +252,11 @@ def call_gpt4(dossier: dict[str, Any]) -> AIReviewOutcome:
             temperature=0.1,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user",
-                 "content": "Review this signup dossier and return the JSON decision:\n"
-                            + json.dumps(dossier, default=str)},
+                {
+                    "role": "user",
+                    "content": "Review this signup dossier and return the JSON decision:\n"
+                    + json.dumps(dossier, default=str),
+                },
             ],
         )
         content = completion.choices[0].message.content or "{}"
@@ -261,33 +264,122 @@ def call_gpt4(dossier: dict[str, Any]) -> AIReviewOutcome:
     except Exception as exc:
         logger.exception("OpenAI call failed")
         return AIReviewOutcome(
-            decision="error", confidence=0.0, rationale="", evidence={},
-            recommended_actions=[], flags=[], raw={}, model=model, error=str(exc),
+            decision="error",
+            confidence=0.0,
+            rationale="",
+            evidence={},
+            recommended_actions=[],
+            flags=[],
+            raw={},
+            model=model,
+            error=str(exc),
         )
 
     confidence = float(raw.get("overall_confidence") or 0.0)
     confidence = max(0.0, min(1.0, confidence))
-    hint = (raw.get("decision_hint") or "").lower()
-    approve_t = float(getattr(settings, "AI_APPROVE_THRESHOLD", 0.80))
-    reject_t = float(getattr(settings, "AI_REJECT_THRESHOLD", 0.30))
-
-    if hint == "reject" or confidence <= reject_t:
-        decision = "rejected"
-    elif hint == "approve" and confidence >= approve_t:
-        decision = "approved"
-    elif hint == "flag":
-        decision = "flagged"
-    else:
-        decision = "flagged"
+    hint = str(raw.get("decision_hint", "")).lower()
+    scores = _normalise_scores(raw.get("scores", {}))
+    decision, decision_basis = _balanced_decision(dossier, raw, scores, confidence, hint)
 
     return AIReviewOutcome(
         decision=decision,
         confidence=confidence,
         rationale=str(raw.get("rationale", "")),
-        evidence={"bullets": raw.get("evidence", []), "scores": raw.get("scores", {})},
+        evidence={
+            "bullets": raw.get("evidence", []),
+            "scores": scores,
+            "decision_basis": decision_basis,
+        },
         recommended_actions=list(raw.get("recommended_actions", [])),
         flags=list(raw.get("flags", [])),
         raw=raw,
         model=model,
         error="",
     )
+
+
+def _normalise_scores(scores: dict[str, Any]) -> dict[str, float]:
+    expected = [
+        "identity_clarity",
+        "business_legitimacy",
+        "documentation",
+        "role_fit",
+        "trust_risk",
+        "behavioural_intelligence",
+    ]
+    normalized = {}
+    for key in expected:
+        try:
+            value = float(scores.get(key, 0.0) or 0.0)
+        except (TypeError, ValueError):
+            value = 0.0
+        normalized[key] = max(0.0, min(1.0, value))
+    return normalized
+
+
+def _balanced_decision(
+    dossier: dict[str, Any],
+    raw: dict[str, Any],
+    scores: dict[str, float],
+    confidence: float,
+    hint: str,
+) -> tuple[str, dict[str, Any]]:
+    intelligence = dossier.get("intelligence", {})
+    hard_blocks = list(intelligence.get("hard_blocks", []))
+    thin_evidence = bool(intelligence.get("thin_evidence"))
+    identity = intelligence.get("identity", {})
+    role_fit = intelligence.get("role_fit", {})
+    approve_t = float(getattr(settings, "AI_APPROVE_THRESHOLD", 0.75))
+    reject_t = float(getattr(settings, "AI_REJECT_THRESHOLD", 0.35))
+
+    business_required = [
+        bool(dossier.get("profile", {}).get("company_name")),
+        bool(dossier.get("profile", {}).get("bio")),
+    ]
+    docs_present = bool(dossier.get("user", {}).get("verification_documents")) or bool(dossier.get("profile", {}).get("credentials"))
+    required_identity_ok = identity.get("missing_required_count", 0) == 0
+    role_required_ok = role_fit.get("missing_required_count", 0) <= 1
+    no_critical_flags = not any((flag.get("severity") or "").lower() == "critical" for flag in raw.get("flags", []))
+
+    if hard_blocks:
+        decision = "rejected"
+        reason = "Hard-block signals were detected."
+    elif thin_evidence:
+        decision = "flagged"
+        reason = "Evidence is too thin for safe automatic approval."
+    elif confidence < reject_t and (
+        hint == "reject"
+        or scores.get("trust_risk", 1.0) < 0.30
+        or scores.get("behavioural_intelligence", 1.0) < 0.30
+    ):
+        decision = "rejected"
+        reason = "Composite risk is below the reject threshold with supporting evidence."
+    elif (
+        confidence >= approve_t
+        and hint == "approve"
+        and required_identity_ok
+        and all(business_required)
+        and docs_present
+        and role_required_ok
+        and no_critical_flags
+    ):
+        decision = "approved"
+        reason = "Required identity, business, and role-fit checks passed with strong composite confidence."
+    else:
+        decision = "flagged"
+        reason = "The account is plausible but needs manual review under the balanced policy."
+
+    return decision, {
+        "policy": "balanced",
+        "approve_threshold": approve_t,
+        "reject_threshold": reject_t,
+        "decision_hint": hint or "flag",
+        "hard_blocks": hard_blocks,
+        "thin_evidence": thin_evidence,
+        "required_identity_ok": required_identity_ok,
+        "business_fields_ok": all(business_required),
+        "docs_present": docs_present,
+        "role_required_ok": role_required_ok,
+        "no_critical_flags": no_critical_flags,
+        "reason": reason,
+    }

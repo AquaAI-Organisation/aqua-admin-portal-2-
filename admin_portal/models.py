@@ -9,18 +9,26 @@ Two kinds of tables live here:
    flag guarantees migrations here will never touch the main backend's schema.
 """
 import uuid
+
 from django.conf import settings
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from django.db import models
 from django.utils import timezone
 
 from .managers import AdminUserManager
+from .services.error_classifier import classify_openai_error
 
 
 ROLE_CHOICES = [
     ("super_admin", "Super Admin"),
     ("developer", "Developer"),
     ("guest", "Guest"),
+]
+INVITE_DELIVERY_CHOICES = [
+    ("pending", "Pending"),
+    ("email_sent", "Email sent"),
+    ("email_failed", "Email failed"),
+    ("link_available", "Link available"),
 ]
 INVITE_ROLE_CHOICES = [
     ("developer", "Developer"),
@@ -39,6 +47,11 @@ SEVERITY_CHOICES = [("info", "Info"), ("warning", "Warning"), ("critical", "Crit
 ISSUE_SOURCE_CHOICES = [
     ("incident", "Incident"),
     ("consultant_warning", "Consultant Warning"),
+    ("message_risk", "Message Risk"),
+    ("breeder_inquiry_risk", "Breeder Inquiry Risk"),
+    ("booking_risk", "Booking Risk"),
+    ("payment_risk", "Payment Risk"),
+    ("trust_drop", "Trust Drop"),
 ]
 ISSUE_STATUS_CHOICES = [
     ("open", "Open"),
@@ -133,6 +146,9 @@ class AdminInvite(models.Model):
     accepted_at = models.DateTimeField(null=True, blank=True)
     revoked = models.BooleanField(default=False)
     revoked_at = models.DateTimeField(null=True, blank=True)
+    delivery_status = models.CharField(max_length=20, choices=INVITE_DELIVERY_CHOICES, default="pending")
+    delivery_error = models.TextField(blank=True)
+    last_delivery_attempt_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["-created_at"]
@@ -326,6 +342,27 @@ class ExternalIncidentLog(models.Model):
         return f"{self.incident_code} ({self.severity_level})"
 
 
+class ExternalTrustScoreSnapshot(models.Model):
+    id = models.UUIDField(primary_key=True)
+    user = models.ForeignKey(
+        ExternalUser, on_delete=models.DO_NOTHING, db_column="user_id", related_name="+"
+    )
+    trust_score = models.IntegerField(default=0)
+    regulatory_tier = models.CharField(max_length=32, blank=True)
+    total_badge_points = models.IntegerField(default=0)
+    total_incident_penalties = models.IntegerField(default=0)
+    contributing_factors = models.JSONField(default=dict, blank=True)
+    calculated_at = models.DateTimeField(null=True, blank=True)
+    calculation_version = models.CharField(max_length=64, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "badges_trustscoresnapshot"
+
+    def __str__(self):
+        return f"{self.user_id} @ {self.calculated_at}"
+
+
 class ExternalConsultantWarning(models.Model):
     id = models.UUIDField(primary_key=True)
     consultant = models.ForeignKey(
@@ -345,6 +382,141 @@ class ExternalConsultantWarning(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class ExternalBreederReview(models.Model):
+    id = models.UUIDField(primary_key=True)
+    breeder = models.ForeignKey(
+        ExternalBreederProfile, on_delete=models.DO_NOTHING, db_column="breeder_id", related_name="+"
+    )
+    reviewer_id = models.UUIDField(null=True, blank=True)
+    rating = models.IntegerField(default=0)
+    comment = models.TextField(blank=True)
+    stock_health_rating = models.IntegerField(null=True, blank=True)
+    communication_rating = models.IntegerField(null=True, blank=True)
+    accuracy_rating = models.IntegerField(null=True, blank=True)
+    is_verified_purchase = models.BooleanField(default=False)
+    created_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "breeders_breederreview"
+
+
+class ExternalBreederInquiry(models.Model):
+    id = models.UUIDField(primary_key=True)
+    breeder = models.ForeignKey(
+        ExternalBreederProfile, on_delete=models.DO_NOTHING, db_column="breeder_id", related_name="+"
+    )
+    user_id = models.UUIDField(null=True, blank=True)
+    message = models.TextField()
+    response = models.TextField(blank=True, null=True)
+    status = models.CharField(max_length=32, blank=True)
+    priority = models.CharField(max_length=32, blank=True)
+    source = models.CharField(max_length=32, blank=True)
+    created_at = models.DateTimeField(null=True, blank=True)
+    responded_at = models.DateTimeField(null=True, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "breeders_breederinquiry"
+
+
+class ExternalConsultantBooking(models.Model):
+    id = models.UUIDField(primary_key=True)
+    consultant = models.ForeignKey(
+        ExternalConsultantProfile, on_delete=models.DO_NOTHING, db_column="consultant_id", related_name="+"
+    )
+    requester_id = models.UUIDField(null=True, blank=True)
+    scheduled_start = models.DateTimeField(null=True, blank=True)
+    scheduled_end = models.DateTimeField(null=True, blank=True)
+    full_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    booking_fee = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    payment_status = models.CharField(max_length=32, blank=True)
+    status = models.CharField(max_length=32, blank=True)
+    consultant_status = models.CharField(max_length=32, blank=True)
+    notes = models.TextField(blank=True, null=True)
+    rating = models.IntegerField(null=True, blank=True)
+    review = models.TextField(blank=True, null=True)
+    response_time_hours = models.FloatField(null=True, blank=True)
+    was_fast_response = models.BooleanField(default=False)
+    was_successful = models.BooleanField(default=False)
+    created_at = models.DateTimeField(null=True, blank=True)
+    responded_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "consultant_consultantbooking"
+
+
+class ExternalPaymentFailureLog(models.Model):
+    id = models.UUIDField(primary_key=True)
+    user_id = models.UUIDField(null=True, blank=True)
+    payment_intent_id = models.UUIDField(null=True, blank=True)
+    failure_reason = models.TextField(blank=True)
+    failure_code = models.CharField(max_length=128, blank=True, null=True)
+    stripe_error = models.JSONField(default=dict, blank=True, null=True)
+    amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    currency = models.CharField(max_length=16, blank=True)
+    endpoint = models.CharField(max_length=255, blank=True, null=True)
+    created_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "payments_paymentfailurelog"
+
+
+class ExternalRefund(models.Model):
+    id = models.UUIDField(primary_key=True)
+    payment_intent_id = models.UUIDField(null=True, blank=True)
+    amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    currency = models.CharField(max_length=16, blank=True)
+    status = models.CharField(max_length=32, blank=True)
+    reason = models.CharField(max_length=64, blank=True)
+    failure_reason = models.TextField(blank=True, null=True)
+    notes = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(null=True, blank=True)
+    processed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "payments_refund"
+
+
+class ExternalConversation(models.Model):
+    id = models.UUIDField(primary_key=True)
+    participant_1_id = models.UUIDField()
+    participant_2_id = models.UUIDField()
+    created_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(null=True, blank=True)
+    last_message_at = models.DateTimeField(null=True, blank=True)
+    last_message_preview = models.TextField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = "messaging_conversation"
+
+
+class ExternalMessage(models.Model):
+    id = models.UUIDField(primary_key=True)
+    conversation = models.ForeignKey(
+        ExternalConversation, on_delete=models.DO_NOTHING, db_column="conversation_id", related_name="+"
+    )
+    sender_id = models.UUIDField()
+    content = models.TextField()
+    is_read = models.BooleanField(default=False)
+    read_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(null=True, blank=True)
+    is_deleted = models.BooleanField(default=False)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+    metadata = models.JSONField(default=dict, blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = "messaging_message"
 
 
 # ---------------------------------------------------------------------------
@@ -413,6 +585,26 @@ class AIAccountReview(models.Model):
         if self.confidence >= 0.5:
             return "medium"
         return "low"
+
+    @property
+    def error_info(self):
+        return classify_openai_error(self.error)
+
+    @property
+    def error_category(self):
+        return self.error_info["category"]
+
+    @property
+    def error_label(self):
+        return self.error_info["label"]
+
+    @property
+    def error_summary(self):
+        return self.error_info["summary"]
+
+    @property
+    def decision_basis(self):
+        return (self.evidence or {}).get("decision_basis", {})
 
 
 class AIFlag(models.Model):

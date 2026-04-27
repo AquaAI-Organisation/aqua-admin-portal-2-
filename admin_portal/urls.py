@@ -11,6 +11,8 @@ urlpatterns = [
 
     # Raw pending intake from source-of-truth backend tables
     path("intake/", views.intake_list, name="intake_list"),
+    path("entities/", views.entity_directory, name="entity_directory"),
+    path("entities/<str:entity_type>/<str:entity_id>/status/", views.entity_status_update, name="entity_status_update"),
 
     # AI reviews
     path("reviews/", views.review_list, name="review_list"),
@@ -42,6 +44,8 @@ urlpatterns = [
     path("team/invite/", views.admin_user_invite, name="admin_user_invite"),
     path("team/<int:user_id>/revoke/", views.admin_user_revoke, name="admin_user_revoke"),
     path("team/invites/<int:invite_id>/cancel/", views.invite_cancel, name="invite_cancel"),
+    path("team/invites/<int:invite_id>/resend/", views.invite_resend, name="invite_resend"),
+    path("team/invites/<int:invite_id>/link/", views.invite_link, name="invite_link"),
     path("invite/accept/<str:token>/", views.invite_accept, name="invite_accept"),
 
     # Password

@@ -6,6 +6,7 @@ from typing import Iterable
 
 from django.conf import settings
 from django.core.mail import send_mail
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
@@ -20,9 +21,29 @@ def _slack_token_ok() -> bool:
 
 
 def _email_ok() -> bool:
-    return bool(getattr(settings, "EMAIL_HOST_USER", "")) and (
-        "REPLACE" not in getattr(settings, "EMAIL_HOST_PASSWORD", "").upper()
-    )
+    return email_config_status()["configured"]
+
+
+def email_config_status() -> dict[str, str | bool]:
+    host = getattr(settings, "EMAIL_HOST", "")
+    user = getattr(settings, "EMAIL_HOST_USER", "")
+    password = getattr(settings, "EMAIL_HOST_PASSWORD", "")
+    missing = []
+    if not host:
+        missing.append("EMAIL_HOST")
+    if not user:
+        missing.append("EMAIL_HOST_USER")
+    if not password or "REPLACE" in password.upper():
+        missing.append("EMAIL_HOST_PASSWORD")
+    if missing:
+        return {
+            "configured": False,
+            "detail": f"SMTP settings are incomplete: missing {', '.join(missing)}.",
+        }
+    return {
+        "configured": True,
+        "detail": f"SMTP configured via {host} as {user}.",
+    }
 
 
 def _portal_url(path: str) -> str:
@@ -110,7 +131,20 @@ def notify_invite(invite, accept_url: str) -> dict:
         f"Accept the invite (expires {invite.expires_at:%Y-%m-%d %H:%M UTC}):\n  {accept_url}\n\n"
         f"If you were not expecting this, ignore this email.\n"
     )
-    return {"email": _send_email(subject, body, [invite.email])}
+    email_result = _send_email_result(subject, body, [invite.email])
+    delivery_status = "email_sent" if email_result["ok"] else "link_available"
+    if email_result["error"]:
+        delivery_status = "email_failed"
+    invite.delivery_status = delivery_status
+    invite.delivery_error = email_result["error"]
+    invite.last_delivery_attempt_at = timezone.now()
+    invite.save(update_fields=["delivery_status", "delivery_error", "last_delivery_attempt_at"])
+    return {
+        "email": email_result["ok"],
+        "delivery_status": delivery_status,
+        "error": email_result["error"],
+        "accept_url": accept_url,
+    }
 
 
 def notify_manual_override(review, admin_user, new_decision, reason) -> dict:
@@ -159,12 +193,16 @@ def notify_password_change(user) -> dict:
 
 
 def _send_email(subject: str, body: str, recipients: Iterable[str]) -> bool:
+    return _send_email_result(subject, body, recipients)["ok"]
+
+
+def _send_email_result(subject: str, body: str, recipients: Iterable[str]) -> dict[str, str | bool]:
     recipients = [r for r in recipients if r]
     if not recipients:
-        return False
+        return {"ok": False, "error": "No recipients were provided."}
     if not _email_ok():
         logger.warning("SMTP not configured; skipping email %r -> %s", subject, recipients)
-        return False
+        return {"ok": False, "error": str(email_config_status()["detail"])}
     try:
         send_mail(
             subject,
@@ -173,10 +211,10 @@ def _send_email(subject: str, body: str, recipients: Iterable[str]) -> bool:
             recipients,
             fail_silently=False,
         )
-        return True
-    except Exception:
+        return {"ok": True, "error": ""}
+    except Exception as exc:
         logger.exception("Email send failed")
-        return False
+        return {"ok": False, "error": str(exc)}
 
 
 def _send_slack_to_super_admins(text: str) -> bool:

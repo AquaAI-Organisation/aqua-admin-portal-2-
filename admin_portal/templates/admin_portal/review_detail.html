@@ -22,6 +22,10 @@
 
 {% if review.error %}
 <div class="message error">{{ review.error }}</div>
+<div class="message warning">
+  <strong>{{ review.error_label|default:"AI error" }}</strong><br>
+  {{ review.error_summary|default:"The AI review failed and can be retried after the configuration issue is fixed." }}
+</div>
 {% endif %}
 
 <div class="grid-2-equal">
@@ -88,6 +92,34 @@
       <div class="cell-sub mono">{{ val|floatformat:2 }}</div>
     </div>
     {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if review.decision_basis %}
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">Balanced policy basis</div>
+  </div>
+  <div class="kv-grid">
+    <div class="kv-label">Policy</div>
+    <div class="kv-value">{{ review.decision_basis.policy|default:"-" }}</div>
+    <div class="kv-label">Reason</div>
+    <div class="kv-value">{{ review.decision_basis.reason|default:"-" }}</div>
+    <div class="kv-label">Approve threshold</div>
+    <div class="kv-value mono">{{ review.decision_basis.approve_threshold|default:"-" }}</div>
+    <div class="kv-label">Reject threshold</div>
+    <div class="kv-value mono">{{ review.decision_basis.reject_threshold|default:"-" }}</div>
+    <div class="kv-label">Thin evidence</div>
+    <div class="kv-value">{{ review.decision_basis.thin_evidence|yesno:"Yes,No" }}</div>
+    <div class="kv-label">Hard blocks</div>
+    <div class="kv-value">
+      {% if review.decision_basis.hard_blocks %}
+        {% for block in review.decision_basis.hard_blocks %}<div>{{ block }}</div>{% endfor %}
+      {% else %}
+        None
+      {% endif %}
+    </div>
   </div>
 </div>
 {% endif %}
@@ -220,9 +252,47 @@
       <label class="inline-chip"><input type="radio" name="new_decision" value="approved" required> Approve</label>
       <label class="inline-chip"><input type="radio" name="new_decision" value="rejected" required> Reject</label>
     </div>
-    <textarea name="reason" rows="4" placeholder="Explain why you are overriding the AI decision." required minlength="10"></textarea>
+    <div class="form-group">
+      <label for="id_reason_code">Override reason</label>
+      <select id="id_reason_code" name="reason_code" required>
+        <option value="compliance_verified">Compliance or documents manually verified</option>
+        <option value="false_positive">AI false positive</option>
+        <option value="business_confirmed">Business legitimacy confirmed</option>
+        <option value="policy_violation">Policy violation confirmed</option>
+        <option value="duplicate_or_test">Duplicate, spam, or test account</option>
+        <option value="insufficient_context">AI lacked enough context</option>
+        <option value="other">Other reason</option>
+      </select>
+    </div>
+    <div class="form-group" id="other-reason-group" style="display:none;">
+      <label for="id_other_reason">Custom reason</label>
+      <textarea id="id_other_reason" name="other_reason" rows="4" placeholder="Explain the custom reason for this override." minlength="10"></textarea>
+    </div>
     <button class="btn-primary" type="submit">Apply manual override</button>
   </form>
 </div>
 {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const reasonSelect = document.getElementById("id_reason_code");
+const otherReasonGroup = document.getElementById("other-reason-group");
+const otherReasonInput = document.getElementById("id_other_reason");
+
+function syncOverrideReason() {
+  if (!reasonSelect || !otherReasonGroup || !otherReasonInput) return;
+  const show = reasonSelect.value === "other";
+  otherReasonGroup.style.display = show ? "grid" : "none";
+  otherReasonInput.required = show;
+  if (!show) {
+    otherReasonInput.value = "";
+  }
+}
+
+if (reasonSelect) {
+  reasonSelect.addEventListener("change", syncOverrideReason);
+  syncOverrideReason();
+}
+</script>
 {% endblock %}
