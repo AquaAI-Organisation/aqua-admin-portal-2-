@@ -2,21 +2,40 @@
 {% block title %}Dashboard | {{ APP_NAME }}{% endblock %}
 {% block topbar_title %}Operations Dashboard{% endblock %}
 {% block content %}
-<div class="page-header">
-  <div>
+<section class="hero-shell">
+  <div class="hero-copy">
+    <div class="hero-kicker">Live governance layer</div>
     <h1>AI governance control room</h1>
     <p class="page-subtitle">Automated onboarding, issue triage, health diagnostics, and super-admin oversight for the shared Aqua AI backend.</p>
+    <div class="page-actions">
+      {% if IS_SUPER_ADMIN %}
+      <form method="post" action="{% url 'admin_portal:process_now' %}">
+        {% csrf_token %}
+        <button class="btn-primary" type="submit">Run full AI scan</button>
+      </form>
+      {% endif %}
+      <a class="btn" href="{% url 'admin_portal:intake_list' %}">View pending accounts</a>
+      <a class="btn" href="{% url 'admin_portal:issue_list' %}">Open flagged issues</a>
+    </div>
   </div>
-  <div class="page-actions">
-    {% if IS_SUPER_ADMIN %}
-    <form method="post" action="{% url 'admin_portal:process_now' %}">
-      {% csrf_token %}
-      <button class="btn-primary" type="submit">Run full AI scan</button>
-    </form>
-    {% endif %}
-    <a class="btn" href="{% url 'admin_portal:intake_list' %}">View pending accounts</a>
+  <div class="hero-rail">
+    <div class="hero-stat">
+      <span class="hero-stat-label">Pending intake</span>
+      <strong>{{ pending_breeder_count|add:pending_consultant_count }}</strong>
+      <span class="hero-stat-note">Breeders {{ pending_breeder_count }} · Consultants {{ pending_consultant_count }}</span>
+    </div>
+    <div class="hero-stat">
+      <span class="hero-stat-label">Open issues</span>
+      <strong>{{ issue_counts.open }}</strong>
+      <span class="hero-stat-note">Critical {{ issue_counts.critical }}</span>
+    </div>
+    <div class="hero-stat">
+      <span class="hero-stat-label">Today reviewed</span>
+      <strong>{{ today_counts.total }}</strong>
+      <span class="hero-stat-note">Approved {{ today_counts.approved }} · Flagged {{ today_counts.flagged }}</span>
+    </div>
   </div>
-</div>
+</section>
 
 <div class="metrics-grid">
   <div class="metric-card">
