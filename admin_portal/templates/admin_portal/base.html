@@ -88,21 +88,12 @@
       <header class="topbar">
         <div>
           <div class="topbar-title">{% block topbar_title %}{{ APP_NAME }}{% endblock %}</div>
-          <div class="topbar-subtitle">
-            Super admins: {{ SUPERADMIN_EMAILS|join:", " }}
-          </div>
         </div>
         <div class="topbar-meta">
           <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle light and dark mode">
             <span class="theme-toggle-icon" aria-hidden="true"></span>
             <span class="theme-toggle-label">Light mode</span>
           </button>
-          {% if LEGACY_ADMIN_REDIRECT_URL %}
-          <span class="inline-chip">Front door: {{ LEGACY_ADMIN_REDIRECT_URL }}</span>
-          {% endif %}
-          {% if LEGACY_ADMIN_INTERNAL_PATH and IS_SUPER_ADMIN %}
-          <span class="inline-chip">Legacy path: {{ LEGACY_ADMIN_INTERNAL_PATH }}</span>
-          {% endif %}
         </div>
       </header>
 
