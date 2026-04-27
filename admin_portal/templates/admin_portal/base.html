@@ -74,13 +74,12 @@
     </aside>
 
     <main class="main-panel">
-      <div class="pond-scene" aria-hidden="true">
-        <div class="pond-ripple ripple-a"></div>
-        <div class="pond-ripple ripple-b"></div>
-        <div class="pond-ripple ripple-c"></div>
-        <div class="koi koi-a"><span class="koi-fin"></span></div>
-        <div class="koi koi-b"><span class="koi-fin"></span></div>
-        <div class="koi koi-c"><span class="koi-fin"></span></div>
+      <div class="reef-scene" aria-hidden="true">
+        <video class="reef-video" autoplay muted loop playsinline>
+          <source src="{% static 'admin_portal/media/underwater-reef.mp4' %}" type="video/mp4">
+        </video>
+        <div class="reef-overlay reef-overlay-base"></div>
+        <div class="reef-overlay reef-overlay-focus"></div>
       </div>
       <div class="shell-ambient shell-ambient-a"></div>
       <div class="shell-ambient shell-ambient-b"></div>
