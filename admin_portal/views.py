@@ -1094,20 +1094,28 @@ def process_now(request):
         except Exception as exc:
             messages.error(request, f"AI scan failed: {exc}")
         else:
-            truncated = bool(review_counts.get("truncated") or issue_counts.get("truncated"))
+            review_truncated = bool(review_counts.get("truncated"))
+            issue_truncated = bool(issue_counts.get("truncated"))
+            truncated = review_truncated or issue_truncated
             summary = (
                 f"Processed {review_counts['breeder']} breeders, {review_counts['consultant']} consultants, "
                 f"and issue sources: {_issue_count_summary(issue_counts)}."
             )
             if truncated:
                 summary += " The scan was time-bounded to keep the web request stable; run it again for the next batch."
+            audit_details = {
+                **{k: v for k, v in review_counts.items() if k != "truncated"},
+                **{k: v for k, v in issue_counts.items() if k != "truncated"},
+                "review_truncated": review_truncated,
+                "issue_truncated": issue_truncated,
+                "truncated": truncated,
+            }
             audit.record_write(
                 request.user,
                 "ai.process_now",
                 request=request,
                 summary=summary,
-                **review_counts,
-                **issue_counts,
+                **audit_details,
             )
             if truncated:
                 messages.warning(request, summary)
