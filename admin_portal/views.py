@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import secrets
 from datetime import timedelta
+from pathlib import Path
 
 from django.conf import settings
 from django.contrib import messages
@@ -11,7 +12,7 @@ from django.contrib.auth import authenticate, login, logout, update_session_auth
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import Count, Q
-from django.http import JsonResponse
+from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -50,6 +51,15 @@ from .services.notifier import notify_invite, notify_password_change
 from .services.issue_runner import process_pending_issues
 from .services.reporting import build_report_for
 from .services.review_runner import manual_override, process_pending, run_review
+
+
+def background_video(request):
+    video_path = Path(settings.BASE_DIR) / "admin_portal" / "static" / "admin_portal" / "media" / "underwater-reef.mp4"
+    if not video_path.exists():
+        raise Http404("Background video not found.")
+    response = FileResponse(video_path.open("rb"), content_type="video/mp4")
+    response["Cache-Control"] = "public, max-age=86400"
+    return response
 
 
 def login_view(request):

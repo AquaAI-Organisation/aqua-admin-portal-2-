@@ -76,7 +76,7 @@
     <main class="main-panel">
       <div class="reef-scene" aria-hidden="true">
         <video class="reef-video" autoplay muted loop playsinline>
-          <source src="{% static 'admin_portal/media/underwater-reef.mp4' %}" type="video/mp4">
+          <source src="{% url 'admin_portal:background_video' %}" type="video/mp4">
         </video>
         <div class="reef-overlay reef-overlay-base"></div>
         <div class="reef-overlay reef-overlay-focus"></div>
