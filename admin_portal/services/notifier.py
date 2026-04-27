@@ -227,7 +227,7 @@ def _send_email_result(subject: str, body: str, recipients: Iterable[str]) -> di
         return {"ok": True, "error": ""}
     except Exception as exc:
         logger.exception("Email send failed")
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": _friendly_email_error(str(exc))}
 
 
 def _send_slack_to_super_admins(text: str) -> bool:
@@ -265,3 +265,17 @@ def _send_slack_to_super_admins(text: str) -> bool:
 
 def send_custom_email(*, subject: str, body: str, recipients: Iterable[str]) -> dict[str, str | bool]:
     return _send_email_result(subject, body, recipients)
+
+
+def _friendly_email_error(error: str) -> str:
+    lowered = (error or "").lower()
+    if "smtpauthentication is disabled for the tenant" in lowered or "smtp auth disabled" in lowered:
+        return (
+            "Microsoft 365 blocked SMTP login because authenticated SMTP is disabled for this mailbox or tenant. "
+            "Enable SMTP AUTH for support@aquaai.uk in Microsoft 365 / Exchange Online, then resend the invite."
+        )
+    if "authentication unsuccessful" in lowered:
+        return "The mail server rejected the username or password. Re-check the mailbox credentials and provider settings."
+    if "connection" in lowered or "timed out" in lowered:
+        return "The SMTP server could not be reached. Re-check the host, port, encryption mode, and firewall/network rules."
+    return error

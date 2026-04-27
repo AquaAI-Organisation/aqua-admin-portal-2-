@@ -932,6 +932,9 @@ def admin_user_revoke(request, user_id):
         messages.error(request, "You cannot revoke your own account.")
         return redirect("admin_portal:admin_user_list")
     if request.method == "POST":
+        if not target.is_active:
+            messages.info(request, f"{target.email} is already inactive.")
+            return redirect("admin_portal:admin_user_list")
         target.is_active = False
         target.save(update_fields=["is_active"])
         audit.record_write(
@@ -943,6 +946,30 @@ def admin_user_revoke(request, user_id):
             summary=f"Deactivated admin user {target.email}.",
         )
         messages.success(request, f"{target.email} deactivated.")
+    return redirect("admin_portal:admin_user_list")
+
+
+@super_admin_required
+def admin_user_activate(request, user_id):
+    target = get_object_or_404(AdminUser, pk=user_id)
+    if target.is_super_admin:
+        messages.error(request, "You cannot manually change the activation state of a platform super-admin here.")
+        return redirect("admin_portal:admin_user_list")
+    if request.method == "POST":
+        if target.is_active:
+            messages.info(request, f"{target.email} is already active.")
+            return redirect("admin_portal:admin_user_list")
+        target.is_active = True
+        target.save(update_fields=["is_active"])
+        audit.record_write(
+            request.user,
+            "admin.reactivate",
+            target_type="admin_user",
+            target_id=target.id,
+            request=request,
+            summary=f"Re-activated admin user {target.email}.",
+        )
+        messages.success(request, f"{target.email} re-activated.")
     return redirect("admin_portal:admin_user_list")
 
 
