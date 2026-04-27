@@ -1063,6 +1063,7 @@ pre.json {
 }
 
 .login-page {
+  position: relative;
   min-height: 100vh;
   display: grid;
   place-items: center;
@@ -1073,6 +1074,8 @@ pre.json {
 }
 
 .login-card {
+  position: relative;
+  z-index: 1;
   width: min(520px, 100%);
   padding: 34px;
   background:

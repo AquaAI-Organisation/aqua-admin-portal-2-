@@ -9,6 +9,13 @@
 </head>
 <body>
   <div class="login-page">
+    <div class="reef-scene" aria-hidden="true">
+      <video class="reef-video" autoplay muted loop playsinline>
+        <source src="{% static 'admin_portal/media/underwater-reef.mp4' %}" type="video/mp4">
+      </video>
+      <div class="reef-overlay reef-overlay-base"></div>
+      <div class="reef-overlay reef-overlay-focus"></div>
+    </div>
     <div class="login-card">
       <div class="brand-block" style="margin-bottom:20px;">
         <div class="brand-mark">A</div>
