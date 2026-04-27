@@ -93,7 +93,6 @@ USE_TZ = True
 # Static files — WhiteNoise serves them on Heroku
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
-STATICFILES_DIRS = [BASE_DIR / "admin_portal" / "static"]
 
 # Use WhiteNoise for static file serving (works on Heroku out of the box)
 WHITENOISE_USE_FINDERS = True
