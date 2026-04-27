@@ -20,6 +20,7 @@ from .issue_review import (
     build_warning_dossier,
     call_issue_gpt,
 )
+from .json_utils import sanitize_json
 from .notifier import notify_issue
 from .review_runner import _deactivate
 
@@ -157,11 +158,11 @@ def _save_issue(*, source_type: str, source_id: str, subject_type: str, user, ti
             status="error" if outcome.error else "open",
             summary=outcome.summary,
             rationale=outcome.rationale,
-            evidence=outcome.evidence,
-            recommended_actions=outcome.recommended_actions,
+            evidence=sanitize_json(outcome.evidence),
+            recommended_actions=sanitize_json(outcome.recommended_actions),
             applied_actions=[],
-            source_payload=source_payload,
-            openai_raw=outcome.raw,
+            source_payload=sanitize_json(source_payload),
+            openai_raw=sanitize_json(outcome.raw),
             ai_model=outcome.model,
             error=outcome.error,
             triaged_at=timezone.now(),
@@ -222,15 +223,24 @@ def process_pending_issues(limit_per_type: int = 25) -> dict[str, int]:
         "trust_drop": 0,
     }
     for incident, user, subject_type, profile in discover_pending_incidents(limit=limit_per_type):
-        run_incident_triage(incident, user, subject_type, profile)
-        counts["incident"] += 1
+        try:
+            run_incident_triage(incident, user, subject_type, profile)
+            counts["incident"] += 1
+        except Exception:
+            logger.exception("Incident triage failed for %s", incident.id)
     for warning, user, consultant in discover_pending_consultant_warnings(limit=limit_per_type):
-        run_warning_triage(warning, user, consultant)
-        counts["consultant_warning"] += 1
+        try:
+            run_warning_triage(warning, user, consultant)
+            counts["consultant_warning"] += 1
+        except Exception:
+            logger.exception("Consultant warning triage failed for %s", warning.id)
     for candidate in discover_behavioral_issue_candidates(limit_per_type=limit_per_type):
         seen = _already_triaged_ids(candidate.source_type)
         if candidate.source_id in seen:
             continue
-        run_signal_triage(candidate)
-        counts[candidate.source_type] += 1
+        try:
+            run_signal_triage(candidate)
+            counts[candidate.source_type] += 1
+        except Exception:
+            logger.exception("Signal triage failed for %s:%s", candidate.source_type, candidate.source_id)
     return counts

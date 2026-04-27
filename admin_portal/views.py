@@ -521,7 +521,7 @@ def entity_status_update(request, entity_type, entity_id):
             request=request,
             summary=summary,
             entity_type=entity_type,
-            action=action,
+            requested_action=action,
         )
         messages.success(request, summary)
     return redirect(next_url)

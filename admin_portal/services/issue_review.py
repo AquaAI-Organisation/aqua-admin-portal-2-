@@ -8,6 +8,8 @@ from typing import Any
 
 from django.conf import settings
 
+from .json_utils import sanitize_json
+
 logger = logging.getLogger(__name__)
 
 
@@ -60,7 +62,7 @@ def _is_placeholder_key(key: str) -> bool:
 
 
 def build_incident_dossier(incident, user, profile=None) -> dict[str, Any]:
-    return {
+    return sanitize_json({
         "source_type": "incident",
         "source_id": str(incident.id),
         "subject": {
@@ -86,11 +88,11 @@ def build_incident_dossier(incident, user, profile=None) -> dict[str, Any]:
             "is_cleared": incident.is_cleared,
             "created_by": incident.created_by,
         },
-    }
+    })
 
 
 def build_warning_dossier(warning, user, consultant_profile=None) -> dict[str, Any]:
-    return {
+    return sanitize_json({
         "source_type": "consultant_warning",
         "source_id": str(warning.id),
         "subject": {
@@ -113,11 +115,11 @@ def build_warning_dossier(warning, user, consultant_profile=None) -> dict[str, A
             "created_at": warning.created_at.isoformat() if warning.created_at else None,
             "resolved_at": warning.resolved_at.isoformat() if warning.resolved_at else None,
         },
-    }
+    })
 
 
 def build_signal_dossier(source_type: str, title: str, payload: dict[str, Any], user, profile=None) -> dict[str, Any]:
-    return {
+    return sanitize_json({
         "source_type": source_type,
         "source_id": str(payload.get("source_id") or payload.get("message_id") or payload.get("booking_id") or payload.get("failure_id") or payload.get("snapshot_id") or ""),
         "subject": {
@@ -135,7 +137,7 @@ def build_signal_dossier(source_type: str, title: str, payload: dict[str, Any], 
             "title": title,
             "payload": payload,
         },
-    }
+    })
 
 
 def _profile_snapshot(profile) -> dict[str, Any]:
