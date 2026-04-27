@@ -23,7 +23,10 @@ def fetch_support_inbox(limit: int = 25) -> dict[str, int]:
     added = 0
     updated = 0
     with client_cls(mailbox.host, mailbox.port) as client:
-        client.login(mailbox.username, mailbox.password)
+        try:
+            client.login(mailbox.username, mailbox.password)
+        except imaplib.IMAP4.error as exc:
+            raise RuntimeError(_friendly_mailbox_error(str(exc))) from exc
         client.select(mailbox.folder)
         status, data = client.search(None, "ALL")
         if status != "OK":
@@ -134,3 +137,13 @@ def _match_sender(sender_email: str) -> tuple[str, str]:
         return "breeder", str(breeder.id)
     except ExternalBreederProfile.DoesNotExist:
         return "user", str(user.id)
+
+
+def _friendly_mailbox_error(error: str) -> str:
+    lowered = (error or "").lower()
+    if "authentication failed" in lowered or "login failed" in lowered or "invalid credentials" in lowered:
+        return (
+            "The inbox login was rejected. Re-check the mailbox credentials, and if this is Microsoft 365 also confirm "
+            "that IMAP access is allowed and that MFA, device approval, or an app password is not blocking the sign-in."
+        )
+    return error

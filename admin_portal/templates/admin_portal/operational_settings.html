@@ -18,6 +18,10 @@
         <div class="card-subtitle">Use your company mailbox here for invites and replies. Enter the SMTP host, username, and password for the mailbox provider behind <span class="mono">support@aquaai.uk</span>.</div>
       </div>
     </div>
+    <div class="helper-text" style="margin-bottom:16px;">
+      Microsoft 365 / GoDaddy note:
+      if this mailbox uses MFA, device approval, or tenant-level SMTP restrictions, the portal may still fail to send until the mailbox owner approves the sign-in path or provides the correct app-password / SMTP AUTH access. The portal is ready for the integration, but Microsoft must allow the mailbox to authenticate from the server.
+    </div>
     <div class="form-row">
       <div class="form-group" style="flex:1;">
         <label for="id_smtp_host">SMTP host</label>
@@ -55,6 +59,13 @@
         <div class="card-subtitle">Create a Slack app and paste its bot token here so the portal can DM Steven and Ben or use a channel fallback.</div>
       </div>
     </div>
+    <div class="helper-text" style="margin-bottom:16px;">
+      Recommended Slack scopes:
+      <span class="mono">chat:write</span>,
+      <span class="mono">im:write</span>,
+      and <span class="mono">users:read.email</span>.
+      Paste the bot token that starts with <span class="mono">xoxb-</span>.
+    </div>
     <div class="form-row">
       <div class="form-group" style="flex:1;">
         <label for="id_slack_bot_token">Slack bot token</label>
@@ -73,6 +84,9 @@
         <div class="card-title">Support inbox</div>
         <div class="card-subtitle">These IMAP values let the portal fetch enquiries from the support mailbox so they appear in Support Inbox.</div>
       </div>
+    </div>
+    <div class="helper-text" style="margin-bottom:16px;">
+      If the inbox still cannot connect after you save these values, the mailbox owner may need to approve the new device, allow IMAP access, or use an app password depending on the Microsoft 365 security policy.
     </div>
     <div class="form-row">
       <div class="form-group" style="flex:1;">

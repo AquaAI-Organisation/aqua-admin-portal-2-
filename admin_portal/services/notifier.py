@@ -275,7 +275,10 @@ def _friendly_email_error(error: str) -> str:
             "Enable SMTP AUTH for support@aquaai.uk in Microsoft 365 / Exchange Online, then resend the invite."
         )
     if "authentication unsuccessful" in lowered:
-        return "The mail server rejected the username or password. Re-check the mailbox credentials and provider settings."
+        return (
+            "The mail server rejected the sign-in attempt. Re-check the mailbox credentials, and if this is Microsoft 365 "
+            "also confirm that SMTP AUTH is allowed and that MFA, device approval, or an app password is not blocking the login."
+        )
     if "connection" in lowered or "timed out" in lowered:
         return "The SMTP server could not be reached. Re-check the host, port, encryption mode, and firewall/network rules."
     return error

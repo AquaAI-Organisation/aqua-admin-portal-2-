@@ -41,7 +41,7 @@ from .models import (
     OperationalSettings,
     SupportInquiry,
 )
-from .permissions import admin_required, super_admin_required, write_access_required
+from .permissions import admin_required, super_admin_required
 from .services import audit
 from .services.health import get_health_snapshot
 from .services.inquiry_intelligence import apply_inquiry_action, persist_inquiry_analysis
@@ -504,7 +504,7 @@ def entity_directory(request):
     )
 
 
-@write_access_required
+@super_admin_required
 def entity_status_update(request, entity_type, entity_id):
     if request.method != "POST":
         return redirect("admin_portal:entity_directory")
@@ -728,7 +728,7 @@ def issue_detail(request, issue_id):
     )
 
 
-@write_access_required
+@super_admin_required
 def issue_resolve(request, issue_id):
     issue = get_object_or_404(AIFlaggedIssue, pk=issue_id)
     if request.method != "POST":
@@ -779,7 +779,7 @@ def flag_detail(request, flag_id):
     return render(request, "admin_portal/flag_detail.html", {"flag": flag, "form": FlagResolveForm()})
 
 
-@write_access_required
+@super_admin_required
 def flag_resolve(request, flag_id):
     flag = get_object_or_404(AIFlag, pk=flag_id)
     if request.method != "POST":

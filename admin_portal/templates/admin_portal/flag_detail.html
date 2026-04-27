@@ -43,7 +43,7 @@
     <div class="kv-value">{{ flag.resolution_notes }}</div>
   </div>
 </div>
-{% elif CAN_WRITE %}
+{% elif IS_SUPER_ADMIN %}
 <div class="card">
   <div class="card-header">
     <div class="card-title">Resolve this flag</div>
@@ -56,7 +56,7 @@
 </div>
 {% else %}
 <div class="card">
-  <div class="helper-text">Your role is read only. Contact Steven or Ben if this flag needs a resolution.</div>
+  <div class="helper-text">Only Steven or Ben can resolve signup flags. Developer and guest roles are read only for this action.</div>
 </div>
 {% endif %}
 {% endblock %}

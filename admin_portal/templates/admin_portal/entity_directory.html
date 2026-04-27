@@ -5,7 +5,7 @@
 <div class="page-header">
   <div>
     <h1>Live account directory</h1>
-    <p class="page-subtitle">Search breeders, consultants, or platform users by email or name, then suspend or re-activate them directly from the shared backend.</p>
+    <p class="page-subtitle">Search breeders, consultants, or platform users by email or name. Only Steven and Ben can suspend, close down, or re-activate accounts in the shared backend.</p>
   </div>
 </div>
 
@@ -63,6 +63,7 @@
           <div class="cell-sub">{{ row.status_detail }}</div>
         </td>
         <td>
+          {% if IS_SUPER_ADMIN %}
           <form method="post" action="{% url 'admin_portal:entity_status_update' row.entity_type row.entity_id %}">
             {% csrf_token %}
             <input type="hidden" name="next" value="{{ request.get_full_path }}">
@@ -74,6 +75,9 @@
             <button class="btn btn-sm" type="submit">Re-activate</button>
             {% endif %}
           </form>
+          {% else %}
+          <span class="muted">Super admin approval required</span>
+          {% endif %}
         </td>
       </tr>
       {% empty %}
