@@ -1,7 +1,7 @@
 from django import forms
 from django.contrib.auth.forms import AuthenticationForm
 
-from .models import AdminInvite, ROLE_CHOICES
+from .models import AdminInvite, OperationalSettings, ROLE_CHOICES
 
 
 class EmailLoginForm(AuthenticationForm):
@@ -111,3 +111,45 @@ class AcceptInviteForm(forms.Form):
         if data.get("password1") != data.get("password2"):
             raise forms.ValidationError("Passwords do not match.")
         return data
+
+
+class OperationalSettingsForm(forms.ModelForm):
+    smtp_password = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(render_value=True, attrs={"placeholder": "SMTP password or app password"}),
+    )
+    slack_bot_token = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(render_value=True, attrs={"placeholder": "xoxb-..."}),
+    )
+    imap_password = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(render_value=True, attrs={"placeholder": "Mailbox password"}),
+    )
+
+    class Meta:
+        model = OperationalSettings
+        fields = [
+            "smtp_host",
+            "smtp_port",
+            "smtp_use_tls",
+            "smtp_username",
+            "smtp_password",
+            "default_from_email",
+            "slack_bot_token",
+            "slack_channel",
+            "imap_host",
+            "imap_port",
+            "imap_use_ssl",
+            "imap_username",
+            "imap_password",
+            "imap_folder",
+        ]
+
+
+class SupportReplyForm(forms.Form):
+    body = forms.CharField(
+        widget=forms.Textarea(attrs={"rows": 6, "placeholder": "Write or edit the reply that should be sent to the enquiry."}),
+        required=True,
+        min_length=5,
+    )

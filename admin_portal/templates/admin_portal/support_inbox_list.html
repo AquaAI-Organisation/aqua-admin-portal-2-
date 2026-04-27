@@ -1,0 +1,73 @@
+{% extends "admin_portal/base.html" %}
+{% block title %}Support Inbox | {{ APP_NAME }}{% endblock %}
+{% block topbar_title %}Support Inbox{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Support enquiries</h1>
+    <p class="page-subtitle">Refresh the support mailbox, review imported enquiries, and open any message for AI triage and response handling.</p>
+  </div>
+  <div class="page-actions">
+    <form method="post" action="{% url 'admin_portal:support_inbox_refresh' %}">
+      {% csrf_token %}
+      <button class="btn-primary" type="submit">Refresh inbox</button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <form method="get" class="filter-row">
+    <div class="form-group" style="flex:1;">
+      <label for="id_q">Search</label>
+      <input id="id_q" name="q" value="{{ q }}" placeholder="Search by sender, subject, or content">
+    </div>
+    <div class="form-group">
+      <label for="id_status">Status</label>
+      <select id="id_status" name="status">
+        <option value="">All statuses</option>
+        <option value="new" {% if status == "new" %}selected{% endif %}>New</option>
+        <option value="triaged" {% if status == "triaged" %}selected{% endif %}>Triaged</option>
+        <option value="actioned" {% if status == "actioned" %}selected{% endif %}>Actioned</option>
+        <option value="replied" {% if status == "replied" %}selected{% endif %}>Replied</option>
+        <option value="error" {% if status == "error" %}selected{% endif %}>Error</option>
+      </select>
+    </div>
+    <button type="submit">Apply filters</button>
+  </form>
+</div>
+
+<div class="card">
+  <div class="table-wrap">
+    <table class="table">
+      <tr>
+        <th>Received</th>
+        <th>Sender</th>
+        <th>Subject</th>
+        <th>Status</th>
+        <th></th>
+      </tr>
+      {% for inquiry in page.object_list %}
+      <tr>
+        <td class="mono">{{ inquiry.received_at|date:"d M Y H:i" }}</td>
+        <td>
+          <div class="cell-name">{{ inquiry.from_name|default:inquiry.from_email }}</div>
+          <div class="cell-sub">{{ inquiry.from_email }}</div>
+        </td>
+        <td>
+          <div class="cell-name">{{ inquiry.subject|default:"(no subject)" }}</div>
+          <div class="cell-sub">{{ inquiry.body_text|truncatechars:120 }}</div>
+        </td>
+        <td>
+          <span class="badge {% if inquiry.status == 'new' %}muted{% elif inquiry.status == 'error' %}danger{% elif inquiry.status == 'replied' %}ok{% else %}info{% endif %}">{{ inquiry.status }}</span>
+        </td>
+        <td><a class="btn btn-sm" href="{% url 'admin_portal:support_inbox_detail' inquiry.id %}">Open</a></td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="5" class="empty-state">No support enquiries imported yet.</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}

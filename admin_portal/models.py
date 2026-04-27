@@ -52,10 +52,19 @@ ISSUE_SOURCE_CHOICES = [
     ("booking_risk", "Booking Risk"),
     ("payment_risk", "Payment Risk"),
     ("trust_drop", "Trust Drop"),
+    ("support_inquiry", "Support Inquiry"),
 ]
 ISSUE_STATUS_CHOICES = [
     ("open", "Open"),
     ("resolved", "Resolved"),
+    ("error", "Error"),
+]
+INQUIRY_STATUS_CHOICES = [
+    ("new", "New"),
+    ("triaged", "Triaged"),
+    ("actioned", "Actioned"),
+    ("replied", "Replied"),
+    ("archived", "Archived"),
     ("error", "Error"),
 ]
 
@@ -163,6 +172,84 @@ class AdminInvite(models.Model):
             and not self.revoked
             and self.expires_at > timezone.now()
         )
+
+
+class OperationalSettings(models.Model):
+    smtp_host = models.CharField(max_length=255, blank=True)
+    smtp_port = models.PositiveIntegerField(default=587)
+    smtp_use_tls = models.BooleanField(default=True)
+    smtp_username = models.CharField(max_length=255, blank=True)
+    smtp_password = models.CharField(max_length=255, blank=True)
+    default_from_email = models.CharField(max_length=255, blank=True)
+
+    slack_bot_token = models.CharField(max_length=255, blank=True)
+    slack_channel = models.CharField(max_length=255, blank=True)
+
+    imap_host = models.CharField(max_length=255, blank=True)
+    imap_port = models.PositiveIntegerField(default=993)
+    imap_use_ssl = models.BooleanField(default=True)
+    imap_username = models.CharField(max_length=255, blank=True)
+    imap_password = models.CharField(max_length=255, blank=True)
+    imap_folder = models.CharField(max_length=128, default="INBOX", blank=True)
+
+    updated_by = models.ForeignKey(
+        AdminUser, null=True, blank=True, on_delete=models.SET_NULL, related_name="operational_settings_updates"
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Operational settings"
+        verbose_name_plural = "Operational settings"
+
+    def __str__(self):
+        return "Operational settings"
+
+    @classmethod
+    def get_solo(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    @property
+    def masked_smtp_username(self):
+        if not self.smtp_username:
+            return ""
+        if "@" in self.smtp_username:
+            name, domain = self.smtp_username.split("@", 1)
+            prefix = name[:2]
+            return f"{prefix}***@{domain}"
+        return f"{self.smtp_username[:2]}***"
+
+
+class SupportInquiry(models.Model):
+    message_id = models.CharField(max_length=255, unique=True)
+    from_email = models.EmailField()
+    from_name = models.CharField(max_length=255, blank=True)
+    subject = models.CharField(max_length=255, blank=True)
+    body_text = models.TextField(blank=True)
+    received_at = models.DateTimeField(default=timezone.now)
+    status = models.CharField(max_length=20, choices=INQUIRY_STATUS_CHOICES, default="new")
+    matched_entity_type = models.CharField(max_length=32, blank=True)
+    matched_entity_id = models.CharField(max_length=64, blank=True)
+    ai_summary = models.TextField(blank=True)
+    ai_rationale = models.TextField(blank=True)
+    ai_recommended_actions = models.JSONField(default=list, blank=True)
+    ai_raw = models.JSONField(default=dict, blank=True)
+    ai_model = models.CharField(max_length=80, blank=True)
+    ai_error = models.TextField(blank=True)
+    response_draft = models.TextField(blank=True)
+    response_history = models.JSONField(default=list, blank=True)
+    responded_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-received_at", "-created_at"]
+        indexes = [
+            models.Index(fields=["status", "-received_at"], name="admin_porta_inquiry_status_idx"),
+        ]
+
+    def __str__(self):
+        return self.subject or self.from_email
 
 
 # ---------------------------------------------------------------------------
@@ -689,6 +776,18 @@ class AIFlaggedIssue(models.Model):
     @property
     def source_label(self):
         return dict(ISSUE_SOURCE_CHOICES).get(self.source_type, self.source_type)
+
+    @property
+    def error_info(self):
+        return classify_openai_error(self.error)
+
+    @property
+    def error_label(self):
+        return self.error_info["label"]
+
+    @property
+    def error_summary(self):
+        return self.error_info["summary"]
 
 
 class DailyReport(models.Model):

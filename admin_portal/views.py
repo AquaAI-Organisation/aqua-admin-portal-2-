@@ -24,6 +24,8 @@ from .forms import (
     EmailLoginForm,
     FlagResolveForm,
     ManualOverrideForm,
+    OperationalSettingsForm,
+    SupportReplyForm,
 )
 from .models import (
     AdminAuditLog,
@@ -36,10 +38,14 @@ from .models import (
     ExternalBreederProfile,
     ExternalConsultantProfile,
     ExternalUser,
+    OperationalSettings,
+    SupportInquiry,
 )
 from .permissions import admin_required, super_admin_required, write_access_required
 from .services import audit
 from .services.health import get_health_snapshot
+from .services.inquiry_intelligence import apply_inquiry_action, persist_inquiry_analysis
+from .services.mailbox import fetch_support_inbox, send_support_reply
 from .services.notifier import notify_invite, notify_password_change
 from .services.issue_runner import process_pending_issues
 from .services.reporting import build_report_for
@@ -527,6 +533,150 @@ def entity_status_update(request, entity_type, entity_id):
     return redirect(next_url)
 
 
+@super_admin_required
+def operational_settings_view(request):
+    config = OperationalSettings.get_solo()
+    form = OperationalSettingsForm(request.POST or None, instance=config)
+    if request.method == "POST" and form.is_valid():
+        settings_obj = form.save(commit=False)
+        settings_obj.updated_by = request.user
+        settings_obj.save()
+        audit.record_write(
+            request.user,
+            "settings.update",
+            target_type="operational_settings",
+            target_id=settings_obj.id,
+            request=request,
+            summary="Updated operational email, Slack, or mailbox settings.",
+        )
+        messages.success(request, "Operational settings updated.")
+        return redirect("admin_portal:operational_settings")
+    return render(
+        request,
+        "admin_portal/operational_settings.html",
+        {"form": form, "settings_obj": config},
+    )
+
+
+@super_admin_required
+def support_inbox_list(request):
+    q = (request.GET.get("q") or "").strip()
+    status = (request.GET.get("status") or "").strip()
+    qs = SupportInquiry.objects.all()
+    if q:
+        qs = qs.filter(
+            Q(from_email__icontains=q)
+            | Q(from_name__icontains=q)
+            | Q(subject__icontains=q)
+            | Q(body_text__icontains=q)
+        )
+    if status in {"new", "triaged", "actioned", "replied", "archived", "error"}:
+        qs = qs.filter(status=status)
+    page = Paginator(qs, 25).get_page(request.GET.get("page"))
+    return render(
+        request,
+        "admin_portal/support_inbox_list.html",
+        {"page": page, "q": q, "status": status},
+    )
+
+
+@super_admin_required
+def support_inbox_refresh(request):
+    if request.method == "POST":
+        try:
+            result = fetch_support_inbox(limit=25)
+        except Exception as exc:
+            messages.error(request, f"Inbox refresh failed: {exc}")
+        else:
+            audit.record_write(
+                request.user,
+                "inbox.refresh",
+                target_type="support_inbox",
+                target_id="support",
+                request=request,
+                summary=f"Fetched support inbox messages: {result['added']} added, {result['updated']} updated.",
+                **result,
+            )
+            messages.success(request, f"Inbox refreshed: {result['added']} added, {result['updated']} updated.")
+    return redirect("admin_portal:support_inbox_list")
+
+
+@super_admin_required
+def support_inbox_detail(request, inquiry_id):
+    inquiry = get_object_or_404(SupportInquiry, pk=inquiry_id)
+    reply_form = SupportReplyForm(initial={"body": inquiry.response_draft})
+    return render(
+        request,
+        "admin_portal/support_inbox_detail.html",
+        {"inquiry": inquiry, "reply_form": reply_form},
+    )
+
+
+@super_admin_required
+def support_inbox_analyse(request, inquiry_id):
+    inquiry = get_object_or_404(SupportInquiry, pk=inquiry_id)
+    if request.method == "POST":
+        persist_inquiry_analysis(inquiry)
+        audit.record_write(
+            request.user,
+            "inbox.analyse",
+            target_type="support_inquiry",
+            target_id=inquiry.id,
+            request=request,
+            summary=f"Analysed support enquiry from {inquiry.from_email}.",
+        )
+        if inquiry.ai_error:
+            messages.warning(request, f"Enquiry analysed with fallback logic: {inquiry.ai_error}")
+        else:
+            messages.success(request, "Enquiry analysed and suggested actions were updated.")
+    return redirect("admin_portal:support_inbox_detail", inquiry_id=inquiry.id)
+
+
+@super_admin_required
+def support_inbox_apply_action(request, inquiry_id):
+    inquiry = get_object_or_404(SupportInquiry, pk=inquiry_id)
+    if request.method == "POST":
+        action_index = int(request.POST.get("action_index", "-1"))
+        actions = list(inquiry.ai_recommended_actions or [])
+        if not (0 <= action_index < len(actions)):
+            messages.error(request, "That enquiry action is no longer available.")
+            return redirect("admin_portal:support_inbox_detail", inquiry_id=inquiry.id)
+        summary = apply_inquiry_action(inquiry, actions[action_index], actor=request.user, state_handler=_set_entity_active_state)
+        audit.record_write(
+            request.user,
+            "inbox.apply_action",
+            target_type="support_inquiry",
+            target_id=inquiry.id,
+            request=request,
+            summary=summary,
+            action_index=action_index,
+            recommended_action=actions[action_index],
+        )
+        messages.success(request, summary)
+    return redirect("admin_portal:support_inbox_detail", inquiry_id=inquiry.id)
+
+
+@super_admin_required
+def support_inbox_send_reply(request, inquiry_id):
+    inquiry = get_object_or_404(SupportInquiry, pk=inquiry_id)
+    form = SupportReplyForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        result = send_support_reply(inquiry, form.cleaned_data["body"])
+        if result["ok"]:
+            audit.record_write(
+                request.user,
+                "inbox.reply",
+                target_type="support_inquiry",
+                target_id=inquiry.id,
+                request=request,
+                summary=f"Sent reply to support enquiry from {inquiry.from_email}.",
+            )
+            messages.success(request, "Reply sent.")
+        else:
+            messages.error(request, f"Reply failed: {result['error']}")
+    return redirect("admin_portal:support_inbox_detail", inquiry_id=inquiry.id)
+
+
 @admin_required
 def issue_list(request):
     qs = AIFlaggedIssue.objects.all()
@@ -536,7 +686,7 @@ def issue_list(request):
     q = (request.GET.get("q") or "").strip()
     if severity in {"info", "warning", "critical"}:
         qs = qs.filter(severity=severity)
-    if source in {"incident", "consultant_warning", "message_risk", "breeder_inquiry_risk", "booking_risk", "payment_risk", "trust_drop"}:
+    if source in {"incident", "consultant_warning", "message_risk", "breeder_inquiry_risk", "booking_risk", "payment_risk", "trust_drop", "support_inquiry"}:
         qs = qs.filter(source_type=source)
     if not show_resolved:
         qs = qs.filter(resolved=False)

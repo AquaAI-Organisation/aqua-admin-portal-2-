@@ -5,8 +5,10 @@ import logging
 from typing import Iterable
 
 from django.conf import settings
-from django.core.mail import send_mail
+from django.core.mail import EmailMessage, get_connection
 from django.utils import timezone
+
+from .runtime_config import get_email_runtime_config, get_slack_runtime_config
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +18,7 @@ def _admin_emails() -> list[str]:
 
 
 def _slack_token_ok() -> bool:
-    token = getattr(settings, "SLACK_BOT_TOKEN", "")
+    token = get_slack_runtime_config().token
     return bool(token) and "REPLACE" not in token.upper()
 
 
@@ -25,9 +27,10 @@ def _email_ok() -> bool:
 
 
 def email_config_status() -> dict[str, str | bool]:
-    host = getattr(settings, "EMAIL_HOST", "")
-    user = getattr(settings, "EMAIL_HOST_USER", "")
-    password = getattr(settings, "EMAIL_HOST_PASSWORD", "")
+    config = get_email_runtime_config()
+    host = config.host
+    user = config.username
+    password = config.password
     missing = []
     if not host:
         missing.append("EMAIL_HOST")
@@ -204,13 +207,23 @@ def _send_email_result(subject: str, body: str, recipients: Iterable[str]) -> di
         logger.warning("SMTP not configured; skipping email %r -> %s", subject, recipients)
         return {"ok": False, "error": str(email_config_status()["detail"])}
     try:
-        send_mail(
-            subject,
-            body,
-            getattr(settings, "DEFAULT_FROM_EMAIL", "admin@humara.io"),
-            recipients,
+        config = get_email_runtime_config()
+        connection = get_connection(
+            host=config.host,
+            port=config.port,
+            username=config.username,
+            password=config.password,
+            use_tls=config.use_tls,
             fail_silently=False,
         )
+        email = EmailMessage(
+            subject,
+            body,
+            config.default_from_email,
+            recipients,
+            connection=connection,
+        )
+        email.send(fail_silently=False)
         return {"ok": True, "error": ""}
     except Exception as exc:
         logger.exception("Email send failed")
@@ -225,7 +238,8 @@ def _send_slack_to_super_admins(text: str) -> bool:
         from slack_sdk import WebClient
         from slack_sdk.errors import SlackApiError
 
-        client = WebClient(token=settings.SLACK_BOT_TOKEN)
+        slack_config = get_slack_runtime_config()
+        client = WebClient(token=slack_config.token)
         delivered = False
         for email in _admin_emails():
             try:
@@ -239,7 +253,7 @@ def _send_slack_to_super_admins(text: str) -> bool:
             except Exception:
                 logger.exception("Slack DM send failed for %s", email)
 
-        fallback_channel = getattr(settings, "SLACK_CHANNEL", "")
+        fallback_channel = slack_config.channel
         if fallback_channel:
             client.chat_postMessage(channel=fallback_channel, text=text)
             delivered = True
@@ -247,3 +261,7 @@ def _send_slack_to_super_admins(text: str) -> bool:
     except Exception:
         logger.exception("Slack client error")
         return False
+
+
+def send_custom_email(*, subject: str, body: str, recipients: Iterable[str]) -> dict[str, str | bool]:
+    return _send_email_result(subject, body, recipients)

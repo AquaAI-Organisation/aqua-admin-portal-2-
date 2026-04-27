@@ -1,0 +1,103 @@
+{% extends "admin_portal/base.html" %}
+{% load portal_tags %}
+{% block title %}Support Enquiry | {{ APP_NAME }}{% endblock %}
+{% block topbar_title %}Support Enquiry{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>{{ inquiry.subject|default:"Support enquiry" }}</h1>
+    <p class="page-subtitle">{{ inquiry.from_name|default:inquiry.from_email }} · {{ inquiry.from_email }} · {{ inquiry.received_at|date:"d M Y H:i" }}</p>
+  </div>
+  <div class="page-actions">
+    <span class="badge {% if inquiry.status == 'new' %}muted{% elif inquiry.status == 'error' %}danger{% elif inquiry.status == 'replied' %}ok{% else %}info{% endif %}">{{ inquiry.status }}</span>
+    <form method="post" action="{% url 'admin_portal:support_inbox_analyse' inquiry.id %}">
+      {% csrf_token %}
+      <button class="btn-primary" type="submit">Analyse enquiry</button>
+    </form>
+  </div>
+</div>
+
+<div class="grid-2-equal">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Message</div>
+    </div>
+    <pre class="json">{{ inquiry.body_text }}</pre>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Match</div>
+    </div>
+    <div class="kv-grid">
+      <div class="kv-label">Matched entity type</div>
+      <div class="kv-value">{{ inquiry.matched_entity_type|default:"-" }}</div>
+      <div class="kv-label">Matched entity id</div>
+      <div class="kv-value mono">{{ inquiry.matched_entity_id|default:"-" }}</div>
+      <div class="kv-label">AI model</div>
+      <div class="kv-value mono">{{ inquiry.ai_model|default:"-" }}</div>
+      <div class="kv-label">AI error</div>
+      <div class="kv-value">{{ inquiry.ai_error|default:"-" }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">AI triage</div>
+  </div>
+  <div class="detail-list">
+    <div class="detail-item">
+      <strong>Summary</strong>
+      <div class="helper-text" style="margin-top:8px;">{{ inquiry.ai_summary|default:"Analyse this enquiry to get AI options." }}</div>
+    </div>
+    <div class="detail-item">
+      <strong>Rationale</strong>
+      <div class="helper-text" style="margin-top:8px;">{{ inquiry.ai_rationale|default:"-" }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">Suggested actions</div>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <tr>
+        <th>Action</th>
+        <th>Details</th>
+        <th></th>
+      </tr>
+      {% for action in inquiry.ai_recommended_actions %}
+      <tr>
+        <td class="cell-name">{{ action.label|default:action.action }}</td>
+        <td><pre class="json">{{ action|jsonify }}</pre></td>
+        <td>
+          <form method="post" action="{% url 'admin_portal:support_inbox_apply_action' inquiry.id %}">
+            {% csrf_token %}
+            <input type="hidden" name="action_index" value="{{ forloop.counter0 }}">
+            <button class="btn btn-sm" type="submit">Apply</button>
+          </form>
+        </td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="3" class="empty-state">No AI actions yet. Run Analyse enquiry first.</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">Reply</div>
+  </div>
+  <form method="post" action="{% url 'admin_portal:support_inbox_send_reply' inquiry.id %}" class="stack">
+    {% csrf_token %}
+    {{ reply_form.body }}
+    <button class="btn-primary" type="submit">Send reply</button>
+  </form>
+</div>
+{% endblock %}

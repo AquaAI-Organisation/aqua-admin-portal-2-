@@ -1,0 +1,111 @@
+{% extends "admin_portal/base.html" %}
+{% block title %}Settings | {{ APP_NAME }}{% endblock %}
+{% block topbar_title %}Settings{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Operational settings</h1>
+    <p class="page-subtitle">Super admins can update email delivery, Slack alerts, and mailbox inbox settings here. These values are used by the control plane immediately after saving.</p>
+  </div>
+</div>
+
+<form method="post" class="stack">
+  {% csrf_token %}
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-title">Email delivery</div>
+        <div class="card-subtitle">Use your company mailbox here for invites and replies. Enter the SMTP host, username, and password for the mailbox provider behind <span class="mono">support@aquaai.uk</span>.</div>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group" style="flex:1;">
+        <label for="id_smtp_host">SMTP host</label>
+        {{ form.smtp_host }}
+      </div>
+      <div class="form-group">
+        <label for="id_smtp_port">SMTP port</label>
+        {{ form.smtp_port }}
+      </div>
+      <div class="form-group">
+        <label for="id_smtp_use_tls">Use TLS</label>
+        {{ form.smtp_use_tls }}
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group" style="flex:1;">
+        <label for="id_smtp_username">SMTP username</label>
+        {{ form.smtp_username }}
+      </div>
+      <div class="form-group" style="flex:1;">
+        <label for="id_smtp_password">SMTP password</label>
+        {{ form.smtp_password }}
+      </div>
+    </div>
+    <div class="form-group">
+      <label for="id_default_from_email">Default from email</label>
+      {{ form.default_from_email }}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-title">Slack alerts</div>
+        <div class="card-subtitle">Create a Slack app and paste its bot token here so the portal can DM Steven and Ben or use a channel fallback.</div>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group" style="flex:1;">
+        <label for="id_slack_bot_token">Slack bot token</label>
+        {{ form.slack_bot_token }}
+      </div>
+      <div class="form-group" style="flex:1;">
+        <label for="id_slack_channel">Fallback Slack channel</label>
+        {{ form.slack_channel }}
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-title">Support inbox</div>
+        <div class="card-subtitle">These IMAP values let the portal fetch enquiries from the support mailbox so they appear in Support Inbox.</div>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group" style="flex:1;">
+        <label for="id_imap_host">IMAP host</label>
+        {{ form.imap_host }}
+      </div>
+      <div class="form-group">
+        <label for="id_imap_port">IMAP port</label>
+        {{ form.imap_port }}
+      </div>
+      <div class="form-group">
+        <label for="id_imap_use_ssl">Use SSL</label>
+        {{ form.imap_use_ssl }}
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group" style="flex:1;">
+        <label for="id_imap_username">IMAP username</label>
+        {{ form.imap_username }}
+      </div>
+      <div class="form-group" style="flex:1;">
+        <label for="id_imap_password">IMAP password</label>
+        {{ form.imap_password }}
+      </div>
+      <div class="form-group" style="flex:1;">
+        <label for="id_imap_folder">Mailbox folder</label>
+        {{ form.imap_folder }}
+      </div>
+    </div>
+  </div>
+
+  <div class="page-actions">
+    <button class="btn-primary" type="submit">Save settings</button>
+  </div>
+</form>
+{% endblock %}

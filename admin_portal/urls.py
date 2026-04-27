@@ -13,6 +13,13 @@ urlpatterns = [
     path("intake/", views.intake_list, name="intake_list"),
     path("entities/", views.entity_directory, name="entity_directory"),
     path("entities/<str:entity_type>/<str:entity_id>/status/", views.entity_status_update, name="entity_status_update"),
+    path("inbox/", views.support_inbox_list, name="support_inbox_list"),
+    path("inbox/refresh/", views.support_inbox_refresh, name="support_inbox_refresh"),
+    path("inbox/<int:inquiry_id>/", views.support_inbox_detail, name="support_inbox_detail"),
+    path("inbox/<int:inquiry_id>/analyse/", views.support_inbox_analyse, name="support_inbox_analyse"),
+    path("inbox/<int:inquiry_id>/apply-action/", views.support_inbox_apply_action, name="support_inbox_apply_action"),
+    path("inbox/<int:inquiry_id>/reply/", views.support_inbox_send_reply, name="support_inbox_send_reply"),
+    path("settings/", views.operational_settings_view, name="operational_settings"),
 
     # AI reviews
     path("reviews/", views.review_list, name="review_list"),

@@ -37,6 +37,7 @@ INTELLIGENCE_KEYWORDS = {
     "urgency_pressure": ["urgent", "immediately", "right now", "asap"],
 }
 SUSPICIOUS_IDENTITY_TOKENS = ("test", "fake", "spam", "asdf", "qwerty", "demo")
+INTERNAL_ROLES = {"superadmin", "admin", "staff", "developer"}
 
 
 @dataclass
@@ -522,9 +523,12 @@ def _keyword_hits(text: str) -> dict[str, int]:
 
 def _load_user(user_id) -> ExternalUser | None:
     try:
-        return ExternalUser.objects.get(pk=user_id)
+        user = ExternalUser.objects.get(pk=user_id)
     except ExternalUser.DoesNotExist:
         return None
+    if (user.role or "").strip().lower() in INTERNAL_ROLES:
+        return None
+    return user
 
 
 def _load_profile(user: ExternalUser) -> tuple[str, Any]:

@@ -10,6 +10,7 @@ from ..models import AdminInvite
 from .error_classifier import classify_openai_error
 from .intelligence_adapter import get_intelligence_readiness
 from .notifier import email_config_status
+from .runtime_config import get_mailbox_runtime_config, get_slack_runtime_config
 
 _OPENAI_CACHE: dict[str, object] = {
     "checked_at": 0.0,
@@ -30,6 +31,7 @@ def get_health_snapshot() -> dict[str, dict[str, str | bool]]:
     openai_status = _check_openai()
     slack_status = _check_slack()
     email_status = _check_email()
+    mailbox_status = _check_mailbox()
     invite_status = _check_invites()
     intelligence_status = _check_intelligence()
     legacy_status = _check_legacy_redirect()
@@ -38,6 +40,7 @@ def get_health_snapshot() -> dict[str, dict[str, str | bool]]:
         "openai": openai_status,
         "slack": slack_status,
         "email": email_status,
+        "mailbox": mailbox_status,
         "invites": invite_status,
         "intelligence": intelligence_status,
         "legacy_redirect": legacy_status,
@@ -89,9 +92,10 @@ def _check_openai():
 
 
 def _check_slack():
-    token = getattr(settings, "SLACK_BOT_TOKEN", "")
+    slack = get_slack_runtime_config()
+    token = slack.token
     dm_emails = getattr(settings, "SUPERADMIN_EMAILS", [])
-    fallback = getattr(settings, "SLACK_CHANNEL", "")
+    fallback = slack.channel
     if _placeholder(token):
         return _status(False, "Slack", "SLACK_BOT_TOKEN is missing or still using a placeholder.")
     if not fallback:
@@ -102,6 +106,13 @@ def _check_slack():
 def _check_email():
     status = email_config_status()
     return _status(bool(status["configured"]), "Email", str(status["detail"]), state="ok" if status["configured"] else "bad")
+
+
+def _check_mailbox():
+    mailbox = get_mailbox_runtime_config()
+    if not mailbox.configured:
+        return _status(False, "Mailbox", "IMAP inbox settings are incomplete.", state="bad")
+    return _status(True, "Mailbox", f"Mailbox configured via {mailbox.host} as {mailbox.username}.", state="ok")
 
 
 def _check_invites():

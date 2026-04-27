@@ -37,6 +37,11 @@
           <span>Flagged Issues</span>
           {% if OPEN_ISSUE_COUNT %}<span class="count-pill">{{ OPEN_ISSUE_COUNT }}</span>{% endif %}
         </a>
+        {% if IS_SUPER_ADMIN %}
+        <a href="{% url 'admin_portal:support_inbox_list' %}" class="nav-link {% if 'support_inbox' in request.resolver_match.url_name %}active{% endif %}">
+          <span>Support Inbox</span>
+        </a>
+        {% endif %}
         <a href="{% url 'admin_portal:daily_report_list' %}" class="nav-link {% if 'report' in request.resolver_match.url_name %}active{% endif %}">
           <span>Daily Reports</span>
         </a>
@@ -46,6 +51,9 @@
         </a>
         <a href="{% url 'admin_portal:audit_log' %}" class="nav-link {% if 'audit' in request.resolver_match.url_name %}active{% endif %}">
           <span>Audit Log</span>
+        </a>
+        <a href="{% url 'admin_portal:operational_settings' %}" class="nav-link {% if 'operational_settings' in request.resolver_match.url_name %}active{% endif %}">
+          <span>Settings</span>
         </a>
         {% endif %}
       </nav>
