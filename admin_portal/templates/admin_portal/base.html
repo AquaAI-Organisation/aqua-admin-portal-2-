@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="{% static 'admin_portal/styles.css' %}">
   {% block extra_head %}{% endblock %}
 </head>
-<body class="{% block body_class %}app-body{% endblock %}">
+<body class="{% block body_class %}app-body{% endblock %}" data-theme="dark">
   <div class="app-shell">
     <aside class="sidebar">
       <a href="{% url 'admin_portal:dashboard' %}" class="brand-block">
@@ -74,6 +74,14 @@
     </aside>
 
     <main class="main-panel">
+      <div class="pond-scene" aria-hidden="true">
+        <div class="pond-ripple ripple-a"></div>
+        <div class="pond-ripple ripple-b"></div>
+        <div class="pond-ripple ripple-c"></div>
+        <div class="koi koi-a"><span class="koi-fin"></span></div>
+        <div class="koi koi-b"><span class="koi-fin"></span></div>
+        <div class="koi koi-c"><span class="koi-fin"></span></div>
+      </div>
       <div class="shell-ambient shell-ambient-a"></div>
       <div class="shell-ambient shell-ambient-b"></div>
       <div class="shell-ambient shell-ambient-c"></div>
@@ -86,6 +94,10 @@
           </div>
         </div>
         <div class="topbar-meta">
+          <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle light and dark mode">
+            <span class="theme-toggle-icon" aria-hidden="true"></span>
+            <span class="theme-toggle-label">Light mode</span>
+          </button>
           {% if LEGACY_ADMIN_REDIRECT_URL %}
           <span class="inline-chip">Front door: {{ LEGACY_ADMIN_REDIRECT_URL }}</span>
           {% endif %}
@@ -107,6 +119,36 @@
       </div>
     </main>
   </div>
+  <script>
+  (() => {
+    const storageKey = "aqua-admin-theme";
+    const body = document.body;
+    const toggle = document.getElementById("themeToggle");
+    const label = toggle ? toggle.querySelector(".theme-toggle-label") : null;
+
+    const applyTheme = (theme) => {
+      body.dataset.theme = theme;
+      if (label) {
+        label.textContent = theme === "light" ? "Dark mode" : "Light mode";
+      }
+    };
+
+    const saved = localStorage.getItem(storageKey);
+    if (saved === "light" || saved === "dark") {
+      applyTheme(saved);
+    } else {
+      applyTheme("dark");
+    }
+
+    if (toggle) {
+      toggle.addEventListener("click", () => {
+        const next = body.dataset.theme === "light" ? "dark" : "light";
+        applyTheme(next);
+        localStorage.setItem(storageKey, next);
+      });
+    }
+  })();
+  </script>
   {% block extra_js %}{% endblock %}
 </body>
 </html>

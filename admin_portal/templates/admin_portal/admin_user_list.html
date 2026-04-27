@@ -105,52 +105,52 @@
   <div class="card-header">
     <div class="card-title">Pending invites</div>
   </div>
-  <div class="table-wrap">
-    <table class="table">
-      <tr>
-        <th>Email</th>
-        <th>Role</th>
-        <th>Delivery</th>
-        <th>Fallback link</th>
-        <th>Expires</th>
-        <th>Sent by</th>
-        <th></th>
-      </tr>
-      {% for invite in invites %}
-      <tr>
-        <td class="cell-name">{{ invite.email }}</td>
-        <td><span class="badge {% if invite.role == 'developer' %}info{% else %}muted{% endif %}">{{ invite.role }}</span></td>
-        <td>
-          <span class="badge {% if invite.delivery_status == 'email_sent' %}ok{% elif invite.delivery_status == 'email_failed' %}warn{% else %}muted{% endif %}">{{ invite.delivery_status }}</span>
-          {% if invite.delivery_error %}<div class="cell-sub">{{ invite.delivery_error }}</div>{% endif %}
-        </td>
-        <td>
-          <div class="invite-link-row">
-            <input class="mono invite-link-input" type="text" readonly value="{{ invite.accept_url }}">
-            <button class="btn btn-sm js-copy-invite" type="button" data-url="{% url 'admin_portal:invite_link' invite.id %}">Copy link</button>
+  <div class="invite-board">
+    {% for invite in invites %}
+    <article class="invite-card">
+      <div class="invite-card-top">
+        <div>
+          <div class="invite-email">{{ invite.email }}</div>
+          <div class="invite-meta-row">
+            <span class="badge {% if invite.role == 'developer' %}info{% else %}muted{% endif %}">{{ invite.role }}</span>
+            <span class="badge {% if invite.delivery_status == 'email_sent' %}ok{% elif invite.delivery_status == 'email_failed' %}warn{% else %}muted{% endif %}">{{ invite.delivery_status }}</span>
           </div>
-        </td>
-        <td class="mono">{{ invite.expires_at|date:"d M Y H:i" }}</td>
-        <td>{{ invite.created_by.email }}</td>
-        <td>
-          <div class="filter-row">
-            <form method="post" action="{% url 'admin_portal:invite_resend' invite.id %}">
-              {% csrf_token %}
-              <button class="btn btn-sm" type="submit">Resend</button>
-            </form>
-            <form method="post" action="{% url 'admin_portal:invite_cancel' invite.id %}">
-              {% csrf_token %}
-              <button class="btn btn-sm" type="submit">Cancel invite</button>
-            </form>
-          </div>
-        </td>
-      </tr>
-      {% empty %}
-      <tr>
-        <td colspan="7" class="empty-state">No pending invites.</td>
-      </tr>
-      {% endfor %}
-    </table>
+        </div>
+        <div class="invite-actions">
+          <form method="post" action="{% url 'admin_portal:invite_resend' invite.id %}">
+            {% csrf_token %}
+            <button class="btn btn-sm" type="submit">Resend</button>
+          </form>
+          <form method="post" action="{% url 'admin_portal:invite_cancel' invite.id %}">
+            {% csrf_token %}
+            <button class="btn btn-sm" type="submit">Cancel invite</button>
+          </form>
+        </div>
+      </div>
+
+      {% if invite.delivery_error %}
+      <div class="invite-error">{{ invite.delivery_error }}</div>
+      {% endif %}
+
+      <div class="invite-link-row">
+        <input class="mono invite-link-input" type="text" readonly value="{{ invite.accept_url }}">
+        <button class="btn btn-sm js-copy-invite" type="button" data-url="{% url 'admin_portal:invite_link' invite.id %}">Copy link</button>
+      </div>
+
+      <div class="invite-foot">
+        <div class="invite-foot-item">
+          <span class="invite-foot-label">Expires</span>
+          <span class="mono">{{ invite.expires_at|date:"d M Y H:i" }}</span>
+        </div>
+        <div class="invite-foot-item">
+          <span class="invite-foot-label">Sent by</span>
+          <span>{{ invite.created_by.email }}</span>
+        </div>
+      </div>
+    </article>
+    {% empty %}
+    <div class="empty-state">No pending invites.</div>
+    {% endfor %}
   </div>
 </div>
 {% endblock %}

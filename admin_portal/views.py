@@ -1079,29 +1079,30 @@ def invite_accept(request, token):
 def process_now(request):
     if request.method == "POST":
         try:
-            review_counts = process_pending(limit_per_type=25)
-            issue_counts = process_pending_issues(limit_per_type=25)
+            review_counts = process_pending(limit_per_type=8, max_runtime_seconds=8)
+            issue_counts = process_pending_issues(limit_per_type=4, max_runtime_seconds=8)
         except Exception as exc:
             messages.error(request, f"AI scan failed: {exc}")
         else:
+            truncated = bool(review_counts.get("truncated") or issue_counts.get("truncated"))
+            summary = (
+                f"Processed {review_counts['breeder']} breeders, {review_counts['consultant']} consultants, "
+                f"and issue sources: {_issue_count_summary(issue_counts)}."
+            )
+            if truncated:
+                summary += " The scan was time-bounded to keep the web request stable; run it again for the next batch."
             audit.record_write(
                 request.user,
                 "ai.process_now",
                 request=request,
-                summary=(
-                    f"Processed {review_counts['breeder']} breeders, {review_counts['consultant']} consultants, "
-                    f"and issue sources: {_issue_count_summary(issue_counts)}."
-                ),
+                summary=summary,
                 **review_counts,
                 **issue_counts,
             )
-            messages.success(
-                request,
-                (
-                    f"Processed {review_counts['breeder']} breeders, {review_counts['consultant']} consultants, "
-                    f"and issue sources: {_issue_count_summary(issue_counts)}."
-                ),
-            )
+            if truncated:
+                messages.warning(request, summary)
+            else:
+                messages.success(request, summary)
     return redirect("admin_portal:dashboard")
 
 

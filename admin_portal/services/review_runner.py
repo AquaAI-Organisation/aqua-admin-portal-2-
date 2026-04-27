@@ -5,6 +5,7 @@ the main backend's tables when safe to do so.
 from __future__ import annotations
 
 import logging
+import time
 from typing import Iterable
 
 from django.utils import timezone
@@ -280,12 +281,24 @@ def _deactivate(subject_type, profile, user, *, reason: str):
 
 # ---------------------------------------------------------------------------
 
-def process_pending(limit_per_type: int = 25) -> dict:
-    counts = {"breeder": 0, "consultant": 0}
+def process_pending(limit_per_type: int = 25, *, max_runtime_seconds: float | None = None) -> dict:
+    counts = {"breeder": 0, "consultant": 0, "truncated": False}
+    started = time.monotonic()
+
+    def _deadline_hit() -> bool:
+        return bool(max_runtime_seconds and (time.monotonic() - started) >= max_runtime_seconds)
+
     for profile, user in discover_pending_breeders(limit=limit_per_type):
+        if _deadline_hit():
+            counts["truncated"] = True
+            break
         run_review("breeder", profile, user)
         counts["breeder"] += 1
-    for profile, user in discover_pending_consultants(limit=limit_per_type):
-        run_review("consultant", profile, user)
-        counts["consultant"] += 1
+    if not counts["truncated"]:
+        for profile, user in discover_pending_consultants(limit=limit_per_type):
+            if _deadline_hit():
+                counts["truncated"] = True
+                break
+            run_review("consultant", profile, user)
+            counts["consultant"] += 1
     return counts

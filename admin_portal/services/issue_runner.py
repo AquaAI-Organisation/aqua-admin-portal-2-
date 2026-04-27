@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import time
 
 from django.utils import timezone
 
@@ -212,7 +213,7 @@ def _apply_issue_actions(issue: AIFlaggedIssue, *, profile=None, user=None, warn
     return applied
 
 
-def process_pending_issues(limit_per_type: int = 25) -> dict[str, int]:
+def process_pending_issues(limit_per_type: int = 25, *, max_runtime_seconds: float | None = None) -> dict[str, int]:
     counts = {
         "incident": 0,
         "consultant_warning": 0,
@@ -221,20 +222,35 @@ def process_pending_issues(limit_per_type: int = 25) -> dict[str, int]:
         "booking_risk": 0,
         "payment_risk": 0,
         "trust_drop": 0,
+        "truncated": False,
     }
+    started = time.monotonic()
+
+    def _deadline_hit() -> bool:
+        return bool(max_runtime_seconds and (time.monotonic() - started) >= max_runtime_seconds)
+
     for incident, user, subject_type, profile in discover_pending_incidents(limit=limit_per_type):
+        if _deadline_hit():
+            counts["truncated"] = True
+            return counts
         try:
             run_incident_triage(incident, user, subject_type, profile)
             counts["incident"] += 1
         except Exception:
             logger.exception("Incident triage failed for %s", incident.id)
     for warning, user, consultant in discover_pending_consultant_warnings(limit=limit_per_type):
+        if _deadline_hit():
+            counts["truncated"] = True
+            return counts
         try:
             run_warning_triage(warning, user, consultant)
             counts["consultant_warning"] += 1
         except Exception:
             logger.exception("Consultant warning triage failed for %s", warning.id)
     for candidate in discover_behavioral_issue_candidates(limit_per_type=limit_per_type):
+        if _deadline_hit():
+            counts["truncated"] = True
+            return counts
         seen = _already_triaged_ids(candidate.source_type)
         if candidate.source_id in seen:
             continue
