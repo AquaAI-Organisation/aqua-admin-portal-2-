@@ -5,20 +5,37 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Invite Unavailable | {{ APP_NAME }}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="{% static 'admin_portal/styles.css' %}">
 </head>
-<body>
+<body data-theme="dark">
   <div class="login-page">
-    <div class="login-card">
-      <div class="brand-block" style="margin-bottom:20px;">
+    <div class="reef-scene" aria-hidden="true">
+      <video class="reef-video" autoplay muted loop playsinline>
+        <source src="{% url 'admin_portal:background_video' %}" type="video/mp4">
+      </video>
+      <div class="reef-overlay reef-overlay-base"></div>
+      <div class="reef-overlay reef-overlay-focus"></div>
+    </div>
+
+    <div class="login-card" style="text-align:center;">
+      <div class="brand-block" style="margin-bottom:24px;justify-content:center;">
         <div class="brand-mark">A</div>
         <div>
           <div class="brand-title">{{ APP_NAME }}</div>
           <div class="brand-subtitle">{{ APP_TAGLINE }}</div>
         </div>
       </div>
-      <h1>Invite unavailable</h1>
-      <p class="page-subtitle">This invite has expired, already been used, or has been revoked.</p>
+
+      <svg style="margin:0 auto 18px;display:block;color:var(--danger);opacity:0.7;" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+      </svg>
+
+      <h1 style="font-size:1.8rem;">Invite unavailable</h1>
+      <p class="page-subtitle" style="margin:10px auto 24px;max-width:320px;">
+        This invite has expired, already been used, or has been revoked.
+      </p>
       <a class="btn btn-primary" href="{% url 'admin_portal:login' %}">Return to sign in</a>
     </div>
   </div>
