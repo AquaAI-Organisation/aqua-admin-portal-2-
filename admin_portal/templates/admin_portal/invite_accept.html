@@ -5,23 +5,37 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Accept Invite | {{ APP_NAME }}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="{% static 'admin_portal/styles.css' %}">
 </head>
-<body>
+<body data-theme="dark">
   <div class="login-page">
+    <div class="reef-scene" aria-hidden="true">
+      <video class="reef-video" autoplay muted loop playsinline>
+        <source src="{% url 'admin_portal:background_video' %}" type="video/mp4">
+      </video>
+      <div class="reef-overlay reef-overlay-base"></div>
+      <div class="reef-overlay reef-overlay-focus"></div>
+    </div>
+
     <div class="login-card">
-      <div class="brand-block" style="margin-bottom:20px;">
+      <div class="brand-block" style="margin-bottom:24px;">
         <div class="brand-mark">A</div>
         <div>
           <div class="brand-title">{{ APP_NAME }}</div>
           <div class="brand-subtitle">{{ APP_TAGLINE }}</div>
         </div>
       </div>
-      <h1>Accept invite</h1>
-      <p class="page-subtitle">Set up your admin account for <strong>{{ invite.email }}</strong>. Your assigned role is <strong>{{ invite.role }}</strong>.</p>
+
+      <h1>Accept&nbsp;invite</h1>
+      <p class="page-subtitle" style="margin-top:6px;margin-bottom:0;">
+        Set up your admin account for <strong style="color:var(--text);">{{ invite.email }}</strong>.
+        Your assigned role is <strong style="color:var(--accent);">{{ invite.role }}</strong>.
+      </p>
 
       {% if messages %}
-      <div class="message-stack">
+      <div class="message-stack" style="margin-top:18px;">
         {% for message in messages %}
         <div class="message {{ message.tags }}">{{ message }}</div>
         {% endfor %}
@@ -32,17 +46,17 @@
         {% csrf_token %}
         <div class="form-group">
           <label for="id_full_name">Full name</label>
-          <input id="id_full_name" type="text" name="full_name" value="{{ invite.full_name }}" placeholder="Optional full name">
+          <input id="id_full_name" type="text" name="full_name" value="{{ invite.full_name }}" placeholder="Optional full name" autocomplete="name">
         </div>
         <div class="form-group">
           <label for="id_password1">Password</label>
-          <input id="id_password1" type="password" name="password1" required minlength="10">
+          <input id="id_password1" type="password" name="password1" required minlength="10" placeholder="Min. 10 characters" autocomplete="new-password">
         </div>
         <div class="form-group">
           <label for="id_password2">Confirm password</label>
-          <input id="id_password2" type="password" name="password2" required minlength="10">
+          <input id="id_password2" type="password" name="password2" required minlength="10" placeholder="Repeat password" autocomplete="new-password">
         </div>
-        <button class="btn-primary" type="submit">Activate account</button>
+        <button class="btn-primary" type="submit" style="margin-top:4px;">Activate account</button>
       </form>
     </div>
   </div>
