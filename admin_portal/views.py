@@ -871,7 +871,7 @@ def audit_log(request):
 
 @super_admin_required
 def admin_user_list(request):
-    users = AdminUser.objects.order_by("email")
+    users = AdminUser.objects.filter(is_staff=True).order_by("email")
     invites = AdminInvite.objects.filter(accepted_at__isnull=True, revoked=False)
     for invite in invites:
         invite.accept_url = _invite_accept_url(request, invite)
@@ -998,7 +998,8 @@ def admin_user_remove(request, user_id):
             return redirect("admin_portal:admin_user_list")
         target_email = target.email
         target_id = target.id
-        target.delete()
+        target.is_staff = False
+        target.save(update_fields=["is_staff"])
         audit.record_write(
             request.user,
             "admin.remove",
