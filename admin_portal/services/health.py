@@ -56,8 +56,8 @@ def _check_database():
 
 
 def _check_openai():
-    key = getattr(settings, "OPENAI_API_KEY", "")
-    model = getattr(settings, "OPENAI_MODEL", "gpt-4o")
+    key = str(getattr(settings, "OPENAI_API_KEY", "")).strip()
+    model = str(getattr(settings, "OPENAI_MODEL", "gpt-4o")).strip()
     if _placeholder(key):
         return _status(False, "OpenAI", "OPENAI_API_KEY is missing or still using a placeholder.")
 

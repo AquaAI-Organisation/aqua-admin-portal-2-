@@ -20,7 +20,7 @@
   </div>
 </div>
 
-{% if review.error %}
+{% if review.error and review.decision == "error" %}
 <div class="message error">{{ review.error }}</div>
 <div class="message warning">
   <strong>{{ review.error_label|default:"AI error" }}</strong><br>

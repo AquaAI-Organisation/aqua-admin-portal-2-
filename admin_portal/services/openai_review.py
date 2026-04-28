@@ -212,8 +212,8 @@ def _is_placeholder_key(key: str) -> bool:
 
 
 def call_gpt4(dossier: dict[str, Any]) -> AIReviewOutcome:
-    api_key = getattr(settings, "OPENAI_API_KEY", "")
-    model = getattr(settings, "OPENAI_MODEL", "gpt-4o")
+    api_key = str(getattr(settings, "OPENAI_API_KEY", "")).strip()
+    model = str(getattr(settings, "OPENAI_MODEL", "gpt-4o")).strip()
 
     if _is_placeholder_key(api_key):
         return AIReviewOutcome(

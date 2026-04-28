@@ -147,6 +147,9 @@ def manual_override(review: AIAccountReview, new_decision: str, reason: str, adm
     review.overridden_by = admin_user
     review.override_reason = reason
     review.decided_at = timezone.now()
+    # Clear stale AI failures once a super admin has made the authoritative
+    # decision so approved/rejected reviews do not keep surfacing old auth errors.
+    review.error = ""
     review.save()
 
     # Apply the override to the external profile
