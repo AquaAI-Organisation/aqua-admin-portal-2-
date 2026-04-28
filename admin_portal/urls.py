@@ -52,6 +52,7 @@ urlpatterns = [
     path("team/invite/", views.admin_user_invite, name="admin_user_invite"),
     path("team/<int:user_id>/revoke/", views.admin_user_revoke, name="admin_user_revoke"),
     path("team/<int:user_id>/activate/", views.admin_user_activate, name="admin_user_activate"),
+    path("team/<int:user_id>/remove/", views.admin_user_remove, name="admin_user_remove"),
     path("team/invites/<int:invite_id>/cancel/", views.invite_cancel, name="invite_cancel"),
     path("team/invites/<int:invite_id>/resend/", views.invite_resend, name="invite_resend"),
     path("team/invites/<int:invite_id>/link/", views.invite_link, name="invite_link"),

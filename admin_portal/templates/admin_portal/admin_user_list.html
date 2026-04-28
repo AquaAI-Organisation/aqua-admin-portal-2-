@@ -84,16 +84,20 @@
               {% csrf_token %}
               <button class="btn-danger btn-sm" type="submit" onclick="return confirm('Revoke access for {{ user.email }}?')">Revoke</button>
             </form>
+              {% else %}
+              <form method="post" action="{% url 'admin_portal:admin_user_activate' user.id %}">
+                {% csrf_token %}
+                <button class="btn btn-sm" type="submit">Re-activate</button>
+              </form>
+              <form method="post" action="{% url 'admin_portal:admin_user_remove' user.id %}">
+                {% csrf_token %}
+                <button class="btn-danger btn-sm" type="submit" onclick="return confirm('Permanently remove {{ user.email }} from the admin list? This cannot be undone.')">Remove account</button>
+              </form>
+              {% endif %}
+            </div>
             {% else %}
-            <form method="post" action="{% url 'admin_portal:admin_user_activate' user.id %}">
-              {% csrf_token %}
-              <button class="btn btn-sm" type="submit">Re-activate</button>
-            </form>
+            <span class="muted">Protected</span>
             {% endif %}
-          </div>
-          {% else %}
-          <span class="muted">Protected</span>
-          {% endif %}
         </td>
       </tr>
       {% endfor %}

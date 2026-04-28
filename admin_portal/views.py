@@ -984,6 +984,35 @@ def admin_user_activate(request, user_id):
 
 
 @super_admin_required
+def admin_user_remove(request, user_id):
+    target = get_object_or_404(AdminUser, pk=user_id)
+    if target.is_super_admin:
+        messages.error(request, "You cannot remove a platform super-admin.")
+        return redirect("admin_portal:admin_user_list")
+    if target.pk == request.user.pk:
+        messages.error(request, "You cannot remove your own account.")
+        return redirect("admin_portal:admin_user_list")
+    if request.method == "POST":
+        if target.is_active:
+            messages.error(request, "Revoke this account before removing it from the list.")
+            return redirect("admin_portal:admin_user_list")
+        target_email = target.email
+        target_id = target.id
+        target.delete()
+        audit.record_write(
+            request.user,
+            "admin.remove",
+            target_type="admin_user",
+            target_id=target_id,
+            request=request,
+            summary=f"Removed admin user {target_email} from the control-plane list.",
+            email=target_email,
+        )
+        messages.success(request, f"{target_email} removed from the admin list.")
+    return redirect("admin_portal:admin_user_list")
+
+
+@super_admin_required
 def invite_cancel(request, invite_id):
     invite = get_object_or_404(AdminInvite, pk=invite_id, accepted_at__isnull=True)
     if request.method == "POST":
