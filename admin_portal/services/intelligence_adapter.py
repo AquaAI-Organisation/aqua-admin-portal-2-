@@ -1,9 +1,14 @@
 """Hybrid intelligence adapter for richer signup and issue signals.
 
 The control plane remains the source-of-truth UI and audit surface. This
-adapter simply assembles higher-signal summaries from the shared backend tables
-so the OpenAI scorer can work with better evidence and so periodic issue scans
-can cover more than just incidents and consultant warnings.
+adapter assembles higher-signal summaries from the shared backend tables so the
+OpenAI scorer can work with better evidence and so periodic issue scans can
+cover more than just incidents and consultant warnings.
+
+Important: this is a shared-database hybrid integration, not a direct runtime
+import of the external Aqua Intelligence repo. The admin app mirrors the most
+useful signals locally so operations remain stable even when the external
+service codebase evolves independently.
 """
 from __future__ import annotations
 
@@ -100,10 +105,16 @@ def build_signup_intelligence(subject_type: str, profile, user: ExternalUser) ->
     if incidents and any((incident.severity_level or "").lower() in {"critical", "high"} for incident in incidents):
         hard_blocks.append("Active critical incident history is already attached to this account.")
 
+    # New users often have little or no historical activity; that alone should
+    # not block approval. Treat thin evidence as a profile-completeness concern,
+    # not a "you are new" concern.
     thin_evidence = (
-        identity_signal["missing_required_count"] >= 2
+        identity_signal["missing_required_count"] >= 3
         or role_signal["missing_required_count"] >= 2
-        or (review_signal.get("sample_size", 0) == 0 and dispute_signal.get("sample_size", 0) == 0)
+        or (
+            not getattr(profile, "company_name", "")
+            and not getattr(profile, "bio", "")
+        )
     )
 
     return {

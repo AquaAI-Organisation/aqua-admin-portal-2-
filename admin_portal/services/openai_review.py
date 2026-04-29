@@ -19,13 +19,17 @@ Your job: decide whether a newly created BREEDER or CONSULTANT account should be
 auto-approved, auto-rejected, or flagged for human review on Aqua AI's platform.
 
 You MUST base every decision on verifiable evidence from the provided dossier.
-NEVER invent facts. If the dossier is too thin to decide, lean toward "flagged".
+NEVER invent facts.
+If the dossier is too thin to decide, lean toward "flagged".
 Lack of history alone is NOT a rejection reason.
+If the profile looks plausible and there are no strong fraud, abuse, or safety
+signals, prefer "approve" or "flag" rather than "reject".
+Reject only when the evidence is clear, concrete, and material.
 
 Score each account on these dimensions (0-1 each):
   - identity_clarity: real-looking name, complete profile, valid email, no obvious test/spam patterns
   - business_legitimacy: company name, website, business address, plausible bio
-  - documentation: presence and plausibility of verification_documents / credentials
+  - documentation: presence and plausibility of verification_documents / credentials, but note that absence of documents alone should usually not force rejection
   - role_fit: profile content matches the claimed role (breeder vs consultant)
   - trust_risk: trust score, mortality rate, disease rate, incidents, is_at_risk flag, suspicious metadata
   - behavioural_intelligence: off-platform, payment-bypass, dispute, booking, inquiry, network, or messaging risk signals
@@ -329,42 +333,48 @@ def _balanced_decision(
     thin_evidence = bool(intelligence.get("thin_evidence"))
     identity = intelligence.get("identity", {})
     role_fit = intelligence.get("role_fit", {})
-    approve_t = float(getattr(settings, "AI_APPROVE_THRESHOLD", 0.75))
-    reject_t = float(getattr(settings, "AI_REJECT_THRESHOLD", 0.35))
+    approve_t = float(getattr(settings, "AI_APPROVE_THRESHOLD", 0.65))
+    reject_t = float(getattr(settings, "AI_REJECT_THRESHOLD", 0.20))
 
     business_required = [
         bool(dossier.get("profile", {}).get("company_name")),
         bool(dossier.get("profile", {}).get("bio")),
     ]
     docs_present = bool(dossier.get("user", {}).get("verification_documents")) or bool(dossier.get("profile", {}).get("credentials"))
-    required_identity_ok = identity.get("missing_required_count", 0) == 0
+    required_identity_ok = identity.get("missing_required_count", 0) <= 1
     role_required_ok = role_fit.get("missing_required_count", 0) <= 1
     no_critical_flags = not any((flag.get("severity") or "").lower() == "critical" for flag in raw.get("flags", []))
+    business_fields_ok = sum(1 for present in business_required if present) >= 1
+    clear_reject_signal = (
+        any((flag.get("severity") or "").lower() == "critical" for flag in raw.get("flags", []))
+        or scores.get("trust_risk", 1.0) < 0.20
+        or scores.get("behavioural_intelligence", 1.0) < 0.20
+    )
 
     if hard_blocks:
         decision = "rejected"
         reason = "Hard-block signals were detected."
-    elif thin_evidence:
-        decision = "flagged"
-        reason = "Evidence is too thin for safe automatic approval."
     elif confidence < reject_t and (
         hint == "reject"
-        or scores.get("trust_risk", 1.0) < 0.30
-        or scores.get("behavioural_intelligence", 1.0) < 0.30
+        and clear_reject_signal
+        and not thin_evidence
     ):
         decision = "rejected"
         reason = "Composite risk is below the reject threshold with supporting evidence."
     elif (
         confidence >= approve_t
-        and hint == "approve"
+        and hint in {"approve", "flag"}
         and required_identity_ok
-        and all(business_required)
-        and docs_present
+        and business_fields_ok
         and role_required_ok
         and no_critical_flags
+        and not hard_blocks
     ):
         decision = "approved"
-        reason = "Required identity, business, and role-fit checks passed with strong composite confidence."
+        reason = "The profile is plausible, passes the core checks, and does not show strong risk signals."
+    elif thin_evidence:
+        decision = "flagged"
+        reason = "Evidence is too thin for safe automatic approval."
     else:
         decision = "flagged"
         reason = "The account is plausible but needs manual review under the balanced policy."
@@ -377,9 +387,10 @@ def _balanced_decision(
         "hard_blocks": hard_blocks,
         "thin_evidence": thin_evidence,
         "required_identity_ok": required_identity_ok,
-        "business_fields_ok": all(business_required),
+        "business_fields_ok": business_fields_ok,
         "docs_present": docs_present,
         "role_required_ok": role_required_ok,
         "no_critical_flags": no_critical_flags,
+        "clear_reject_signal": clear_reject_signal,
         "reason": reason,
     }
