@@ -76,7 +76,7 @@
           {% if OPEN_ISSUE_COUNT %}<span class="count-pill">{{ OPEN_ISSUE_COUNT }}</span>{% endif %}
         </a>
 
-        {% if IS_SUPER_ADMIN %}
+        {% if IS_SUPER_ADMIN or IS_ADMIN %}
         <a href="{% url 'admin_portal:support_inbox_list' %}" class="nav-link {% if 'support_inbox' in request.resolver_match.url_name %}active{% endif %}">
           <span class="nav-icon">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

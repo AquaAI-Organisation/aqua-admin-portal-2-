@@ -18,7 +18,7 @@ class AdminInviteForm(forms.ModelForm):
     role = forms.ChoiceField(
         choices=[c for c in ROLE_CHOICES if c[0] != "super_admin"],
         initial="guest",
-        help_text="Guest = read-only. Developer = read + write (updates notify super-admins).",
+        help_text="Guest = read-only. Admin = moderation and operational control. Developer = standard write access with notifications.",
     )
 
     class Meta:
@@ -34,7 +34,7 @@ class ChangeRoleForm(forms.Form):
     ASSIGNABLE_ROLES = [c for c in ROLE_CHOICES if c[0] != "super_admin"]
     role = forms.ChoiceField(
         choices=ASSIGNABLE_ROLES,
-        help_text="Guest = read-only. Developer = read + write with notifications.",
+        help_text="Guest = read-only. Admin = moderation and operational control. Developer = standard write access with notifications.",
     )
 
 

@@ -40,8 +40,8 @@ def admin_required(view_func):
 
 
 def write_access_required(view_func):
-    """Only developers and super-admins can perform write operations.
-    Guests get a 403. Developer writes trigger super-admin notifications."""
+    """Only admins, developers, and super-admins can perform write operations.
+    Guests get a 403. Developer/admin writes trigger super-admin notifications."""
 
     @login_required(login_url="admin_portal:login")
     @wraps(view_func)
@@ -54,6 +54,22 @@ def write_access_required(view_func):
                 "Your account has read-only (Guest) access. "
                 "Contact Steven or Ben to upgrade your role."
             )
+        return view_func(request, *args, **kwargs)
+
+    return _wrapped
+
+
+def operational_admin_required(view_func):
+    """Allow admins and super-admins to perform moderation/operations actions."""
+
+    @login_required(login_url="admin_portal:login")
+    @wraps(view_func)
+    def _wrapped(request, *args, **kwargs):
+        user = request.user
+        if not user.is_active:
+            return HttpResponseForbidden("Your admin account is inactive.")
+        if not (getattr(user, "is_admin", False) or getattr(user, "is_super_admin", False)):
+            return HttpResponseForbidden("This action requires Admin or Super Admin access.")
         return view_func(request, *args, **kwargs)
 
     return _wrapped

@@ -21,6 +21,7 @@ from .services.error_classifier import classify_openai_error
 
 ROLE_CHOICES = [
     ("super_admin", "Super Admin"),
+    ("admin", "Admin"),
     ("developer", "Developer"),
     ("guest", "Guest"),
 ]
@@ -31,6 +32,7 @@ INVITE_DELIVERY_CHOICES = [
     ("link_available", "Link available"),
 ]
 INVITE_ROLE_CHOICES = [
+    ("admin", "Admin"),
     ("developer", "Developer"),
     ("guest", "Guest"),
 ]
@@ -91,6 +93,7 @@ class AdminUser(AbstractBaseUser, PermissionsMixin):
         default="guest",
         help_text=(
             "guest = read-only access. "
+            "admin = moderation and operational control. "
             "developer = read + write (updates notify super-admins). "
             "super_admin = full control (set automatically for Steven/Ben)."
         ),
@@ -126,12 +129,16 @@ class AdminUser(AbstractBaseUser, PermissionsMixin):
 
     @property
     def can_write(self):
-        """Developers and super admins can make changes."""
-        return self.role in ("developer", "super_admin") or self.is_super_admin
+        """Admins, developers, and super admins can make changes."""
+        return self.role in ("admin", "developer", "super_admin") or self.is_super_admin
 
     @property
     def is_guest(self):
         return self.role == "guest" and not self.is_super_admin
+
+    @property
+    def is_admin(self):
+        return self.role == "admin" and not self.is_super_admin
 
     @property
     def is_developer(self):

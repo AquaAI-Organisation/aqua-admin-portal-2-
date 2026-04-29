@@ -42,7 +42,7 @@ from .models import (
     OperationalSettings,
     SupportInquiry,
 )
-from .permissions import admin_required, super_admin_required
+from .permissions import admin_required, operational_admin_required, super_admin_required
 from .services import audit
 from .services.health import get_health_snapshot
 from .services.inquiry_intelligence import apply_inquiry_action, persist_inquiry_analysis
@@ -339,7 +339,7 @@ def review_detail(request, review_id):
     )
 
 
-@super_admin_required
+@operational_admin_required
 def review_rerun(request, review_id):
     review = get_object_or_404(AIAccountReview, pk=review_id)
     profile = _load_external_profile(review)
@@ -514,7 +514,7 @@ def entity_directory(request):
     )
 
 
-@super_admin_required
+@operational_admin_required
 def entity_status_update(request, entity_type, entity_id):
     if request.method != "POST":
         return redirect("admin_portal:entity_directory")
@@ -568,7 +568,7 @@ def operational_settings_view(request):
     )
 
 
-@super_admin_required
+@operational_admin_required
 def support_inbox_list(request):
     q = (request.GET.get("q") or "").strip()
     status = (request.GET.get("status") or "").strip()
@@ -590,7 +590,7 @@ def support_inbox_list(request):
     )
 
 
-@super_admin_required
+@operational_admin_required
 def support_inbox_refresh(request):
     if request.method == "POST":
         try:
@@ -611,7 +611,7 @@ def support_inbox_refresh(request):
     return redirect("admin_portal:support_inbox_list")
 
 
-@super_admin_required
+@operational_admin_required
 def support_inbox_detail(request, inquiry_id):
     inquiry = get_object_or_404(SupportInquiry, pk=inquiry_id)
     reply_form = SupportReplyForm(initial={"body": inquiry.response_draft})
@@ -622,7 +622,7 @@ def support_inbox_detail(request, inquiry_id):
     )
 
 
-@super_admin_required
+@operational_admin_required
 def support_inbox_analyse(request, inquiry_id):
     inquiry = get_object_or_404(SupportInquiry, pk=inquiry_id)
     if request.method == "POST":
@@ -642,7 +642,7 @@ def support_inbox_analyse(request, inquiry_id):
     return redirect("admin_portal:support_inbox_detail", inquiry_id=inquiry.id)
 
 
-@super_admin_required
+@operational_admin_required
 def support_inbox_apply_action(request, inquiry_id):
     inquiry = get_object_or_404(SupportInquiry, pk=inquiry_id)
     if request.method == "POST":
@@ -666,7 +666,7 @@ def support_inbox_apply_action(request, inquiry_id):
     return redirect("admin_portal:support_inbox_detail", inquiry_id=inquiry.id)
 
 
-@super_admin_required
+@operational_admin_required
 def support_inbox_send_reply(request, inquiry_id):
     inquiry = get_object_or_404(SupportInquiry, pk=inquiry_id)
     form = SupportReplyForm(request.POST or None)
@@ -738,7 +738,7 @@ def issue_detail(request, issue_id):
     )
 
 
-@super_admin_required
+@operational_admin_required
 def issue_resolve(request, issue_id):
     issue = get_object_or_404(AIFlaggedIssue, pk=issue_id)
     if request.method != "POST":
@@ -789,7 +789,7 @@ def flag_detail(request, flag_id):
     return render(request, "admin_portal/flag_detail.html", {"flag": flag, "form": FlagResolveForm()})
 
 
-@super_admin_required
+@operational_admin_required
 def flag_resolve(request, flag_id):
     flag = get_object_or_404(AIFlag, pk=flag_id)
     if request.method != "POST":
@@ -1115,7 +1115,7 @@ def invite_accept(request, token):
     return render(request, "admin_portal/invite_accept.html", {"invite": invite, "form": form})
 
 
-@super_admin_required
+@operational_admin_required
 def process_now(request):
     if request.method == "POST":
         try:

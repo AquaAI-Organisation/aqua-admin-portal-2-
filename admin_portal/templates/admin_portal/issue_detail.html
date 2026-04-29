@@ -126,7 +126,7 @@
 </div>
 
 {% if not issue.resolved %}
-  {% if IS_SUPER_ADMIN %}
+  {% if IS_SUPER_ADMIN or IS_ADMIN %}
   <div class="card">
     <div class="card-header">
       <div class="card-title">Resolve issue</div>
@@ -139,7 +139,7 @@
   </div>
   {% else %}
   <div class="card">
-    <div class="helper-text">Only Steven or Ben can resolve or close issues. Developer and guest roles are read only for this action.</div>
+    <div class="helper-text">Admin and Super Admin can resolve or close issues. Developer and guest roles are read only for this action.</div>
   </div>
   {% endif %}
 {% endif %}

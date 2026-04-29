@@ -13,6 +13,7 @@ def branding(request):
         "APP_TAGLINE": "AI-driven approval control plane",
         "SUPERADMIN_EMAILS": getattr(settings, "SUPERADMIN_EMAILS", []),
         "IS_SUPER_ADMIN": bool(getattr(user, "is_super_admin", False)) if is_authenticated else False,
+        "IS_ADMIN": bool(getattr(user, "is_admin", False)) if is_authenticated else False,
         "CAN_WRITE": bool(getattr(user, "can_write", False)) if is_authenticated else False,
         "USER_ROLE": getattr(user, "role_display", "") if is_authenticated else "",
         "OPEN_ISSUE_COUNT": open_issue_count,

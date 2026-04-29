@@ -33,5 +33,5 @@ def record_write(actor, action: str, *, summary: str, target_type: str = "", tar
         request=request,
         **details,
     )
-    if getattr(actor, "is_developer", False):
+    if getattr(actor, "is_developer", False) or getattr(actor, "is_admin", False):
         notify_developer_action(actor, action, summary)
