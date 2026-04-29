@@ -1,0 +1,75 @@
+{% extends "admin_portal/base.html" %}
+{% block title %}Command Centre | {{ APP_NAME }}{% endblock %}
+{% block topbar_title %}Humara Command Centre{% endblock %}
+{% block content %}
+<section class="hero-shell">
+  <div class="hero-copy">
+    <div class="hero-kicker">Integrated delivery cockpit</div>
+    <h1>Cross-team command centre</h1>
+    <p class="page-subtitle">Plan, track, and communicate across GitHub, Notion, Slack, requests, and reminders from one workspace.</p>
+  </div>
+</section>
+
+<div class="card">
+  <div class="card-header"><div><div class="card-title">Platform tabs</div></div></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+    <button class="btn btn-sm cc-tab active" data-tab="github">GitHub</button>
+    <button class="btn btn-sm cc-tab" data-tab="notion">Notion</button>
+    <button class="btn btn-sm cc-tab" data-tab="slack">Slack</button>
+    <button class="btn btn-sm cc-tab" data-tab="requests">Requests</button>
+    <button class="btn btn-sm cc-tab" data-tab="reminders">Reminders</button>
+  </div>
+
+  <div id="github" class="cc-panel">
+    <div class="detail-list">
+      {% for repo in repos %}
+      <div class="detail-item split"><strong>{{ repo.name }}</strong><span class="badge {{ repo.badge }}">{{ repo.status }}</span></div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div id="notion" class="cc-panel" style="display:none;">
+    <p class="helper-text">Documentation templates by phase:</p>
+    <ul>
+      {% for doc in notion_docs %}<li>{{ doc }}</li>{% endfor %}
+    </ul>
+  </div>
+
+  <div id="slack" class="cc-panel" style="display:none;">
+    <p class="helper-text">Workstream channels:</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      {% for channel in slack_channels %}<span class="badge">{{ channel }}</span>{% endfor %}
+    </div>
+  </div>
+
+  <div id="requests" class="cc-panel" style="display:none;">
+    <table class="table"><thead><tr><th>From</th><th>To</th><th>Priority</th><th>Request</th></tr></thead>
+    <tbody>{% for request in team_requests %}<tr><td>{{ request.from }}</td><td>{{ request.to }}</td><td><span class="badge {{ request.priority_badge }}">{{ request.priority }}</span></td><td>{{ request.summary }}</td></tr>{% endfor %}</tbody></table>
+  </div>
+
+  <div id="reminders" class="cc-panel" style="display:none;">
+    <p class="helper-text">Upcoming nudges generated from task deadlines:</p>
+    <div class="detail-list">
+      {% for reminder in reminders %}
+      <div class="detail-item">
+        <strong>{{ reminder.task }}</strong>
+        <div class="cell-sub">{{ reminder.message }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<script>
+  document.querySelectorAll('.cc-tab').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.cc-tab').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      const tab = btn.dataset.tab;
+      document.querySelectorAll('.cc-panel').forEach((panel) => {
+        panel.style.display = panel.id === tab ? 'block' : 'none';
+      });
+    });
+  });
+</script>
+{% endblock %}

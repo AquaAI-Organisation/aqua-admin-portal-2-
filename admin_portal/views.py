@@ -158,6 +158,35 @@ def dashboard(request):
     return render(request, "admin_portal/dashboard.html", context)
 
 
+
+
+@admin_required
+def command_centre(request):
+    context = {
+        "repos": [
+            {"name": "humara-contracts", "status": "healthy", "badge": "ok"},
+            {"name": "humara-server", "status": "warning", "badge": "warn"},
+            {"name": "humara-web", "status": "healthy", "badge": "ok"},
+            {"name": "humara-mobile", "status": "degraded", "badge": "danger"},
+        ],
+        "notion_docs": [
+            "Phase 1: Pre-Launch Infra",
+            "Phase 2: TGE Launch",
+            "Phase 3: Flywheel Ops",
+            "Phase 4: Expansion Playbook",
+        ],
+        "slack_channels": ["#backend", "#smart-contract", "#frontend", "#devops", "#security", "#launch-war-room"],
+        "team_requests": [
+            {"from": "Benito", "to": "Steven", "priority": "High", "priority_badge": "danger", "summary": "Finalize token sale contract audit checklist."},
+            {"from": "Steven", "to": "Benito", "priority": "Medium", "priority_badge": "warn", "summary": "Review API docs for vesting endpoints before QA handoff."},
+        ],
+        "reminders": [
+            {"task": "Deploy staging backend", "message": "Hope you are progressing smoothly, kindly notify if you are facing challenges as we approach the deadline in 2 days, 10 hours."},
+            {"task": "Publish Notion milestone brief", "message": "Friendly check-in: deadline is in 1 day, 4 hours. Share blockers early so we can support."},
+        ],
+    }
+    return render(request, "admin_portal/command_centre.html", context)
+
 @admin_required
 def intake_list(request):
     role = request.GET.get("role", "").strip()
