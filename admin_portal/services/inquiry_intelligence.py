@@ -53,8 +53,8 @@ class InquiryOutcome:
 
 
 def analyse_inquiry(inquiry: SupportInquiry) -> InquiryOutcome:
-    api_key = getattr(settings, "OPENAI_API_KEY", "")
-    model = getattr(settings, "OPENAI_MODEL", "gpt-4o")
+    api_key = str(getattr(settings, "OPENAI_API_KEY", "")).strip()
+    model = str(getattr(settings, "OPENAI_MODEL", "gpt-4o")).strip()
 
     if _is_placeholder_key(api_key):
         return _heuristic_outcome(inquiry, model, "OpenAI key is not configured.")
