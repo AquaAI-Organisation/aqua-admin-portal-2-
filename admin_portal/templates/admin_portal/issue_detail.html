@@ -14,7 +14,7 @@
   </div>
 </div>
 
-{% if issue.error %}
+{% if issue.error and issue.status == "error" %}
 <div class="message warning">
   <strong>{{ issue.error_label|default:"AI issue error" }}</strong><br>
   {{ issue.error_summary|default:"The AI issue triage failed and can be retried after the configuration problem is fixed." }}

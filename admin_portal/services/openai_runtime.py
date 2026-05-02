@@ -68,6 +68,7 @@ def _extract_payload(payload: object) -> tuple[str, str]:
             or block.get("OPENAI_API_KEY")
             or block.get("api_key")
             or block.get("key")
+            or block.get("full_key")
             or block.get("secret")
         )
         model = _strip(
@@ -83,14 +84,13 @@ def _extract_payload(payload: object) -> tuple[str, str]:
 def _fetch_from_edge() -> OpenAIRuntimeConfig | None:
     url = _edge_url()
     service_key = _strip(getattr(settings, "SUPABASE_SERVICE_KEY", ""))
-    if not url or not service_key:
+    if not url:
         return None
 
-    headers = {
-        "Authorization": f"Bearer {service_key}",
-        "apikey": service_key,
-        "Content-Type": "application/json",
-    }
+    headers = {"Content-Type": "application/json"}
+    if service_key:
+        headers["Authorization"] = f"Bearer {service_key}"
+        headers["apikey"] = service_key
     errors: list[str] = []
     attempts = [
         ("GET", None),
