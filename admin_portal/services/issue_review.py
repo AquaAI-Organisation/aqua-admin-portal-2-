@@ -10,6 +10,7 @@ from django.conf import settings
 
 from .json_utils import sanitize_json
 from .openai_runtime import get_openai_runtime_config
+from .supabase_edge import has_issue_triage_function, invoke_json, issue_triage_url
 
 logger = logging.getLogger(__name__)
 
@@ -179,6 +180,32 @@ def _profile_snapshot(profile) -> dict[str, Any]:
 
 
 def call_issue_gpt(dossier: dict[str, Any]) -> IssueReviewOutcome:
+    if has_issue_triage_function():
+        edge_result = invoke_json(
+            issue_triage_url(),
+            {
+                "kind": "issue_triage",
+                "dossier": dossier,
+                "system_prompt": ISSUE_SYSTEM_PROMPT,
+            },
+        )
+        if edge_result.ok:
+            raw = edge_result.payload or {}
+            severity = str(raw.get("severity", "warning")).lower()
+            if severity not in {"info", "warning", "critical"}:
+                severity = "warning"
+            return IssueReviewOutcome(
+                severity=severity,
+                summary=str(raw.get("summary", "")),
+                rationale=str(raw.get("rationale", "")),
+                evidence={"bullets": raw.get("evidence", []), "runtime_source": "supabase_edge_function"},
+                recommended_actions=list(raw.get("recommended_actions", [])),
+                raw=raw,
+                model=str(raw.get("model", "supabase-edge-issue-triage")),
+                error="",
+            )
+        logger.warning("Supabase issue-triage function failed: %s", edge_result.error)
+
     runtime = get_openai_runtime_config()
     api_key = runtime.key
     model = runtime.model or str(getattr(settings, "OPENAI_MODEL", "gpt-4o")).strip()

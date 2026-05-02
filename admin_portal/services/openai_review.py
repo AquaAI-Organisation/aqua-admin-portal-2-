@@ -10,6 +10,7 @@ from django.conf import settings
 
 from .intelligence_adapter import build_signup_intelligence
 from .openai_runtime import get_openai_runtime_config
+from .supabase_edge import has_signup_review_function, invoke_json, signup_review_url
 
 logger = logging.getLogger(__name__)
 
@@ -217,6 +218,40 @@ def _is_placeholder_key(key: str) -> bool:
 
 
 def call_gpt4(dossier: dict[str, Any]) -> AIReviewOutcome:
+    if has_signup_review_function():
+        edge_result = invoke_json(
+            signup_review_url(),
+            {
+                "kind": "signup_review",
+                "dossier": dossier,
+                "system_prompt": SYSTEM_PROMPT,
+            },
+        )
+        if edge_result.ok:
+            raw = edge_result.payload or {}
+            confidence = float(raw.get("overall_confidence") or 0.0)
+            confidence = max(0.0, min(1.0, confidence))
+            hint = str(raw.get("decision_hint", "")).lower()
+            scores = _normalise_scores(raw.get("scores", {}))
+            decision, decision_basis = _balanced_decision(dossier, raw, scores, confidence, hint)
+            return AIReviewOutcome(
+                decision=decision,
+                confidence=confidence,
+                rationale=str(raw.get("rationale", "")),
+                evidence={
+                    "bullets": raw.get("evidence", []),
+                    "scores": scores,
+                    "decision_basis": decision_basis,
+                    "runtime_source": "supabase_edge_function",
+                },
+                recommended_actions=list(raw.get("recommended_actions", [])),
+                flags=list(raw.get("flags", [])),
+                raw=raw,
+                model=str(raw.get("model", "supabase-edge-signup-review")),
+                error="",
+            )
+        logger.warning("Supabase signup-review function failed: %s", edge_result.error)
+
     runtime = get_openai_runtime_config()
     api_key = runtime.key
     model = runtime.model or str(getattr(settings, "OPENAI_MODEL", "gpt-4o")).strip()

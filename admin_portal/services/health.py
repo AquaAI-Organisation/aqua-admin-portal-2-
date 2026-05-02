@@ -12,6 +12,11 @@ from .intelligence_adapter import get_intelligence_readiness
 from .notifier import email_config_status
 from .openai_runtime import get_openai_runtime_config
 from .runtime_config import get_mailbox_runtime_config, get_slack_runtime_config
+from .supabase_edge import (
+    has_inquiry_triage_function,
+    has_issue_triage_function,
+    has_signup_review_function,
+)
 
 _OPENAI_CACHE: dict[str, object] = {
     "checked_at": 0.0,
@@ -57,6 +62,21 @@ def _check_database():
 
 
 def _check_openai():
+    if has_signup_review_function() or has_issue_triage_function() or has_inquiry_triage_function():
+        configured = []
+        if has_signup_review_function():
+            configured.append("signup review")
+        if has_issue_triage_function():
+            configured.append("issue triage")
+        if has_inquiry_triage_function():
+            configured.append("inquiry triage")
+        detail = (
+            "OpenAI is configured through Supabase Edge Functions for "
+            + ", ".join(configured)
+            + ". The secret stays in Supabase; Django only calls the function endpoints."
+        )
+        return _status(True, "OpenAI", detail, state="ok")
+
     runtime = get_openai_runtime_config(force_refresh=True)
     key = runtime.key
     model = runtime.model or str(getattr(settings, "OPENAI_MODEL", "gpt-4o")).strip()

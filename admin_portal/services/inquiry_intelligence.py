@@ -14,6 +14,7 @@ from .json_utils import sanitize_json
 from .notifier import notify_issue
 from .openai_review import _is_placeholder_key
 from .openai_runtime import get_openai_runtime_config
+from .supabase_edge import has_inquiry_triage_function, inquiry_triage_url, invoke_json
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,36 @@ class InquiryOutcome:
 
 
 def analyse_inquiry(inquiry: SupportInquiry) -> InquiryOutcome:
+    if has_inquiry_triage_function():
+        dossier = {
+            "from_email": inquiry.from_email,
+            "from_name": inquiry.from_name,
+            "subject": inquiry.subject,
+            "body_text": inquiry.body_text,
+            "matched_entity_type": inquiry.matched_entity_type,
+            "matched_entity_id": inquiry.matched_entity_id,
+        }
+        edge_result = invoke_json(
+            inquiry_triage_url(),
+            {
+                "kind": "support_inquiry",
+                "dossier": dossier,
+                "system_prompt": PROMPT,
+            },
+        )
+        if edge_result.ok:
+            raw = edge_result.payload or {}
+            actions = sanitize_json(list(raw.get("recommended_actions", [])))
+            return InquiryOutcome(
+                summary=str(raw.get("summary", "")),
+                rationale=str(raw.get("rationale", "")),
+                recommended_actions=actions,
+                raw=sanitize_json(raw),
+                model=str(raw.get("model", "supabase-edge-inquiry-triage")),
+                error="",
+            )
+        logger.warning("Supabase inquiry-triage function failed: %s", edge_result.error)
+
     runtime = get_openai_runtime_config()
     api_key = runtime.key
     model = runtime.model or str(getattr(settings, "OPENAI_MODEL", "gpt-4o")).strip()

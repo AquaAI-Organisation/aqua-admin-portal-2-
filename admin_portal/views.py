@@ -1162,7 +1162,7 @@ def invite_accept(request, token):
         if AdminUser.objects.filter(email=invite.email).exists():
             messages.error(request, "An admin already exists for this email.")
             return redirect("admin_portal:login")
-        role = invite.role if invite.role in {"guest", "developer"} else "guest"
+        role = invite.role if invite.role in {"guest", "developer", "admin"} else "guest"
         user = AdminUser.objects.create_user(
             email=invite.email,
             password=form.cleaned_data["password1"],
