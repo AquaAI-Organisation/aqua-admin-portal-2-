@@ -9,6 +9,7 @@ from typing import Any
 from django.conf import settings
 
 from .intelligence_adapter import build_signup_intelligence
+from .openai_runtime import get_openai_runtime_config
 
 logger = logging.getLogger(__name__)
 
@@ -216,8 +217,9 @@ def _is_placeholder_key(key: str) -> bool:
 
 
 def call_gpt4(dossier: dict[str, Any]) -> AIReviewOutcome:
-    api_key = str(getattr(settings, "OPENAI_API_KEY", "")).strip()
-    model = str(getattr(settings, "OPENAI_MODEL", "gpt-4o")).strip()
+    runtime = get_openai_runtime_config()
+    api_key = runtime.key
+    model = runtime.model or str(getattr(settings, "OPENAI_MODEL", "gpt-4o")).strip()
 
     if _is_placeholder_key(api_key):
         return AIReviewOutcome(
@@ -229,7 +231,7 @@ def call_gpt4(dossier: dict[str, Any]) -> AIReviewOutcome:
             flags=[],
             raw={},
             model=model,
-            error="OPENAI_API_KEY is not set. Paste your real GPT-4 key into .env.",
+            error=runtime.error or "OpenAI runtime key is not configured from Supabase edge function or environment.",
         )
 
     try:
@@ -333,8 +335,8 @@ def _balanced_decision(
     thin_evidence = bool(intelligence.get("thin_evidence"))
     identity = intelligence.get("identity", {})
     role_fit = intelligence.get("role_fit", {})
-    approve_t = float(getattr(settings, "AI_APPROVE_THRESHOLD", 0.65))
-    reject_t = float(getattr(settings, "AI_REJECT_THRESHOLD", 0.20))
+    approve_t = float(getattr(settings, "AI_APPROVE_THRESHOLD", 0.45))
+    reject_t = float(getattr(settings, "AI_REJECT_THRESHOLD", 0.10))
 
     business_required = [
         bool(dossier.get("profile", {}).get("company_name")),
@@ -362,13 +364,15 @@ def _balanced_decision(
         decision = "rejected"
         reason = "Composite risk is below the reject threshold with supporting evidence."
     elif (
-        confidence >= approve_t
-        and hint in {"approve", "flag"}
-        and required_identity_ok
+        required_identity_ok
         and business_fields_ok
         and role_required_ok
         and no_critical_flags
         and not hard_blocks
+        and (
+            confidence >= approve_t
+            or (hint != "reject" and not thin_evidence and not clear_reject_signal)
+        )
     ):
         decision = "approved"
         reason = "The profile is plausible, passes the core checks, and does not show strong risk signals."

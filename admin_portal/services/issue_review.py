@@ -9,6 +9,7 @@ from typing import Any
 from django.conf import settings
 
 from .json_utils import sanitize_json
+from .openai_runtime import get_openai_runtime_config
 
 logger = logging.getLogger(__name__)
 
@@ -178,8 +179,9 @@ def _profile_snapshot(profile) -> dict[str, Any]:
 
 
 def call_issue_gpt(dossier: dict[str, Any]) -> IssueReviewOutcome:
-    api_key = str(getattr(settings, "OPENAI_API_KEY", "")).strip()
-    model = str(getattr(settings, "OPENAI_MODEL", "gpt-4o")).strip()
+    runtime = get_openai_runtime_config()
+    api_key = runtime.key
+    model = runtime.model or str(getattr(settings, "OPENAI_MODEL", "gpt-4o")).strip()
 
     if _is_placeholder_key(api_key):
         return IssueReviewOutcome(
@@ -189,7 +191,7 @@ def call_issue_gpt(dossier: dict[str, Any]) -> IssueReviewOutcome:
             evidence={"bullets": []},
             recommended_actions=[{"action": "notify_super_admins"}],
             model=model,
-            error="OPENAI_API_KEY is not set. Paste your real GPT-4 key into .env.",
+            error=runtime.error or "OpenAI runtime key is not configured from Supabase edge function or environment.",
         )
 
     try:

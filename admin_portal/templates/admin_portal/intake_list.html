@@ -86,6 +86,33 @@
           {% else %}
           <span class="helper-text">Awaiting scan</span>
           {% endif %}
+          {% if IS_SUPER_ADMIN or IS_ADMIN %}
+          <div class="filter-row" style="margin-top:10px;">
+            <form method="post" action="{% url 'admin_portal:intake_decide' row.role row.entity_id 'approve' %}">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              <button class="btn btn-sm" type="submit">Approve</button>
+            </form>
+            <form method="post" action="{% url 'admin_portal:intake_decide' row.role row.entity_id 'reject' %}">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              <button class="btn-danger btn-sm" type="submit" onclick="return confirm('Reject {{ row.display_name }}?')">Reject</button>
+            </form>
+            {% if row.is_active %}
+            <form method="post" action="{% url 'admin_portal:intake_decide' row.role row.entity_id 'suspend' %}">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              <button class="btn btn-sm" type="submit">Suspend</button>
+            </form>
+            {% else %}
+            <form method="post" action="{% url 'admin_portal:intake_decide' row.role row.entity_id 'reactivate' %}">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              <button class="btn btn-sm" type="submit">Re-activate</button>
+            </form>
+            {% endif %}
+          </div>
+          {% endif %}
         </td>
       </tr>
       {% empty %}

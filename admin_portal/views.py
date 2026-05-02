@@ -221,6 +221,8 @@ def intake_list(request):
                 "display_name": profile.company_name or profile.user.name or profile.user.username or profile.user.email,
                 "user_email": profile.user.email,
                 "username": profile.user.username,
+                "entity_id": str(profile.id),
+                "is_active": bool(profile.is_active),
                 "source_status": "Pending verification",
                 "source_detail": f"Verified: {'Yes' if profile.is_verified else 'No'} | Active: {'Yes' if profile.is_active else 'No'}",
                 "review": review,
@@ -249,6 +251,8 @@ def intake_list(request):
                 "display_name": profile.company_name or profile.user.name or profile.user.username or profile.user.email,
                 "user_email": profile.user.email,
                 "username": profile.user.username,
+                "entity_id": str(profile.id),
+                "is_active": bool(profile.is_active),
                 "source_status": "Pending admin approval",
                 "source_detail": f"Admin status: {profile.admin_status or 'pending'} | Active: {'Yes' if profile.is_active else 'No'}",
                 "review": review,
@@ -290,6 +294,75 @@ def intake_list(request):
             "summary": summary,
         },
     )
+
+
+def _ensure_review(subject_type: str, profile, user) -> AIAccountReview:
+    review = AIAccountReview.objects.filter(subject_type=subject_type, subject_id=profile.id).first()
+    if review:
+        return review
+    display = (profile.company_name or user.name or f"{user.first_name} {user.last_name}").strip()
+    return AIAccountReview.objects.create(
+        subject_type=subject_type,
+        subject_id=profile.id,
+        subject_user_email=user.email,
+        subject_display_name=display[:255],
+        decision="pending",
+        confidence=0.0,
+        rationale="",
+        evidence={},
+        recommended_actions=[],
+        applied_actions=[],
+        openai_raw={},
+        ai_model="",
+        error="",
+    )
+
+
+@operational_admin_required
+def intake_decide(request, entity_type, entity_id, action):
+    if request.method != "POST":
+        return redirect("admin_portal:intake_list")
+    next_url = request.POST.get("next") or reverse("admin_portal:intake_list")
+    action = (action or "").strip().lower()
+    if entity_type not in {"breeder", "consultant"}:
+        messages.error(request, "Invalid intake entity type.")
+        return redirect(next_url)
+    if action not in {"approve", "reject", "suspend", "reactivate"}:
+        messages.error(request, "Invalid intake action.")
+        return redirect(next_url)
+
+    profile_model = ExternalBreederProfile if entity_type == "breeder" else ExternalConsultantProfile
+    profile = get_object_or_404(profile_model.objects.select_related("user"), pk=entity_id)
+    user = profile.user
+
+    try:
+        if action == "approve":
+            review = _ensure_review(entity_type, profile, user)
+            manual_override(review, "approved", "Approved from Pending Intake.", request.user)
+            summary = f"{profile.company_name or user.email} approved from Pending Intake."
+        elif action == "reject":
+            review = _ensure_review(entity_type, profile, user)
+            manual_override(review, "rejected", "Rejected from Pending Intake.", request.user)
+            summary = f"{profile.company_name or user.email} rejected from Pending Intake."
+        else:
+            activate = action == "reactivate"
+            summary = _set_entity_active_state(entity_type, entity_id, activate=activate, actor=request.user)
+    except Exception as exc:
+        messages.error(request, f"Could not update intake account: {exc}")
+        return redirect(next_url)
+
+    audit.record_write(
+        request.user,
+        f"intake.{action}",
+        target_type=entity_type,
+        target_id=entity_id,
+        request=request,
+        summary=summary,
+        entity_type=entity_type,
+        intake_action=action,
+    )
+    messages.success(request, summary)
+    return redirect(next_url)
 
 
 @admin_required

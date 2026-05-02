@@ -13,6 +13,7 @@ from ..models import AIFlaggedIssue, SupportInquiry
 from .json_utils import sanitize_json
 from .notifier import notify_issue
 from .openai_review import _is_placeholder_key
+from .openai_runtime import get_openai_runtime_config
 
 logger = logging.getLogger(__name__)
 
@@ -53,11 +54,12 @@ class InquiryOutcome:
 
 
 def analyse_inquiry(inquiry: SupportInquiry) -> InquiryOutcome:
-    api_key = str(getattr(settings, "OPENAI_API_KEY", "")).strip()
-    model = str(getattr(settings, "OPENAI_MODEL", "gpt-4o")).strip()
+    runtime = get_openai_runtime_config()
+    api_key = runtime.key
+    model = runtime.model or str(getattr(settings, "OPENAI_MODEL", "gpt-4o")).strip()
 
     if _is_placeholder_key(api_key):
-        return _heuristic_outcome(inquiry, model, "OpenAI key is not configured.")
+        return _heuristic_outcome(inquiry, model, runtime.error or "OpenAI key is not configured.")
 
     try:
         from openai import OpenAI

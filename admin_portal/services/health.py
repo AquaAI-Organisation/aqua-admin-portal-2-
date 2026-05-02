@@ -10,6 +10,7 @@ from ..models import AdminInvite
 from .error_classifier import classify_openai_error
 from .intelligence_adapter import get_intelligence_readiness
 from .notifier import email_config_status
+from .openai_runtime import get_openai_runtime_config
 from .runtime_config import get_mailbox_runtime_config, get_slack_runtime_config
 
 _OPENAI_CACHE: dict[str, object] = {
@@ -56,10 +57,12 @@ def _check_database():
 
 
 def _check_openai():
-    key = str(getattr(settings, "OPENAI_API_KEY", "")).strip()
-    model = str(getattr(settings, "OPENAI_MODEL", "gpt-4o")).strip()
+    runtime = get_openai_runtime_config(force_refresh=True)
+    key = runtime.key
+    model = runtime.model or str(getattr(settings, "OPENAI_MODEL", "gpt-4o")).strip()
     if _placeholder(key):
-        return _status(False, "OpenAI", "OPENAI_API_KEY is missing or still using a placeholder.")
+        detail = runtime.error or "OpenAI runtime key is missing or still using a placeholder."
+        return _status(False, "OpenAI", detail)
 
     now = time.monotonic()
     cached = _OPENAI_CACHE.get("result")
@@ -76,7 +79,7 @@ def _check_openai():
     try:
         client = OpenAI(api_key=key)
         client.models.retrieve(model)
-        result = _status(True, "OpenAI", f"Authenticated successfully and can access model {model}.")
+        result = _status(True, "OpenAI", f"Authenticated successfully via {runtime.source} and can access model {model}.")
     except Exception as exc:
         info = classify_openai_error(str(exc))
         state = "warn" if info["category"] == "transport_error" else "bad"

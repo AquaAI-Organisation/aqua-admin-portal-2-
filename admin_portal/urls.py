@@ -12,6 +12,7 @@ urlpatterns = [
 
     # Raw pending intake from source-of-truth backend tables
     path("intake/", views.intake_list, name="intake_list"),
+    path("intake/<str:entity_type>/<str:entity_id>/<str:action>/", views.intake_decide, name="intake_decide"),
     path("entities/", views.entity_directory, name="entity_directory"),
     path("entities/<str:entity_type>/<str:entity_id>/status/", views.entity_status_update, name="entity_status_update"),
     path("inbox/", views.support_inbox_list, name="support_inbox_list"),
