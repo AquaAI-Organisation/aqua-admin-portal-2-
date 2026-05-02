@@ -57,14 +57,24 @@ def _operationalise_outcome(outcome: AIReviewOutcome) -> AIReviewOutcome:
     risk_bucket = _risk_bucket(outcome)
     decision_basis = dict((outcome.evidence or {}).get("decision_basis", {}))
     decision_basis["risk_bucket"] = risk_bucket
+    auto_admit_floor = 0.09
     decision_basis["operational_policy"] = "auto_admit_non_critical"
+    decision_basis["auto_admit_floor"] = auto_admit_floor
 
     evidence = dict(outcome.evidence or {})
     evidence["decision_basis"] = decision_basis
     evidence["risk_bucket"] = risk_bucket
     outcome.evidence = evidence
 
-    if outcome.decision == "flagged" and risk_bucket != "critical":
+    hard_blocks = list(decision_basis.get("hard_blocks", []))
+    should_auto_admit = (
+        outcome.decision in {"flagged", "rejected"}
+        and risk_bucket != "critical"
+        and not hard_blocks
+        and outcome.confidence >= auto_admit_floor
+    )
+
+    if should_auto_admit:
         outcome.decision = "approved"
         rationale = (outcome.rationale or "").strip()
         prefix = "Auto-approved with follow-up risk monitoring."
