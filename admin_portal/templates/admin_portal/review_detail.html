@@ -10,6 +10,7 @@
   </div>
   <div class="page-actions">
     <span class="badge {{ review.badge_class }}">{{ review.decision }}</span>
+    {% if review.risk_bucket %}<span class="badge {{ review.risk_badge_class }}">{{ review.risk_bucket }} risk</span>{% endif %}
     {% if review.manually_overridden %}<span class="badge override">manual override</span>{% endif %}
     {% if IS_SUPER_ADMIN %}
     <form method="post" action="{% url 'admin_portal:review_rerun' review.id %}">
@@ -65,6 +66,8 @@
     <div class="kv-grid">
       <div class="kv-label">Role</div>
       <div class="kv-value">{{ review.subject_type }}</div>
+      <div class="kv-label">Risk bucket</div>
+      <div class="kv-value">{{ review.risk_bucket|default:"-" }}</div>
       <div class="kv-label">Email</div>
       <div class="kv-value">{{ review.subject_user_email|default:"-" }}</div>
       <div class="kv-label">AI model</div>
@@ -101,13 +104,17 @@
   <div class="card-header">
     <div class="card-title">Balanced policy basis</div>
   </div>
-  <div class="kv-grid">
-    <div class="kv-label">Policy</div>
-    <div class="kv-value">{{ review.decision_basis.policy|default:"-" }}</div>
-    <div class="kv-label">Reason</div>
-    <div class="kv-value">{{ review.decision_basis.reason|default:"-" }}</div>
-    <div class="kv-label">Approve threshold</div>
-    <div class="kv-value mono">{{ review.decision_basis.approve_threshold|default:"-" }}</div>
+    <div class="kv-grid">
+      <div class="kv-label">Policy</div>
+      <div class="kv-value">{{ review.decision_basis.policy|default:"-" }}</div>
+      <div class="kv-label">Operational policy</div>
+      <div class="kv-value">{{ review.decision_basis.operational_policy|default:"-" }}</div>
+      <div class="kv-label">Reason</div>
+      <div class="kv-value">{{ review.decision_basis.reason|default:"-" }}</div>
+      <div class="kv-label">Risk bucket</div>
+      <div class="kv-value">{{ review.decision_basis.risk_bucket|default:"-" }}</div>
+      <div class="kv-label">Approve threshold</div>
+      <div class="kv-value mono">{{ review.decision_basis.approve_threshold|default:"-" }}</div>
     <div class="kv-label">Reject threshold</div>
     <div class="kv-value mono">{{ review.decision_basis.reject_threshold|default:"-" }}</div>
     <div class="kv-label">Thin evidence</div>

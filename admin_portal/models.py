@@ -700,6 +700,19 @@ class AIAccountReview(models.Model):
     def decision_basis(self):
         return (self.evidence or {}).get("decision_basis", {})
 
+    @property
+    def risk_bucket(self):
+        return (self.decision_basis or {}).get("risk_bucket", "")
+
+    @property
+    def risk_badge_class(self):
+        return {
+            "low": "ok",
+            "medium": "info",
+            "high": "warn",
+            "critical": "danger",
+        }.get(self.risk_bucket, "muted")
+
 
 class AIFlag(models.Model):
     review = models.ForeignKey(AIAccountReview, on_delete=models.CASCADE, related_name="flags")

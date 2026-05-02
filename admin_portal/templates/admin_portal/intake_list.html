@@ -72,6 +72,7 @@
         </td>
         <td>
           <span class="badge {{ row.ai_badge_class }}">{{ row.ai_label }}</span>
+          {% if row.review and row.review.risk_bucket %}<span class="badge {{ row.review.risk_badge_class }}">{{ row.review.risk_bucket }} risk</span>{% endif %}
           {% if row.review and row.review.manually_overridden %}<span class="badge override">override</span>{% endif %}
           {% if row.review %}
           <div class="cell-sub mono">{{ row.review.confidence|floatformat:2 }}</div>

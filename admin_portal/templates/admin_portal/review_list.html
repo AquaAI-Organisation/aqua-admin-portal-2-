@@ -65,6 +65,7 @@
         <td>
           <span class="badge {{ review.badge_class }}">{{ review.decision }}</span>
           {% if review.manually_overridden %}<span class="badge override">override</span>{% endif %}
+          {% if review.risk_bucket %}<span class="badge {{ review.risk_badge_class }}">{{ review.risk_bucket }} risk</span>{% endif %}
         </td>
         <td>
           <div class="confidence-bar">

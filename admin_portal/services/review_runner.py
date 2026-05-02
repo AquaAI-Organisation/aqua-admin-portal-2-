@@ -24,6 +24,57 @@ from .openai_review import (
 logger = logging.getLogger(__name__)
 
 
+def _max_flag_severity(flags: list[dict] | None) -> str:
+    levels = {"info": 0, "warning": 1, "critical": 2}
+    highest = "info"
+    for flag in flags or []:
+        severity = str((flag or {}).get("severity", "info")).lower()
+        if levels.get(severity, 0) > levels.get(highest, 0):
+            highest = severity
+    return highest
+
+
+def _risk_bucket(outcome: AIReviewOutcome) -> str:
+    if outcome.decision == "rejected":
+        return "critical"
+    highest = _max_flag_severity(outcome.flags)
+    if highest == "critical":
+        return "critical"
+    if outcome.confidence < 0.35 or highest == "warning":
+        return "high"
+    if outcome.confidence < 0.60:
+        return "medium"
+    return "low"
+
+
+def _operationalise_outcome(outcome: AIReviewOutcome) -> AIReviewOutcome:
+    """Bias toward admitting plausible accounts while preserving risk alerts.
+
+    Only truly clear-risk outcomes should remain rejected. Non-critical flagged
+    outcomes are auto-approved and kept visible via AIFlag severity plus a
+    stored risk bucket in evidence.
+    """
+    risk_bucket = _risk_bucket(outcome)
+    decision_basis = dict((outcome.evidence or {}).get("decision_basis", {}))
+    decision_basis["risk_bucket"] = risk_bucket
+    decision_basis["operational_policy"] = "auto_admit_non_critical"
+
+    evidence = dict(outcome.evidence or {})
+    evidence["decision_basis"] = decision_basis
+    evidence["risk_bucket"] = risk_bucket
+    outcome.evidence = evidence
+
+    if outcome.decision == "flagged" and risk_bucket != "critical":
+        outcome.decision = "approved"
+        rationale = (outcome.rationale or "").strip()
+        prefix = "Auto-approved with follow-up risk monitoring."
+        outcome.rationale = f"{prefix} {rationale}".strip()
+        actions = list(outcome.recommended_actions or [])
+        actions.insert(0, {"action": "approve_account", "mode": "auto_with_risk_review"})
+        outcome.recommended_actions = actions
+    return outcome
+
+
 # ---------------------------------------------------------------------------
 # Discover profiles that the AI hasn't reviewed yet
 # ---------------------------------------------------------------------------
@@ -87,6 +138,7 @@ def run_review(subject_type: str, profile, user) -> AIAccountReview:
         dossier = build_consultant_dossier(profile, user)
 
     outcome = call_gpt4(dossier)
+    outcome = _operationalise_outcome(outcome)
 
     display = (profile.company_name or user.name or f"{user.first_name} {user.last_name}").strip()
     review, _ = AIAccountReview.objects.update_or_create(
