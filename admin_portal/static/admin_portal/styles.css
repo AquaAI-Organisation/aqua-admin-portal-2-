@@ -1283,6 +1283,19 @@ input:focus, select:focus, textarea:focus {
 /* ── Detail List ──────────────────────────────────────────── */
 .detail-list { display: grid; gap: 8px; }
 
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 18px;
+  align-items: center;
+}
+
+.filter-bar .input {
+  min-width: 220px;
+  flex: 1 1 220px;
+}
+
 .detail-item {
   padding: 12px 14px;
   background: rgba(255,255,255,0.025);
@@ -1297,6 +1310,15 @@ input:focus, select:focus, textarea:focus {
   gap: 12px;
   flex-wrap: wrap;
   align-items: center;
+}
+
+.pagination {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: 16px;
+  flex-wrap: wrap;
 }
 
 /* ── Score Grid ───────────────────────────────────────────── */

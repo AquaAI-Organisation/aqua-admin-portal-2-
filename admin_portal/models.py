@@ -613,6 +613,141 @@ class ExternalMessage(models.Model):
         db_table = "messaging_message"
 
 
+class ExternalMarketplaceSellerProfile(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    user = models.ForeignKey(
+        ExternalUser, on_delete=models.DO_NOTHING, db_column="user_id", related_name="+"
+    )
+    rating = models.FloatField(null=True, blank=True)
+    reviews_count = models.IntegerField(null=True, blank=True)
+    stripe_connect_account_id = models.CharField(max_length=255, blank=True, null=True)
+    stripe_connect_status = models.CharField(max_length=32, blank=True)
+    payouts_enabled = models.BooleanField(default=False)
+    delivery_sales_enabled = models.BooleanField(default=False)
+    delivery_suspended = models.BooleanField(default=False)
+    updated_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "marketplace_sellerprofile"
+
+
+class ExternalBreederShippingProfile(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    seller = models.ForeignKey(
+        ExternalUser, on_delete=models.DO_NOTHING, db_column="seller_id", related_name="+"
+    )
+    supports_collection = models.BooleanField(default=True)
+    supports_delivery = models.BooleanField(default=False)
+    collection_radius_km = models.IntegerField(default=0)
+    local_zone_km = models.IntegerField(default=0)
+    regional_zone_km = models.IntegerField(default=0)
+    appointment_only = models.BooleanField(default=False)
+    holiday_mode_enabled = models.BooleanField(default=False)
+    holiday_message = models.TextField(blank=True)
+    collection_address = models.TextField(blank=True)
+    opening_hours = models.JSONField(default=dict, blank=True)
+    updated_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "marketplace_breedershippingprofile"
+
+
+class ExternalBreederVerification(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    seller = models.ForeignKey(
+        ExternalUser, on_delete=models.DO_NOTHING, db_column="seller_id", related_name="+"
+    )
+    licence_number = models.CharField(max_length=100, blank=True)
+    issuing_authority = models.CharField(max_length=255, blank=True)
+    expiry_date = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=20, blank=True)
+    rejection_reason = models.TextField(blank=True)
+    reviewed_by_id = models.UUIDField(null=True, blank=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "marketplace_breederverification"
+
+
+class ExternalBreederReservation(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    reservation_code = models.CharField(max_length=40)
+    buyer = models.ForeignKey(
+        ExternalUser, on_delete=models.DO_NOTHING, db_column="buyer_id", related_name="+"
+    )
+    seller = models.ForeignKey(
+        ExternalUser, on_delete=models.DO_NOTHING, db_column="seller_id", related_name="+"
+    )
+    delivery_method = models.CharField(max_length=20, blank=True)
+    status = models.CharField(max_length=30, blank=True)
+    payment_status = models.CharField(max_length=20, blank=True)
+    subtotal = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    shipping_cost = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    platform_fee = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    no_show_fee = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    tracking_number = models.CharField(max_length=120, blank=True)
+    courier_name = models.CharField(max_length=120, blank=True)
+    delivery_zone = models.CharField(max_length=20, blank=True)
+    checkout_group_code = models.CharField(max_length=32, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(null=True, blank=True)
+    paid_at = models.DateTimeField(null=True, blank=True)
+    dispatched_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "marketplace_breederreservation"
+
+
+class ExternalReservationDispute(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    reservation = models.ForeignKey(
+        ExternalBreederReservation, on_delete=models.DO_NOTHING, db_column="reservation_id", related_name="+"
+    )
+    opened_by = models.ForeignKey(
+        ExternalUser, on_delete=models.DO_NOTHING, db_column="opened_by_id", related_name="+"
+    )
+    reason = models.CharField(max_length=30, blank=True)
+    description = models.TextField(blank=True)
+    breeder_response = models.TextField(blank=True)
+    resolution = models.CharField(max_length=50, blank=True)
+    resolution_summary = models.TextField(blank=True)
+    status = models.CharField(max_length=30, blank=True)
+    opened_at = models.DateTimeField(null=True, blank=True)
+    breeder_responded_at = models.DateTimeField(null=True, blank=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "marketplace_reservationdispute"
+
+
+class ExternalFeatureDAuditLog(models.Model):
+    id = models.UUIDField(primary_key=True)
+    entity_id = models.CharField(max_length=255)
+    entity_type = models.CharField(max_length=32, blank=True)
+    badge_type = models.CharField(max_length=64, blank=True)
+    action = models.CharField(max_length=64, blank=True)
+    action_reason = models.TextField(blank=True)
+    previous_state = models.JSONField(default=dict, blank=True, null=True)
+    new_state = models.JSONField(default=dict, blank=True, null=True)
+    evidence_data = models.JSONField(default=dict, blank=True)
+    triggered_by = models.CharField(max_length=255, blank=True)
+    triggered_by_type = models.CharField(max_length=32, blank=True)
+    timestamp = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "badges_badgeauditlog"
+
+
 # ---------------------------------------------------------------------------
 # AI decision record, flags, analytics, audit
 # ---------------------------------------------------------------------------

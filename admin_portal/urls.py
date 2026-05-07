@@ -6,6 +6,11 @@ app_name = "admin_portal"
 
 urlpatterns = [
     path("", views.dashboard, name="dashboard"),
+    path("feature-d/", views.feature_d_dashboard, name="feature_d_dashboard"),
+    path("feature-d/audit/", views.feature_d_audit, name="feature_d_audit"),
+    path("feature-d/verifications/<int:verification_id>/<str:decision>/", views.feature_d_verification_action, name="feature_d_verification_action"),
+    path("feature-d/disputes/<int:dispute_id>/resolve/", views.feature_d_dispute_action, name="feature_d_dispute_action"),
+    path("feature-d/breeders/<str:seller_id>/delivery-toggle/", views.feature_d_delivery_toggle, name="feature_d_delivery_toggle"),
     path("background-video/", views.background_video, name="background_video"),
     path("login/", views.login_view, name="login"),
     path("logout/", views.logout_view, name="logout"),

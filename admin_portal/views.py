@@ -36,14 +36,29 @@ from .models import (
     AIFlag,
     AIFlaggedIssue,
     DailyReport,
+    ExternalBreederShippingProfile,
+    ExternalBreederReservation,
+    ExternalBreederVerification,
     ExternalBreederProfile,
     ExternalConsultantProfile,
+    ExternalFeatureDAuditLog,
+    ExternalMarketplaceSellerProfile,
+    ExternalReservationDispute,
     ExternalUser,
     OperationalSettings,
     SupportInquiry,
 )
 from .permissions import admin_required, operational_admin_required, super_admin_required
 from .services import audit
+from .services.feature_d_backend import (
+    FeatureDBackendError,
+    approve_verification,
+    fetch_feature_d_dashboard,
+    is_configured as feature_d_backend_configured,
+    reject_verification,
+    resolve_dispute,
+    toggle_delivery,
+)
 from .services.health import get_health_snapshot
 from .services.inquiry_intelligence import apply_inquiry_action, persist_inquiry_analysis
 from .services.mailbox import fetch_support_inbox, send_support_reply
@@ -156,6 +171,179 @@ def dashboard(request):
         "pending_consultant_count": ExternalConsultantProfile.objects.filter(admin_status="pending").count(),
     }
     return render(request, "admin_portal/dashboard.html", context)
+
+
+@admin_required
+def feature_d_dashboard(request):
+    backend_summary = None
+    backend_error = ""
+    if feature_d_backend_configured():
+        try:
+            backend_summary = fetch_feature_d_dashboard().get("data", {})
+        except FeatureDBackendError as exc:
+            backend_error = str(exc)
+    else:
+        backend_error = "Backend admin bridge is not configured. Read-only queues are still available."
+
+    today = timezone.now().date()
+    pending_verifications = (
+        ExternalBreederVerification.objects.select_related("seller")
+        .filter(status="pending")
+        .order_by("created_at")[:50]
+    )
+    expiring_soon = (
+        ExternalBreederVerification.objects.select_related("seller")
+        .filter(status="approved", expiry_date__isnull=False, expiry_date__lte=today + timedelta(days=30))
+        .order_by("expiry_date")[:50]
+    )
+    open_disputes = (
+        ExternalReservationDispute.objects.select_related("reservation", "reservation__buyer", "reservation__seller", "opened_by")
+        .exclude(status="resolved")
+        .order_by("-opened_at")[:50]
+    )
+    connect_watchlist = (
+        ExternalMarketplaceSellerProfile.objects.select_related("user")
+        .filter(
+            Q(stripe_connect_status__in=["not_started", "pending", "restricted", "error"])
+            | Q(payouts_enabled=False)
+            | Q(delivery_suspended=True)
+        )
+        .order_by("stripe_connect_status", "-updated_at")[:50]
+    )
+    holiday_mode = (
+        ExternalBreederShippingProfile.objects.select_related("seller")
+        .filter(holiday_mode_enabled=True)
+        .order_by("-updated_at")[:30]
+    )
+    recent_reservations = (
+        ExternalBreederReservation.objects.select_related("buyer", "seller")
+        .order_by("-created_at")[:20]
+    )
+    recent_feature_d_audit = (
+        ExternalFeatureDAuditLog.objects.filter(
+            Q(action__icontains="state_transition")
+            | Q(badge_type__in=["verified_breeder", "trusted_seller", "quick_dispatch", "reservation_master"])
+        )
+        .order_by("-timestamp")[:30]
+    )
+
+    context = {
+        "backend_summary": backend_summary,
+        "backend_error": backend_error,
+        "backend_bridge_configured": feature_d_backend_configured(),
+        "pending_verifications": pending_verifications,
+        "expiring_soon": expiring_soon,
+        "open_disputes": open_disputes,
+        "connect_watchlist": connect_watchlist,
+        "holiday_mode": holiday_mode,
+        "recent_reservations": recent_reservations,
+        "recent_feature_d_audit": recent_feature_d_audit,
+        "pending_verification_count": pending_verifications.count(),
+        "open_dispute_count": open_disputes.count(),
+        "watchlist_count": connect_watchlist.count(),
+        "holiday_count": holiday_mode.count(),
+    }
+    return render(request, "admin_portal/feature_d_dashboard.html", context)
+
+
+@admin_required
+def feature_d_verification_action(request, verification_id, decision):
+    if request.method != "POST":
+        return redirect("admin_portal:feature_d_dashboard")
+    try:
+        if decision == "approve":
+            result = approve_verification(verification_id)
+            messages.success(request, "Breeder verification approved in the backend.")
+        else:
+            reason = (request.POST.get("rejection_reason") or "").strip() or "Admin requested a resubmission."
+            result = reject_verification(verification_id, reason)
+            messages.success(request, "Breeder verification rejected in the backend.")
+        audit.record_write(
+            request.user,
+            f"feature_d.verification.{decision}",
+            summary=f"Feature D verification {verification_id} {decision}d",
+            target_type="feature_d_verification",
+            target_id=str(verification_id),
+            request=request,
+            backend_result=result.get("data", {}),
+        )
+    except FeatureDBackendError as exc:
+        messages.error(request, str(exc))
+    return redirect("admin_portal:feature_d_dashboard")
+
+
+@admin_required
+def feature_d_dispute_action(request, dispute_id):
+    if request.method != "POST":
+        return redirect("admin_portal:feature_d_dashboard")
+    resolution = (request.POST.get("resolution") or "").strip() or "refund_buyer"
+    summary = (request.POST.get("summary") or "").strip() or "Resolved from admin control plane."
+    try:
+        result = resolve_dispute(dispute_id, resolution, summary)
+        audit.record_write(
+            request.user,
+            "feature_d.dispute.resolve",
+            summary=f"Resolved Feature D dispute {dispute_id}",
+            target_type="feature_d_dispute",
+            target_id=str(dispute_id),
+            request=request,
+            resolution=resolution,
+            backend_result=result.get("data", {}),
+        )
+        messages.success(request, "Dispute resolution sent to the backend.")
+    except FeatureDBackendError as exc:
+        messages.error(request, str(exc))
+    return redirect("admin_portal:feature_d_dashboard")
+
+
+@admin_required
+def feature_d_delivery_toggle(request, seller_id):
+    if request.method != "POST":
+        return redirect("admin_portal:feature_d_dashboard")
+    enabled = (request.POST.get("enabled") or "").lower() == "true"
+    try:
+        result = toggle_delivery(seller_id, enabled)
+        audit.record_write(
+            request.user,
+            "feature_d.delivery.toggle",
+            summary=f"{'Enabled' if enabled else 'Suspended'} delivery for breeder {seller_id}",
+            target_type="feature_d_seller",
+            target_id=str(seller_id),
+            request=request,
+            enabled=enabled,
+            backend_result=result.get("data", {}),
+        )
+        messages.success(request, "Delivery override sent to the backend.")
+    except FeatureDBackendError as exc:
+        messages.error(request, str(exc))
+    return redirect("admin_portal:feature_d_dashboard")
+
+
+@admin_required
+def feature_d_audit(request):
+    q = (request.GET.get("q") or "").strip()
+    action = (request.GET.get("action") or "").strip()
+    qs = ExternalFeatureDAuditLog.objects.all().order_by("-timestamp")
+    if q:
+        qs = qs.filter(
+            Q(entity_id__icontains=q)
+            | Q(badge_type__icontains=q)
+            | Q(action_reason__icontains=q)
+            | Q(triggered_by__icontains=q)
+        )
+    if action:
+        qs = qs.filter(action=action)
+    paginator = Paginator(qs, 40)
+    page_obj = paginator.get_page(request.GET.get("page"))
+    return render(
+        request,
+        "admin_portal/feature_d_audit.html",
+        {
+            "page_obj": page_obj,
+            "q": q,
+            "action": action,
+        },
+    )
 
 
 @admin_required

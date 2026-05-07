@@ -1,0 +1,330 @@
+{% extends "admin_portal/base.html" %}
+{% block title %}Feature D Ops | {{ APP_NAME }}{% endblock %}
+{% block topbar_title %}Feature D Operations{% endblock %}
+{% block content %}
+
+<section class="hero-shell">
+  <div class="hero-copy">
+    <div class="hero-kicker">Breeder commerce control plane</div>
+    <h1>Feature D live operations</h1>
+    <p class="page-subtitle">Verification queue, dispute oversight, Stripe Connect watchlist, holiday-mode monitoring, and backend-controlled overrides for the v4 breeder reservation flow.</p>
+    <div class="page-actions" style="margin-top:22px;">
+      <a class="btn" href="{% url 'admin_portal:feature_d_audit' %}">Open Feature D audit</a>
+      <a class="btn" href="{% url 'admin_portal:dashboard' %}">Back to main dashboard</a>
+    </div>
+  </div>
+
+  <div class="hero-rail">
+    <div class="hero-stat">
+      <span class="hero-stat-label">Pending licences</span>
+      <strong>{{ pending_verification_count }}</strong>
+      <span class="hero-stat-note">Manual approval queue</span>
+    </div>
+    <div class="hero-stat">
+      <span class="hero-stat-label">Open disputes</span>
+      <strong>{{ open_dispute_count }}</strong>
+      <span class="hero-stat-note">Buyer escalations awaiting action</span>
+    </div>
+    <div class="hero-stat">
+      <span class="hero-stat-label">Connect watchlist</span>
+      <strong>{{ watchlist_count }}</strong>
+      <span class="hero-stat-note">Payout, suspension, or onboarding blockers</span>
+    </div>
+  </div>
+</section>
+
+{% if backend_error %}
+<div class="message warning">{{ backend_error }}</div>
+{% endif %}
+
+<div class="metrics-grid">
+  <div class="metric-card">
+    <div class="metric-label">Bridge mode</div>
+    <div class="metric-value">{% if backend_bridge_configured %}Live{% else %}Read-only{% endif %}</div>
+    <div class="metric-hint">Backend actions use the shared bearer token bridge.</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-label">Holiday mode breeders</div>
+    <div class="metric-value">{{ holiday_count }}</div>
+    <div class="metric-hint">Browsing stays on, checkout stays blocked.</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-label">Backend summary reservations</div>
+    <div class="metric-value">{{ backend_summary.total_reservations|default:"-" }}</div>
+    <div class="metric-hint">From `/api/v1/marketplace/admin/reservations/dashboard/`</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-label">Backend summary disputes</div>
+    <div class="metric-value">{{ backend_summary.open_disputes|default:"-" }}</div>
+    <div class="metric-hint">Active dispute count from source service.</div>
+  </div>
+</div>
+
+<div class="grid-2">
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-title">Licence verification queue</div>
+        <div class="card-subtitle">Approve or reject breeder delivery licences through the backend bridge.</div>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Breeder</th>
+            <th>Licence</th>
+            <th>Expiry</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in pending_verifications %}
+          <tr>
+            <td>
+              <div class="cell-name">{{ item.seller.name|default:item.seller.username|default:item.seller.email }}</div>
+              <div class="cell-sub">{{ item.seller.email }}</div>
+            </td>
+            <td>
+              <div class="cell-name mono">{{ item.licence_number }}</div>
+              <div class="cell-sub">{{ item.issuing_authority }}</div>
+            </td>
+            <td class="mono">{{ item.expiry_date|default:"-" }}</td>
+            <td><span class="badge pending">{{ item.status }}</span></td>
+            <td>
+              {% if backend_bridge_configured %}
+              <form method="post" action="{% url 'admin_portal:feature_d_verification_action' item.id 'approve' %}" style="display:inline-block;">
+                {% csrf_token %}
+                <button class="btn btn-sm" type="submit">Approve</button>
+              </form>
+              <form method="post" action="{% url 'admin_portal:feature_d_verification_action' item.id 'reject' %}" style="display:inline-block; margin-top:6px;">
+                {% csrf_token %}
+                <input type="hidden" name="rejection_reason" value="Admin requested a resubmission.">
+                <button class="btn btn-sm" type="submit">Reject</button>
+              </form>
+              {% else %}
+              <span class="cell-sub">Bridge required</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="empty-state">No pending breeder licence reviews.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-title">Open disputes</div>
+        <div class="card-subtitle">Resolve reservation disputes using the backend’s canonical resolution flow.</div>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Reservation</th>
+            <th>Reason</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for dispute in open_disputes %}
+          <tr>
+            <td>
+              <div class="cell-name mono">{{ dispute.reservation.reservation_code }}</div>
+              <div class="cell-sub">{{ dispute.reservation.seller.email }} → {{ dispute.reservation.buyer.email }}</div>
+            </td>
+            <td>
+              <div class="cell-name">{{ dispute.reason|title }}</div>
+              <div class="cell-sub">{{ dispute.description|truncatechars:90 }}</div>
+            </td>
+            <td><span class="badge warn">{{ dispute.status }}</span></td>
+            <td>
+              {% if backend_bridge_configured %}
+              <form method="post" action="{% url 'admin_portal:feature_d_dispute_action' dispute.id %}">
+                {% csrf_token %}
+                <input type="hidden" name="resolution" value="refund_buyer">
+                <input type="hidden" name="summary" value="Resolved from Feature D admin queue.">
+                <button class="btn btn-sm" type="submit">Resolve</button>
+              </form>
+              {% else %}
+              <span class="cell-sub">Bridge required</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="4" class="empty-state">No active reservation disputes.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="grid-2">
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-title">Stripe Connect monitor</div>
+        <div class="card-subtitle">Breeders who are blocked by onboarding, payouts, or a delivery suspension.</div>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Breeder</th>
+            <th>Connect</th>
+            <th>Payouts</th>
+            <th>Delivery</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in connect_watchlist %}
+          <tr>
+            <td>
+              <div class="cell-name">{{ item.user.name|default:item.user.username|default:item.user.email }}</div>
+              <div class="cell-sub">{{ item.user.email }}</div>
+            </td>
+            <td><span class="badge {% if item.stripe_connect_status == 'active' %}ok{% else %}pending{% endif %}">{{ item.stripe_connect_status|default:"unknown" }}</span></td>
+            <td>{{ item.payouts_enabled|yesno:"Enabled,Blocked" }}</td>
+            <td>{{ item.delivery_suspended|yesno:"Suspended,Available" }}</td>
+            <td>
+              {% if backend_bridge_configured %}
+              <form method="post" action="{% url 'admin_portal:feature_d_delivery_toggle' item.user_id %}">
+                {% csrf_token %}
+                <input type="hidden" name="enabled" value="{% if item.delivery_suspended %}true{% else %}false{% endif %}">
+                <button class="btn btn-sm" type="submit">{% if item.delivery_suspended %}Enable{% else %}Suspend{% endif %}</button>
+              </form>
+              {% else %}
+              <span class="cell-sub">Bridge required</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="empty-state">No breeders currently on the Connect watchlist.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-title">Licence expiry + holiday monitor</div>
+        <div class="card-subtitle">Operational blockers that affect checkout availability and fulfilment trust context.</div>
+      </div>
+    </div>
+    <div class="detail-list">
+      {% for item in expiring_soon %}
+      <div class="detail-item split">
+        <div>
+          <strong>{{ item.seller.name|default:item.seller.username|default:item.seller.email }}</strong>
+          <div class="cell-sub">Licence {{ item.licence_number }} expires {{ item.expiry_date }}</div>
+        </div>
+        <span class="badge warn">Expiring</span>
+      </div>
+      {% empty %}
+      <div class="empty-state">No approved licences expiring in the next 30 days.</div>
+      {% endfor %}
+      {% for item in holiday_mode %}
+      <div class="detail-item split">
+        <div>
+          <strong>{{ item.seller.name|default:item.seller.username|default:item.seller.email }}</strong>
+          <div class="cell-sub">{{ item.holiday_message|default:"Holiday mode enabled." }}</div>
+        </div>
+        <span class="badge pending">Holiday</span>
+      </div>
+      {% empty %}
+      {% if not expiring_soon %}
+      <div class="empty-state">No breeders are currently in holiday mode.</div>
+      {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<div class="grid-2-equal">
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-title">Recent reservations</div>
+        <div class="card-subtitle">Latest breeder orders crossing the canonical checkout flow.</div>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th>Breeder / Buyer</th>
+            <th>Status</th>
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in recent_reservations %}
+          <tr>
+            <td class="mono">{{ item.reservation_code }}</td>
+            <td>
+              <div class="cell-name">{{ item.seller.email }}</div>
+              <div class="cell-sub">{{ item.buyer.email }}</div>
+            </td>
+            <td>
+              <span class="badge {% if item.status == 'completed' %}ok{% elif item.status == 'disputed' %}danger{% else %}pending{% endif %}">{{ item.status }}</span>
+              <div class="cell-sub">{{ item.payment_status }}</div>
+            </td>
+            <td class="mono">£{{ item.total_amount|default:"0.00" }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="4" class="empty-state">No breeder reservations found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-title">Recent Feature D audit</div>
+        <div class="card-subtitle">Hash-chain state transitions and badge events from the shared backend.</div>
+      </div>
+      <a class="btn btn-sm" href="{% url 'admin_portal:feature_d_audit' %}">Open full audit</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Action</th>
+            <th>Entity</th>
+            <th>Reason</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in recent_feature_d_audit %}
+          <tr>
+            <td class="mono">{{ item.timestamp|date:"d M H:i" }}</td>
+            <td><span class="badge muted">{{ item.action }}</span></td>
+            <td class="mono">{{ item.entity_type }} / {{ item.entity_id }}</td>
+            <td class="cell-sub">{{ item.action_reason|truncatechars:90 }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="4" class="empty-state">No Feature D audit entries found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
