@@ -69,10 +69,17 @@ from .services.feature_d_backend import (
     resolve_dispute,
     toggle_delivery,
 )
-from .services.google_oauth import clear_gmail_service_cache
+from .services.google_oauth import (
+    build_authorization_url,
+    clear_gmail_service_cache,
+    exchange_code_for_tokens,
+    fetch_connected_profile,
+    map_aliases,
+)
 from .services.health import get_health_snapshot
 from .services.inquiry_intelligence import apply_inquiry_action, persist_inquiry_analysis
 from .services.mailbox import fetch_support_inbox, send_support_reply
+from .services.runtime_config import get_gmail_runtime_config
 from .services.notifier import notify_invite, notify_password_change
 from .services.issue_runner import process_pending_issues
 from .services.reporting import build_report_for
@@ -837,8 +844,147 @@ def operational_settings_view(request):
     return render(
         request,
         "admin_portal/operational_settings.html",
-        {"form": form, "settings_obj": config},
+        {
+            "form": form,
+            "settings_obj": config,
+            "gmail_connected": bool(config.gmail_refresh_token),
+            "gmail_redirect_uri": _google_redirect_uri(request),
+            "gmail_client_ready": bool(config.gmail_client_id and config.gmail_client_secret),
+        },
     )
+
+
+def _google_redirect_uri(request) -> str:
+    """The exact callback URL that must be registered in the Google Cloud OAuth client."""
+    return request.build_absolute_uri(reverse("admin_portal:google_oauth_callback"))
+
+
+@super_admin_required
+def google_oauth_start(request):
+    """Kick off the Google consent flow and redirect the admin to Google's sign-in screen."""
+    config = OperationalSettings.get_solo()
+    if not (config.gmail_client_id and config.gmail_client_secret):
+        messages.error(
+            request,
+            "Add the Google OAuth client ID and client secret and save settings before connecting the mailbox.",
+        )
+        return redirect("admin_portal:operational_settings")
+
+    state = secrets.token_urlsafe(24)
+    request.session["google_oauth_state"] = state
+    auth_url = build_authorization_url(
+        client_id=config.gmail_client_id,
+        redirect_uri=_google_redirect_uri(request),
+        state=state,
+        login_hint=config.gmail_sender or "support@aquaai.uk",
+    )
+    return redirect(auth_url)
+
+
+@super_admin_required
+def google_oauth_callback(request):
+    """Handle Google's redirect, exchange the code, store the refresh token, and link aliases."""
+    config = OperationalSettings.get_solo()
+    error = request.GET.get("error")
+    if error:
+        messages.error(request, f"Google sign-in was cancelled or failed: {error}")
+        return redirect("admin_portal:operational_settings")
+
+    expected_state = request.session.pop("google_oauth_state", None)
+    returned_state = request.GET.get("state")
+    if not expected_state or expected_state != returned_state:
+        messages.error(request, "The Google sign-in response could not be verified. Please try connecting again.")
+        return redirect("admin_portal:operational_settings")
+
+    code = request.GET.get("code")
+    if not code:
+        messages.error(request, "Google did not return an authorization code. Please try connecting again.")
+        return redirect("admin_portal:operational_settings")
+
+    try:
+        tokens = exchange_code_for_tokens(
+            client_id=config.gmail_client_id,
+            client_secret=config.gmail_client_secret,
+            code=code,
+            redirect_uri=_google_redirect_uri(request),
+        )
+    except Exception as exc:
+        messages.error(request, f"Could not complete the Google connection: {exc}")
+        return redirect("admin_portal:operational_settings")
+
+    refresh_token = tokens.get("refresh_token") or config.gmail_refresh_token
+    if not refresh_token:
+        messages.error(
+            request,
+            "Google did not return a refresh token. Remove Aqua AI from your Google account permissions and connect again.",
+        )
+        return redirect("admin_portal:operational_settings")
+
+    profile = {"primary_email": "", "aliases": []}
+    try:
+        profile = fetch_connected_profile(
+            access_token=tokens.get("access_token", ""),
+            refresh_token=refresh_token,
+            client_id=config.gmail_client_id,
+            client_secret=config.gmail_client_secret,
+        )
+    except Exception:
+        profile = {"primary_email": config.gmail_sender, "aliases": []}
+
+    mapping = map_aliases(profile.get("primary_email", ""), profile.get("aliases", []))
+
+    config.gmail_refresh_token = refresh_token
+    if mapping.get("sender"):
+        config.gmail_sender = mapping["sender"]
+    if mapping.get("support_alias"):
+        config.support_alias_email = mapping["support_alias"]
+    if mapping.get("privacy_alias"):
+        config.privacy_alias_email = mapping["privacy_alias"]
+    if mapping.get("providers_alias"):
+        config.providers_alias_email = mapping["providers_alias"]
+    config.updated_by = request.user
+    config.save()
+    clear_gmail_service_cache()
+
+    linked = [a for a in profile.get("aliases", []) if a]
+    audit.record_write(
+        request.user,
+        "settings.gmail_connect",
+        target_type="operational_settings",
+        target_id=config.id,
+        request=request,
+        summary=f"Connected Google Workspace mailbox {profile.get('primary_email') or config.gmail_sender}.",
+        connected_mailbox=profile.get("primary_email", ""),
+        linked_aliases=linked,
+    )
+    messages.success(
+        request,
+        "Google Workspace mailbox connected for "
+        f"{profile.get('primary_email') or config.gmail_sender}. "
+        + (f"Linked aliases: {', '.join(linked)}." if linked else "Inbox lanes are ready."),
+    )
+    return redirect("admin_portal:operational_settings")
+
+
+@super_admin_required
+def google_oauth_disconnect(request):
+    """Clear the stored Gmail credentials so the mailbox is fully disconnected."""
+    if request.method == "POST":
+        config = OperationalSettings.get_solo()
+        config.gmail_refresh_token = ""
+        config.updated_by = request.user
+        config.save(update_fields=["gmail_refresh_token", "updated_by", "updated_at"])
+        clear_gmail_service_cache()
+        audit.record_write(
+            request.user,
+            "settings.gmail_disconnect",
+            target_type="operational_settings",
+            target_id=config.id,
+            request=request,
+            summary="Disconnected the Google Workspace mailbox.",
+        )
+        messages.success(request, "The Google Workspace mailbox has been disconnected.")
+    return redirect("admin_portal:operational_settings")
 
 
 @operational_admin_required
@@ -864,6 +1010,7 @@ def support_inbox_list(request):
         "privacy": SupportInquiry.objects.filter(mailbox_kind="privacy").count(),
         "providers": SupportInquiry.objects.filter(mailbox_kind="providers").count(),
     }
+    gmail = get_gmail_runtime_config()
     return render(
         request,
         "admin_portal/support_inbox_list.html",
@@ -873,6 +1020,10 @@ def support_inbox_list(request):
             "status": status,
             "mailbox": mailbox,
             "mailbox_counts": mailbox_counts,
+            "gmail_connected": gmail.configured,
+            "support_alias": gmail.support_alias,
+            "privacy_alias": gmail.privacy_alias,
+            "providers_alias": gmail.providers_alias,
         },
     )
 

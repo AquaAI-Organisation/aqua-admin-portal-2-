@@ -5,7 +5,77 @@
 <div class="page-header">
   <div>
     <h1>Operational settings</h1>
-    <p class="page-subtitle">Connect the Aqua AI Google Workspace mailbox through OAuth, route support aliases into the right inbox lanes, and configure Slack alerts for operational notifications.</p>
+    <p class="page-subtitle">Connect the Aqua AI Google Workspace mailbox with one click, route support aliases into the right inbox lanes, and configure account approval and Slack alerts.</p>
+  </div>
+</div>
+
+{# ── Google Workspace connection (one-click OAuth) ── #}
+<div class="card connect-card {% if gmail_connected %}is-connected{% else %}is-disconnected{% endif %}">
+  <div class="connect-head">
+    <div class="connect-brand">
+      <span class="google-mark" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 48 48">
+          <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+          <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+          <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+          <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+        </svg>
+      </span>
+      <div>
+        <div class="card-title">Google Workspace mailbox</div>
+        <div class="card-subtitle">Sign in once with Google to read the support, privacy, and provider inboxes and send replies and invites.</div>
+      </div>
+    </div>
+    <span class="conn-status {% if gmail_connected %}ok{% else %}idle{% endif %}">
+      <span class="conn-dot" aria-hidden="true"></span>
+      {% if gmail_connected %}Connected{% else %}Not connected{% endif %}
+    </span>
+  </div>
+
+  {% if gmail_connected %}
+  <div class="connect-detail">
+    <div class="connect-account">
+      <div class="meta-text">Connected mailbox</div>
+      <div class="mono connect-email">{{ settings_obj.gmail_sender|default:"support@aquaai.uk" }}</div>
+    </div>
+    <div class="lane-chips">
+      <span class="lane-chip"><span class="lane-dot general"></span>General support <span class="mono">{{ settings_obj.support_alias_email|default:"—" }}</span></span>
+      <span class="lane-chip"><span class="lane-dot privacy"></span>Privacy <span class="mono">{{ settings_obj.privacy_alias_email|default:"—" }}</span></span>
+      <span class="lane-chip"><span class="lane-dot providers"></span>Providers <span class="mono">{{ settings_obj.providers_alias_email|default:"—" }}</span></span>
+    </div>
+  </div>
+  <div class="connect-actions">
+    <a class="btn" href="{% url 'admin_portal:google_oauth_start' %}">Reconnect / refresh access</a>
+    <form method="post" action="{% url 'admin_portal:google_oauth_disconnect' %}" onsubmit="return confirm('Disconnect the Google Workspace mailbox? Inbox sync and outbound email will stop until you reconnect.');">
+      {% csrf_token %}
+      <button class="btn btn-danger" type="submit">Disconnect</button>
+    </form>
+  </div>
+  {% else %}
+  <div class="connect-steps">
+    <ol>
+      <li>Enter your Google OAuth <strong>client ID</strong> and <strong>client secret</strong> below and press <strong>Save settings</strong>.</li>
+      <li>Add the redirect URI shown below to that OAuth client in the Google Cloud Console.</li>
+      <li>Press <strong>Connect with Google</strong> to sign in as <span class="mono">support@aquaai.uk</span> and grant access — the refresh token and aliases are linked automatically.</li>
+    </ol>
+  </div>
+  <div class="connect-actions">
+    {% if gmail_client_ready %}
+    <a class="btn-primary" href="{% url 'admin_portal:google_oauth_start' %}">
+      <span class="btn-google-mark" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+      </span>
+      Connect with Google
+    </a>
+    {% else %}
+    <span class="helper-text">Save your client ID and client secret below to enable the <strong>Connect with Google</strong> button.</span>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <div class="redirect-uri">
+    <span class="meta-text">Authorised redirect URI (register this in the Google Cloud Console)</span>
+    <code class="mono redirect-uri-value">{{ gmail_redirect_uri }}</code>
   </div>
 </div>
 
@@ -22,10 +92,11 @@
       When this toggle is on, the review processor will approve every new breeder or consultant account automatically. Turn it off to return to the usual AI-based approval and risk review logic.
     </div>
     <div class="form-row" style="align-items:center;">
-      <div class="form-group" style="max-width:320px;">
-        <label for="id_auto_activate_new_accounts">Automatic account activation</label>
+      <label class="switch">
         {{ form.auto_activate_new_accounts }}
-      </div>
+        <span class="switch-track" aria-hidden="true"></span>
+        <span class="switch-text">Automatic account activation</span>
+      </label>
       <div class="helper-text">
         On = approve all new accounts automatically. Off = AI-enabled approval.
       </div>
@@ -35,13 +106,9 @@
   <div class="card">
     <div class="card-header">
       <div>
-        <div class="card-title">Google Workspace OAuth</div>
-        <div class="card-subtitle">Use Gmail API access for sending invites, replying to inbox messages, and pulling support, privacy, and provider mailbox traffic into the control plane.</div>
+        <div class="card-title">Google OAuth client credentials</div>
+        <div class="card-subtitle">From your Google Cloud Console OAuth 2.0 client. Saved here so the one-click connect flow above can sign in.</div>
       </div>
-    </div>
-    <div class="helper-text" style="margin-bottom:16px;">
-      The refresh token should be created for <span class="mono">support@aquaai.uk</span>. The Gmail account must have the aliases
-      <span class="mono">privacy@aquaai.uk</span> and <span class="mono">providers@aquaai.uk</span> configured as send-as addresses in Google Workspace.
     </div>
     <div class="form-row">
       <div class="form-group" style="flex:1;">
@@ -53,30 +120,37 @@
         {{ form.gmail_client_secret }}
       </div>
     </div>
-    <div class="form-row">
-      <div class="form-group" style="flex:1;">
-        <label for="id_gmail_refresh_token">Refresh token</label>
-        {{ form.gmail_refresh_token }}
+
+    <details class="advanced-block">
+      <summary>Advanced: manual token &amp; alias overrides</summary>
+      <div class="helper-text" style="margin:12px 0;">
+        These are normally filled in automatically by the <strong>Connect with Google</strong> flow. Only edit them if you are pasting a token generated elsewhere or overriding the detected aliases.
       </div>
-      <div class="form-group" style="flex:1;">
-        <label for="id_gmail_sender">Primary sender mailbox</label>
-        {{ form.gmail_sender }}
+      <div class="form-row">
+        <div class="form-group" style="flex:1;">
+          <label for="id_gmail_refresh_token">Refresh token</label>
+          {{ form.gmail_refresh_token }}
+        </div>
+        <div class="form-group" style="flex:1;">
+          <label for="id_gmail_sender">Primary sender mailbox</label>
+          {{ form.gmail_sender }}
+        </div>
       </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group" style="flex:1;">
-        <label for="id_support_alias_email">General support alias</label>
-        {{ form.support_alias_email }}
+      <div class="form-row">
+        <div class="form-group" style="flex:1;">
+          <label for="id_support_alias_email">General support alias</label>
+          {{ form.support_alias_email }}
+        </div>
+        <div class="form-group" style="flex:1;">
+          <label for="id_privacy_alias_email">Privacy alias</label>
+          {{ form.privacy_alias_email }}
+        </div>
+        <div class="form-group" style="flex:1;">
+          <label for="id_providers_alias_email">Providers alias</label>
+          {{ form.providers_alias_email }}
+        </div>
       </div>
-      <div class="form-group" style="flex:1;">
-        <label for="id_privacy_alias_email">Privacy alias</label>
-        {{ form.privacy_alias_email }}
-      </div>
-      <div class="form-group" style="flex:1;">
-        <label for="id_providers_alias_email">Providers alias</label>
-        {{ form.providers_alias_email }}
-      </div>
-    </div>
+    </details>
   </div>
 
   <div class="card">
@@ -108,62 +182,65 @@
         <div class="card-subtitle">These legacy SMTP and IMAP values remain available as a fallback, but the preferred production path is Google Workspace OAuth above.</div>
       </div>
     </div>
-    <div class="form-row">
-      <div class="form-group" style="flex:1;">
-        <label for="id_smtp_host">SMTP host</label>
-        {{ form.smtp_host }}
+    <details class="advanced-block">
+      <summary>Show legacy SMTP / IMAP settings</summary>
+      <div class="form-row" style="margin-top:12px;">
+        <div class="form-group" style="flex:1;">
+          <label for="id_smtp_host">SMTP host</label>
+          {{ form.smtp_host }}
+        </div>
+        <div class="form-group">
+          <label for="id_smtp_port">SMTP port</label>
+          {{ form.smtp_port }}
+        </div>
+        <div class="form-group">
+          <label for="id_smtp_use_tls">Use TLS</label>
+          {{ form.smtp_use_tls }}
+        </div>
       </div>
-      <div class="form-group">
-        <label for="id_smtp_port">SMTP port</label>
-        {{ form.smtp_port }}
+      <div class="form-row">
+        <div class="form-group" style="flex:1;">
+          <label for="id_smtp_username">SMTP username</label>
+          {{ form.smtp_username }}
+        </div>
+        <div class="form-group" style="flex:1;">
+          <label for="id_smtp_password">SMTP password</label>
+          {{ form.smtp_password }}
+        </div>
+        <div class="form-group" style="flex:1;">
+          <label for="id_default_from_email">Default from email</label>
+          {{ form.default_from_email }}
+        </div>
       </div>
-      <div class="form-group">
-        <label for="id_smtp_use_tls">Use TLS</label>
-        {{ form.smtp_use_tls }}
+      <div class="form-row">
+        <div class="form-group" style="flex:1;">
+          <label for="id_imap_host">IMAP host</label>
+          {{ form.imap_host }}
+        </div>
+        <div class="form-group">
+          <label for="id_imap_port">IMAP port</label>
+          {{ form.imap_port }}
+        </div>
+        <div class="form-group">
+          <label for="id_imap_use_ssl">Use SSL</label>
+          {{ form.imap_use_ssl }}
+        </div>
       </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group" style="flex:1;">
-        <label for="id_smtp_username">SMTP username</label>
-        {{ form.smtp_username }}
+      <div class="form-row">
+        <div class="form-group" style="flex:1;">
+          <label for="id_imap_username">IMAP username</label>
+          {{ form.imap_username }}
+        </div>
+        <div class="form-group" style="flex:1;">
+          <label for="id_imap_password">IMAP password</label>
+          {{ form.imap_password }}
+        </div>
+        <div class="form-group" style="flex:1;">
+          <label for="id_imap_folder">Mailbox folder</label>
+          {{ form.imap_folder }}
+        </div>
       </div>
-      <div class="form-group" style="flex:1;">
-        <label for="id_smtp_password">SMTP password</label>
-        {{ form.smtp_password }}
-      </div>
-      <div class="form-group" style="flex:1;">
-        <label for="id_default_from_email">Default from email</label>
-        {{ form.default_from_email }}
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group" style="flex:1;">
-        <label for="id_imap_host">IMAP host</label>
-        {{ form.imap_host }}
-      </div>
-      <div class="form-group">
-        <label for="id_imap_port">IMAP port</label>
-        {{ form.imap_port }}
-      </div>
-      <div class="form-group">
-        <label for="id_imap_use_ssl">Use SSL</label>
-        {{ form.imap_use_ssl }}
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group" style="flex:1;">
-        <label for="id_imap_username">IMAP username</label>
-        {{ form.imap_username }}
-      </div>
-      <div class="form-group" style="flex:1;">
-        <label for="id_imap_password">IMAP password</label>
-        {{ form.imap_password }}
-      </div>
-      <div class="form-group" style="flex:1;">
-        <label for="id_imap_folder">Mailbox folder</label>
-        {{ form.imap_folder }}
-      </div>
-    </div>
+    </details>
   </div>
 
   <div class="page-actions">

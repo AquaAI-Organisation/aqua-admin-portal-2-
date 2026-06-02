@@ -16,13 +16,47 @@
   </div>
 </div>
 
-<div class="card">
-  <div class="pill-row">
-    <a class="pill {% if mailbox == 'general' %}active{% endif %}" href="{% url 'admin_portal:support_inbox_list' %}?mailbox=general">General Support Inbox <span class="count-pill">{{ mailbox_counts.general }}</span></a>
-    <a class="pill {% if mailbox == 'providers' %}active{% endif %}" href="{% url 'admin_portal:support_inbox_list' %}?mailbox=providers">Providers Inbox <span class="count-pill">{{ mailbox_counts.providers }}</span></a>
-    <a class="pill {% if mailbox == 'privacy' %}active{% endif %}" href="{% url 'admin_portal:support_inbox_list' %}?mailbox=privacy">Privacy Inbox <span class="count-pill">{{ mailbox_counts.privacy }}</span></a>
+<div class="lane-tabs">
+  <a class="lane-tab general {% if mailbox == 'general' %}active{% endif %}" href="{% url 'admin_portal:support_inbox_list' %}?mailbox=general">
+    <span class="lane-tab-icon">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+    </span>
+    <span>
+      <span class="lane-tab-name">General Support</span>
+      <span class="lane-tab-sub">{{ support_alias|default:"support@aquaai.uk" }}</span>
+    </span>
+    <span class="lane-tab-count">{{ mailbox_counts.general }}</span>
+  </a>
+  <a class="lane-tab privacy {% if mailbox == 'privacy' %}active{% endif %}" href="{% url 'admin_portal:support_inbox_list' %}?mailbox=privacy">
+    <span class="lane-tab-icon">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+    </span>
+    <span>
+      <span class="lane-tab-name">Privacy &amp; DSAR</span>
+      <span class="lane-tab-sub">{{ privacy_alias|default:"privacy@aquaai.uk" }}</span>
+    </span>
+    <span class="lane-tab-count">{{ mailbox_counts.privacy }}</span>
+  </a>
+  <a class="lane-tab providers {% if mailbox == 'providers' %}active{% endif %}" href="{% url 'admin_portal:support_inbox_list' %}?mailbox=providers">
+    <span class="lane-tab-icon">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+    </span>
+    <span>
+      <span class="lane-tab-name">Providers</span>
+      <span class="lane-tab-sub">{{ providers_alias|default:"providers@aquaai.uk" }}</span>
+    </span>
+    <span class="lane-tab-count">{{ mailbox_counts.providers }}</span>
+  </a>
+</div>
+
+{% if not gmail_connected %}
+<div class="card" style="border-color:rgba(245,201,110,0.30);">
+  <div class="helper-text">
+    The Google Workspace mailbox is not connected yet, so no live messages will sync.
+    {% if IS_SUPER_ADMIN %}<a href="{% url 'admin_portal:operational_settings' %}">Connect it in Settings</a>{% else %}Ask a super admin to connect it in Settings.{% endif %}
   </div>
 </div>
+{% endif %}
 
 <div class="card">
   <form method="get" class="filter-row">

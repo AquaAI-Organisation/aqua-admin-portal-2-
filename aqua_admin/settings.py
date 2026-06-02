@@ -116,6 +116,12 @@ CSRF_TRUSTED_ORIGINS = [
     f"https://{h}" for h in ALLOWED_HOSTS if h != "*"
 ]
 
+# Behind a TLS-terminating proxy (Heroku/Render/etc.) so that
+# request.build_absolute_uri() returns https:// URLs — required for the Google
+# OAuth redirect URI to match what is registered in the Cloud Console.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+USE_X_FORWARDED_HOST = True
+
 # --- Control-plane specific -------------------------------------------------
 
 SUPERADMIN_EMAILS = [
@@ -163,6 +169,9 @@ PROVIDERS_ALIAS_EMAIL = os.getenv("PROVIDERS_ALIAS_EMAIL", "providers@aquaai.uk"
 GMAIL_SCOPES = [
     "https://www.googleapis.com/auth/gmail.modify",
     "https://www.googleapis.com/auth/gmail.send",
+    # Lets the OAuth connect flow read the mailbox's send-as aliases so the
+    # privacy/providers/support inbox lanes can be linked automatically.
+    "https://www.googleapis.com/auth/gmail.settings.basic",
 ]
 
 LOGGING = {

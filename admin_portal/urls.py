@@ -35,6 +35,9 @@ urlpatterns = [
     path("data-requests/verify/<str:token>/", views.dsar_verify, name="dsar_verify"),
     path("data-requests/deliverables/<uuid:deliverable_id>/download/", views.dsar_deliverable_download, name="dsar_deliverable_download"),
     path("settings/", views.operational_settings_view, name="operational_settings"),
+    path("settings/google/connect/", views.google_oauth_start, name="google_oauth_start"),
+    path("settings/google/callback/", views.google_oauth_callback, name="google_oauth_callback"),
+    path("settings/google/disconnect/", views.google_oauth_disconnect, name="google_oauth_disconnect"),
 
     # AI reviews
     path("reviews/", views.review_list, name="review_list"),

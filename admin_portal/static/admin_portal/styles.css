@@ -1598,6 +1598,244 @@ details summary:hover { color: var(--accent); }
   background: rgba(125,212,255,0.28);
 }
 
+/* ── Google Workspace connection card ─────────────────────── */
+.connect-card {
+  display: grid;
+  gap: 18px;
+  border-color: rgba(125,212,255,0.16);
+}
+
+.connect-card.is-connected {
+  border-color: rgba(109,232,159,0.30);
+  box-shadow: 0 0 0 1px rgba(109,232,159,0.10), 0 18px 40px rgba(0,0,0,0.18);
+}
+
+.connect-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.connect-brand {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.google-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+  flex: none;
+}
+
+.conn-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.conn-status .conn-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+}
+
+.conn-status.ok {
+  color: var(--ok);
+  background: rgba(109,232,159,0.10);
+  border: 1px solid rgba(109,232,159,0.30);
+}
+.conn-status.ok .conn-dot { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+
+.conn-status.idle {
+  color: var(--muted);
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(125,212,255,0.16);
+}
+.conn-status.idle .conn-dot { background: var(--muted); }
+
+.connect-detail {
+  display: grid;
+  gap: 14px;
+}
+
+.connect-email { font-size: 1.0rem; color: var(--text); margin-top: 4px; }
+
+.lane-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.lane-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 13px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(125,212,255,0.14);
+  background: rgba(255,255,255,0.03);
+  font-size: 0.82rem;
+  color: var(--soft);
+}
+
+.lane-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.lane-dot.general   { background: var(--accent-2); box-shadow: 0 0 6px var(--accent-2); }
+.lane-dot.privacy   { background: var(--accent-3); box-shadow: 0 0 6px var(--accent-3); }
+.lane-dot.providers { background: var(--accent);   box-shadow: 0 0 6px var(--accent); }
+
+.connect-steps ol {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 10px;
+  color: var(--soft);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.connect-steps strong { color: var(--text); }
+
+.connect-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.connect-actions form { margin: 0; }
+
+.btn-google-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px; height: 22px;
+  border-radius: 5px;
+  background: #fff;
+  margin-right: 4px;
+}
+a.btn-primary { display: inline-flex; align-items: center; gap: 4px; text-decoration: none; }
+
+.redirect-uri {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed rgba(125,212,255,0.20);
+  background: rgba(255,255,255,0.02);
+}
+.redirect-uri-value {
+  word-break: break-all;
+  color: var(--accent-2);
+  font-size: 0.84rem;
+}
+
+/* ── Toggle switch ────────────────────────────────────────── */
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.switch-track {
+  position: relative;
+  width: 46px; height: 26px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.10);
+  border: 1px solid rgba(125,212,255,0.18);
+  transition: background var(--t-fast), border-color var(--t-fast);
+  flex: none;
+}
+.switch-track::after {
+  content: "";
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform var(--t-fast), background var(--t-fast);
+}
+.switch input:checked + .switch-track {
+  background: linear-gradient(135deg, var(--accent-3), var(--accent) 40%, var(--accent-2));
+  border-color: transparent;
+}
+.switch input:checked + .switch-track::after {
+  transform: translateX(20px);
+  background: #021c2e;
+}
+.switch input:focus-visible + .switch-track {
+  outline: 2px solid var(--accent-2);
+  outline-offset: 2px;
+}
+
+.advanced-block {
+  border-top: 1px solid rgba(125,212,255,0.10);
+  padding-top: 12px;
+  margin-top: 4px;
+}
+
+/* ── Inbox lanes (segmented) ──────────────────────────────── */
+.lane-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.lane-tab {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  border: 1px solid rgba(125,212,255,0.12);
+  background: rgba(255,255,255,0.03);
+  text-decoration: none;
+  color: var(--soft);
+  transition: transform var(--t-fast), border-color var(--t-fast), background var(--t-fast);
+}
+.lane-tab:hover { transform: translateY(-2px); color: var(--text); }
+.lane-tab .lane-tab-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 38px; height: 38px; border-radius: 10px;
+  background: rgba(255,255,255,0.04);
+  flex: none;
+}
+.lane-tab .lane-tab-name { font-weight: 700; color: var(--text); font-size: 0.92rem; }
+.lane-tab .lane-tab-sub { font-size: 0.74rem; color: var(--muted); margin-top: 2px; }
+.lane-tab .lane-tab-count {
+  margin-left: auto;
+  font-size: 1.4rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+
+.lane-tab.general.active   { border-color: rgba(125,212,255,0.45); background: rgba(125,212,255,0.08); }
+.lane-tab.general .lane-tab-icon   { color: var(--accent-2); }
+.lane-tab.privacy.active   { border-color: rgba(203,247,112,0.45); background: rgba(203,247,112,0.07); }
+.lane-tab.privacy .lane-tab-icon   { color: var(--accent-3); }
+.lane-tab.providers.active { border-color: rgba(94,232,197,0.45); background: rgba(94,232,197,0.08); }
+.lane-tab.providers .lane-tab-icon { color: var(--accent); }
+
+@media (max-width: 900px) {
+  .lane-tabs { grid-template-columns: 1fr; }
+}
+
 /* ── Animations ───────────────────────────────────────────── */
 @keyframes rise-in {
   from { opacity: 0; transform: translateY(10px); }
