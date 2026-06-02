@@ -7,3 +7,5 @@ slack-sdk>=3.26
 requests>=2.31
 gunicorn>=21.2
 whitenoise>=6.6
+google-api-python-client>=2.140
+google-auth>=2.34

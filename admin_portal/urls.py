@@ -6,6 +6,11 @@ app_name = "admin_portal"
 
 urlpatterns = [
     path("", views.dashboard, name="dashboard"),
+    path("feature-d/", views.feature_d_dashboard, name="feature_d_dashboard"),
+    path("feature-d/audit/", views.feature_d_audit, name="feature_d_audit"),
+    path("feature-d/verifications/<int:verification_id>/<str:decision>/", views.feature_d_verification_action, name="feature_d_verification_action"),
+    path("feature-d/disputes/<int:dispute_id>/resolve/", views.feature_d_dispute_action, name="feature_d_dispute_action"),
+    path("feature-d/breeders/<str:seller_id>/delivery-toggle/", views.feature_d_delivery_toggle, name="feature_d_delivery_toggle"),
     path("background-video/", views.background_video, name="background_video"),
     path("login/", views.login_view, name="login"),
     path("logout/", views.logout_view, name="logout"),
@@ -21,6 +26,14 @@ urlpatterns = [
     path("inbox/<int:inquiry_id>/analyse/", views.support_inbox_analyse, name="support_inbox_analyse"),
     path("inbox/<int:inquiry_id>/apply-action/", views.support_inbox_apply_action, name="support_inbox_apply_action"),
     path("inbox/<int:inquiry_id>/reply/", views.support_inbox_send_reply, name="support_inbox_send_reply"),
+    path("data-requests/", views.dsar_request_list, name="dsar_request_list"),
+    path("data-requests/<uuid:request_id>/", views.dsar_request_detail, name="dsar_request_detail"),
+    path("data-requests/<uuid:request_id>/prepare/", views.dsar_prepare, name="dsar_prepare"),
+    path("data-requests/<uuid:request_id>/approve/", views.dsar_approve, name="dsar_approve"),
+    path("data-requests/<uuid:request_id>/reject/", views.dsar_reject, name="dsar_reject"),
+    path("data-requests/<uuid:request_id>/extend/", views.dsar_extend, name="dsar_extend"),
+    path("data-requests/verify/<str:token>/", views.dsar_verify, name="dsar_verify"),
+    path("data-requests/deliverables/<uuid:deliverable_id>/download/", views.dsar_deliverable_download, name="dsar_deliverable_download"),
     path("settings/", views.operational_settings_view, name="operational_settings"),
 
     # AI reviews

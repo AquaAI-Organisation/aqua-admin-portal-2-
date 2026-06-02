@@ -31,6 +31,21 @@ class EmailRuntimeConfig:
 
 
 @dataclass
+class GmailRuntimeConfig:
+    client_id: str
+    client_secret: str
+    refresh_token: str
+    sender: str
+    support_alias: str
+    privacy_alias: str
+    providers_alias: str
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.client_id and self.client_secret and self.refresh_token and self.sender)
+
+
+@dataclass
 class SlackRuntimeConfig:
     token: str
     channel: str
@@ -63,6 +78,19 @@ def get_email_runtime_config() -> EmailRuntimeConfig:
         username=op.smtp_username or getattr(settings, "EMAIL_HOST_USER", ""),
         password=op.smtp_password or getattr(settings, "EMAIL_HOST_PASSWORD", ""),
         default_from_email=op.default_from_email or getattr(settings, "DEFAULT_FROM_EMAIL", "Aqua Admin <admin@humara.io>"),
+    )
+
+
+def get_gmail_runtime_config() -> GmailRuntimeConfig:
+    op = get_operational_settings()
+    return GmailRuntimeConfig(
+        client_id=op.gmail_client_id or getattr(settings, "GMAIL_CLIENT_ID", ""),
+        client_secret=op.gmail_client_secret or getattr(settings, "GMAIL_CLIENT_SECRET", ""),
+        refresh_token=op.gmail_refresh_token or getattr(settings, "GMAIL_REFRESH_TOKEN", ""),
+        sender=op.gmail_sender or getattr(settings, "GMAIL_SENDER", "support@aquaai.uk"),
+        support_alias=op.support_alias_email or getattr(settings, "SUPPORT_ALIAS_EMAIL", "support@aquaai.uk"),
+        privacy_alias=op.privacy_alias_email or getattr(settings, "PRIVACY_ALIAS_EMAIL", "privacy@aquaai.uk"),
+        providers_alias=op.providers_alias_email or getattr(settings, "PROVIDERS_ALIAS_EMAIL", "providers@aquaai.uk"),
     )
 
 

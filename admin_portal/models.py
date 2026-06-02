@@ -8,6 +8,7 @@ Two kinds of tables live here:
    `consultant_consultantprofile`, `breeders_breederprofile`). The `managed = False`
    flag guarantees migrations here will never touch the main backend's schema.
 """
+from datetime import timedelta
 import uuid
 
 from django.conf import settings
@@ -61,6 +62,11 @@ ISSUE_STATUS_CHOICES = [
     ("resolved", "Resolved"),
     ("error", "Error"),
 ]
+MAILBOX_KIND_CHOICES = [
+    ("general", "General Support"),
+    ("privacy", "Privacy"),
+    ("providers", "Providers"),
+]
 INQUIRY_STATUS_CHOICES = [
     ("new", "New"),
     ("triaged", "Triaged"),
@@ -68,6 +74,37 @@ INQUIRY_STATUS_CHOICES = [
     ("replied", "Replied"),
     ("archived", "Archived"),
     ("error", "Error"),
+]
+DSAR_REQUEST_TYPE_CHOICES = [
+    ("access", "Access"),
+    ("portability", "Portability"),
+    ("rectification", "Rectification"),
+    ("erasure", "Erasure"),
+    ("restriction", "Restriction"),
+    ("objection", "Objection"),
+]
+DSAR_STATUS_CHOICES = [
+    ("received", "Received"),
+    ("verifying", "Verifying"),
+    ("verified", "Verified"),
+    ("in_progress", "In progress"),
+    ("awaiting_dpo_approval", "Awaiting DPO approval"),
+    ("fulfilled", "Fulfilled"),
+    ("rejected", "Rejected"),
+    ("extended", "Extended"),
+    ("withdrawn", "Withdrawn"),
+    ("unmatched", "Unmatched"),
+]
+DSAR_CHANNEL_CHOICES = [
+    ("web_form", "Web form"),
+    ("email", "Email"),
+    ("in_app", "In app"),
+]
+DSAR_DELIVERABLE_CHOICES = [
+    ("access_export_json", "Access export JSON"),
+    ("access_export_html", "Access export HTML"),
+    ("deletion_report_json", "Deletion report JSON"),
+    ("deletion_report_html", "Deletion report HTML"),
 ]
 
 
@@ -182,6 +219,21 @@ class AdminInvite(models.Model):
 
 
 class OperationalSettings(models.Model):
+    auto_activate_new_accounts = models.BooleanField(
+        default=False,
+        help_text=(
+            "When enabled, new breeder and consultant accounts are automatically approved "
+            "without AI review as soon as the review processor picks them up."
+        ),
+    )
+    gmail_client_id = models.CharField(max_length=255, blank=True)
+    gmail_client_secret = models.CharField(max_length=255, blank=True)
+    gmail_refresh_token = models.CharField(max_length=255, blank=True)
+    gmail_sender = models.CharField(max_length=255, blank=True, default="support@aquaai.uk")
+    support_alias_email = models.CharField(max_length=255, blank=True, default="support@aquaai.uk")
+    privacy_alias_email = models.CharField(max_length=255, blank=True, default="privacy@aquaai.uk")
+    providers_alias_email = models.CharField(max_length=255, blank=True, default="providers@aquaai.uk")
+
     smtp_host = models.CharField(max_length=255, blank=True)
     smtp_port = models.PositiveIntegerField(default=587)
     smtp_use_tls = models.BooleanField(default=True)
@@ -229,10 +281,14 @@ class OperationalSettings(models.Model):
 
 class SupportInquiry(models.Model):
     message_id = models.CharField(max_length=255, unique=True)
+    gmail_thread_id = models.CharField(max_length=255, blank=True)
     from_email = models.EmailField()
     from_name = models.CharField(max_length=255, blank=True)
+    to_email = models.CharField(max_length=255, blank=True)
+    mailbox_kind = models.CharField(max_length=20, choices=MAILBOX_KIND_CHOICES, default="general")
     subject = models.CharField(max_length=255, blank=True)
     body_text = models.TextField(blank=True)
+    gmail_label_ids = models.JSONField(default=list, blank=True)
     received_at = models.DateTimeField(default=timezone.now)
     status = models.CharField(max_length=20, choices=INQUIRY_STATUS_CHOICES, default="new")
     matched_entity_type = models.CharField(max_length=32, blank=True)
@@ -253,10 +309,109 @@ class SupportInquiry(models.Model):
         ordering = ["-received_at", "-created_at"]
         indexes = [
             models.Index(fields=["status", "-received_at"], name="admin_porta_inquiry_status_idx"),
+            models.Index(fields=["mailbox_kind", "-received_at"], name="admp_inquiry_mailbox_idx"),
         ]
 
     def __str__(self):
         return self.subject or self.from_email
+
+    @property
+    def mailbox_label(self):
+        return dict(MAILBOX_KIND_CHOICES).get(self.mailbox_kind, self.mailbox_kind)
+
+    @property
+    def latest_dsar_request(self):
+        return self.dsar_requests.order_by("-created_at").first()
+
+
+class DSARRequest(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    inquiry = models.ForeignKey(
+        SupportInquiry, null=True, blank=True, on_delete=models.SET_NULL, related_name="dsar_requests"
+    )
+    request_type = models.CharField(max_length=20, choices=DSAR_REQUEST_TYPE_CHOICES, default="access")
+    status = models.CharField(max_length=32, choices=DSAR_STATUS_CHOICES, default="received")
+    subject_user_id = models.UUIDField(null=True, blank=True)
+    submitted_email = models.EmailField()
+    submitted_name = models.CharField(max_length=255, blank=True)
+    detail = models.TextField(blank=True)
+    channel = models.CharField(max_length=16, choices=DSAR_CHANNEL_CHOICES, default="email")
+    received_at = models.DateTimeField(default=timezone.now)
+    verified_at = models.DateTimeField(null=True, blank=True)
+    dpo_actioned_at = models.DateTimeField(null=True, blank=True)
+    fulfilled_at = models.DateTimeField(null=True, blank=True)
+    due_at = models.DateTimeField(null=True, blank=True)
+    extended = models.BooleanField(default=False)
+    extension_reason = models.TextField(blank=True)
+    dpo_actor = models.ForeignKey(
+        AdminUser, null=True, blank=True, on_delete=models.SET_NULL, related_name="dsar_actions"
+    )
+    verification_token_hash = models.CharField(max_length=128, blank=True)
+    verification_sent_at = models.DateTimeField(null=True, blank=True)
+    verification_expires_at = models.DateTimeField(null=True, blank=True)
+    verification_email = models.EmailField(blank=True)
+    export_summary = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["received_at", "-created_at"]
+        indexes = [
+            models.Index(fields=["status", "due_at"], name="admp_dsar_status_due_idx"),
+            models.Index(fields=["submitted_email"], name="admin_porta_dsar_email_idx"),
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self.due_at and self.received_at:
+            self.due_at = self.received_at + timedelta(days=30)
+        super().save(*args, **kwargs)
+
+    @property
+    def days_remaining(self) -> int:
+        if not self.due_at:
+            return 0
+        delta = self.due_at - timezone.now()
+        return int(delta.total_seconds() // 86400)
+
+    @property
+    def is_overdue(self) -> bool:
+        return bool(self.due_at and timezone.now() > self.due_at and self.status not in {"fulfilled", "rejected", "withdrawn"})
+
+    @property
+    def request_type_label(self):
+        return dict(DSAR_REQUEST_TYPE_CHOICES).get(self.request_type, self.request_type)
+
+
+class DSAREvent(models.Model):
+    request = models.ForeignKey(DSARRequest, on_delete=models.CASCADE, related_name="events")
+    action = models.CharField(max_length=64)
+    actor = models.ForeignKey(
+        AdminUser, null=True, blank=True, on_delete=models.SET_NULL, related_name="dsar_events"
+    )
+    details = models.JSONField(default=dict, blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["created_at", "id"]
+        indexes = [
+            models.Index(fields=["request", "created_at"], name="admin_porta_dsar_event_idx"),
+        ]
+
+
+class DSARDeliverable(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    request = models.ForeignKey(DSARRequest, on_delete=models.CASCADE, related_name="deliverables")
+    artefact_type = models.CharField(max_length=32, choices=DSAR_DELIVERABLE_CHOICES)
+    storage_ref = models.TextField()
+    file_name = models.CharField(max_length=255, blank=True)
+    mime_type = models.CharField(max_length=128, blank=True)
+    generated_at = models.DateTimeField(default=timezone.now)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    retrieved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-generated_at"]
 
 
 # ---------------------------------------------------------------------------
@@ -611,6 +766,141 @@ class ExternalMessage(models.Model):
     class Meta:
         managed = False
         db_table = "messaging_message"
+
+
+class ExternalMarketplaceSellerProfile(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    user = models.ForeignKey(
+        ExternalUser, on_delete=models.DO_NOTHING, db_column="user_id", related_name="+"
+    )
+    rating = models.FloatField(null=True, blank=True)
+    reviews_count = models.IntegerField(null=True, blank=True)
+    stripe_connect_account_id = models.CharField(max_length=255, blank=True, null=True)
+    stripe_connect_status = models.CharField(max_length=32, blank=True)
+    payouts_enabled = models.BooleanField(default=False)
+    delivery_sales_enabled = models.BooleanField(default=False)
+    delivery_suspended = models.BooleanField(default=False)
+    updated_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "marketplace_sellerprofile"
+
+
+class ExternalBreederShippingProfile(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    seller = models.ForeignKey(
+        ExternalUser, on_delete=models.DO_NOTHING, db_column="seller_id", related_name="+"
+    )
+    supports_collection = models.BooleanField(default=True)
+    supports_delivery = models.BooleanField(default=False)
+    collection_radius_km = models.IntegerField(default=0)
+    local_zone_km = models.IntegerField(default=0)
+    regional_zone_km = models.IntegerField(default=0)
+    appointment_only = models.BooleanField(default=False)
+    holiday_mode_enabled = models.BooleanField(default=False)
+    holiday_message = models.TextField(blank=True)
+    collection_address = models.TextField(blank=True)
+    opening_hours = models.JSONField(default=dict, blank=True)
+    updated_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "marketplace_breedershippingprofile"
+
+
+class ExternalBreederVerification(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    seller = models.ForeignKey(
+        ExternalUser, on_delete=models.DO_NOTHING, db_column="seller_id", related_name="+"
+    )
+    licence_number = models.CharField(max_length=100, blank=True)
+    issuing_authority = models.CharField(max_length=255, blank=True)
+    expiry_date = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=20, blank=True)
+    rejection_reason = models.TextField(blank=True)
+    reviewed_by_id = models.UUIDField(null=True, blank=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "marketplace_breederverification"
+
+
+class ExternalBreederReservation(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    reservation_code = models.CharField(max_length=40)
+    buyer = models.ForeignKey(
+        ExternalUser, on_delete=models.DO_NOTHING, db_column="buyer_id", related_name="+"
+    )
+    seller = models.ForeignKey(
+        ExternalUser, on_delete=models.DO_NOTHING, db_column="seller_id", related_name="+"
+    )
+    delivery_method = models.CharField(max_length=20, blank=True)
+    status = models.CharField(max_length=30, blank=True)
+    payment_status = models.CharField(max_length=20, blank=True)
+    subtotal = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    shipping_cost = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    platform_fee = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    no_show_fee = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    tracking_number = models.CharField(max_length=120, blank=True)
+    courier_name = models.CharField(max_length=120, blank=True)
+    delivery_zone = models.CharField(max_length=20, blank=True)
+    checkout_group_code = models.CharField(max_length=32, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(null=True, blank=True)
+    paid_at = models.DateTimeField(null=True, blank=True)
+    dispatched_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "marketplace_breederreservation"
+
+
+class ExternalReservationDispute(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    reservation = models.ForeignKey(
+        ExternalBreederReservation, on_delete=models.DO_NOTHING, db_column="reservation_id", related_name="+"
+    )
+    opened_by = models.ForeignKey(
+        ExternalUser, on_delete=models.DO_NOTHING, db_column="opened_by_id", related_name="+"
+    )
+    reason = models.CharField(max_length=30, blank=True)
+    description = models.TextField(blank=True)
+    breeder_response = models.TextField(blank=True)
+    resolution = models.CharField(max_length=50, blank=True)
+    resolution_summary = models.TextField(blank=True)
+    status = models.CharField(max_length=30, blank=True)
+    opened_at = models.DateTimeField(null=True, blank=True)
+    breeder_responded_at = models.DateTimeField(null=True, blank=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "marketplace_reservationdispute"
+
+
+class ExternalFeatureDAuditLog(models.Model):
+    id = models.UUIDField(primary_key=True)
+    entity_id = models.CharField(max_length=255)
+    entity_type = models.CharField(max_length=32, blank=True)
+    badge_type = models.CharField(max_length=64, blank=True)
+    action = models.CharField(max_length=64, blank=True)
+    action_reason = models.TextField(blank=True)
+    previous_state = models.JSONField(default=dict, blank=True, null=True)
+    new_state = models.JSONField(default=dict, blank=True, null=True)
+    evidence_data = models.JSONField(default=dict, blank=True)
+    triggered_by = models.CharField(max_length=255, blank=True)
+    triggered_by_type = models.CharField(max_length=32, blank=True)
+    timestamp = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "badges_badgeauditlog"
 
 
 # ---------------------------------------------------------------------------

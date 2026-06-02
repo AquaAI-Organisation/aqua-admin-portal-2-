@@ -114,6 +114,14 @@ class AcceptInviteForm(forms.Form):
 
 
 class OperationalSettingsForm(forms.ModelForm):
+    gmail_client_secret = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(render_value=True, attrs={"placeholder": "Google OAuth client secret"}),
+    )
+    gmail_refresh_token = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(render_value=True, attrs={"placeholder": "Long-lived Gmail refresh token"}),
+    )
     smtp_password = forms.CharField(
         required=False,
         widget=forms.PasswordInput(render_value=True, attrs={"placeholder": "SMTP password or app password"}),
@@ -130,6 +138,14 @@ class OperationalSettingsForm(forms.ModelForm):
     class Meta:
         model = OperationalSettings
         fields = [
+            "auto_activate_new_accounts",
+            "gmail_client_id",
+            "gmail_client_secret",
+            "gmail_refresh_token",
+            "gmail_sender",
+            "support_alias_email",
+            "privacy_alias_email",
+            "providers_alias_email",
             "smtp_host",
             "smtp_port",
             "smtp_use_tls",

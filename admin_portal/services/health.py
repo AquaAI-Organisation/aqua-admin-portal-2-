@@ -8,10 +8,15 @@ from django.db import connection
 
 from ..models import AdminInvite
 from .error_classifier import classify_openai_error
+from .google_oauth import get_gmail_service, gmail_configured
 from .intelligence_adapter import get_intelligence_readiness
 from .notifier import email_config_status
 from .openai_runtime import get_openai_runtime_config
-from .runtime_config import get_mailbox_runtime_config, get_slack_runtime_config
+from .runtime_config import (
+    get_gmail_runtime_config,
+    get_mailbox_runtime_config,
+    get_slack_runtime_config,
+)
 from .supabase_edge import (
     has_inquiry_triage_function,
     has_issue_triage_function,
@@ -127,11 +132,31 @@ def _check_slack():
 
 
 def _check_email():
+    if gmail_configured():
+        runtime = get_gmail_runtime_config()
+        try:
+            profile = get_gmail_service().users().getProfile(userId="me").execute()
+            address = profile.get("emailAddress") or runtime.sender
+            return _status(True, "Email", f"Gmail OAuth authenticated successfully as {address}.", state="ok")
+        except Exception as exc:
+            return _status(False, "Email", f"Gmail OAuth authentication failed: {exc}", state="bad")
     status = email_config_status()
     return _status(bool(status["configured"]), "Email", str(status["detail"]), state="ok" if status["configured"] else "bad")
 
 
 def _check_mailbox():
+    if gmail_configured():
+        runtime = get_gmail_runtime_config()
+        return _status(
+            True,
+            "Mailbox",
+            (
+                "Inbox routes are configured for "
+                f"general ({runtime.support_alias}), privacy ({runtime.privacy_alias}), and "
+                f"providers ({runtime.providers_alias})."
+            ),
+            state="ok",
+        )
     mailbox = get_mailbox_runtime_config()
     if not mailbox.configured:
         return _status(False, "Mailbox", "IMAP inbox settings are incomplete.", state="bad")

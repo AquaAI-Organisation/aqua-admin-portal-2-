@@ -36,14 +36,40 @@ from .models import (
     AIFlag,
     AIFlaggedIssue,
     DailyReport,
+    DSARDeliverable,
+    DSARRequest,
+    ExternalBreederShippingProfile,
+    ExternalBreederReservation,
+    ExternalBreederVerification,
     ExternalBreederProfile,
     ExternalConsultantProfile,
+    ExternalFeatureDAuditLog,
+    ExternalMarketplaceSellerProfile,
+    ExternalReservationDispute,
     ExternalUser,
     OperationalSettings,
     SupportInquiry,
 )
 from .permissions import admin_required, operational_admin_required, super_admin_required
 from .services import audit
+from .services.dsar import (
+    approve_and_send_dsar,
+    ensure_dsar_request_from_inquiry,
+    extend_dsar_request,
+    prepare_dsar_request,
+    reject_dsar_request,
+    verify_dsar_token,
+)
+from .services.feature_d_backend import (
+    FeatureDBackendError,
+    approve_verification,
+    fetch_feature_d_dashboard,
+    is_configured as feature_d_backend_configured,
+    reject_verification,
+    resolve_dispute,
+    toggle_delivery,
+)
+from .services.google_oauth import clear_gmail_service_cache
 from .services.health import get_health_snapshot
 from .services.inquiry_intelligence import apply_inquiry_action, persist_inquiry_analysis
 from .services.mailbox import fetch_support_inbox, send_support_reply
@@ -156,6 +182,179 @@ def dashboard(request):
         "pending_consultant_count": ExternalConsultantProfile.objects.filter(admin_status="pending").count(),
     }
     return render(request, "admin_portal/dashboard.html", context)
+
+
+@admin_required
+def feature_d_dashboard(request):
+    backend_summary = None
+    backend_error = ""
+    if feature_d_backend_configured():
+        try:
+            backend_summary = fetch_feature_d_dashboard().get("data", {})
+        except FeatureDBackendError as exc:
+            backend_error = str(exc)
+    else:
+        backend_error = "Backend admin bridge is not configured. Read-only queues are still available."
+
+    today = timezone.now().date()
+    pending_verifications = (
+        ExternalBreederVerification.objects.select_related("seller")
+        .filter(status="pending")
+        .order_by("created_at")[:50]
+    )
+    expiring_soon = (
+        ExternalBreederVerification.objects.select_related("seller")
+        .filter(status="approved", expiry_date__isnull=False, expiry_date__lte=today + timedelta(days=30))
+        .order_by("expiry_date")[:50]
+    )
+    open_disputes = (
+        ExternalReservationDispute.objects.select_related("reservation", "reservation__buyer", "reservation__seller", "opened_by")
+        .exclude(status="resolved")
+        .order_by("-opened_at")[:50]
+    )
+    connect_watchlist = (
+        ExternalMarketplaceSellerProfile.objects.select_related("user")
+        .filter(
+            Q(stripe_connect_status__in=["not_started", "pending", "restricted", "error"])
+            | Q(payouts_enabled=False)
+            | Q(delivery_suspended=True)
+        )
+        .order_by("stripe_connect_status", "-updated_at")[:50]
+    )
+    holiday_mode = (
+        ExternalBreederShippingProfile.objects.select_related("seller")
+        .filter(holiday_mode_enabled=True)
+        .order_by("-updated_at")[:30]
+    )
+    recent_reservations = (
+        ExternalBreederReservation.objects.select_related("buyer", "seller")
+        .order_by("-created_at")[:20]
+    )
+    recent_feature_d_audit = (
+        ExternalFeatureDAuditLog.objects.filter(
+            Q(action__icontains="state_transition")
+            | Q(badge_type__in=["verified_breeder", "trusted_seller", "quick_dispatch", "reservation_master"])
+        )
+        .order_by("-timestamp")[:30]
+    )
+
+    context = {
+        "backend_summary": backend_summary,
+        "backend_error": backend_error,
+        "backend_bridge_configured": feature_d_backend_configured(),
+        "pending_verifications": pending_verifications,
+        "expiring_soon": expiring_soon,
+        "open_disputes": open_disputes,
+        "connect_watchlist": connect_watchlist,
+        "holiday_mode": holiday_mode,
+        "recent_reservations": recent_reservations,
+        "recent_feature_d_audit": recent_feature_d_audit,
+        "pending_verification_count": pending_verifications.count(),
+        "open_dispute_count": open_disputes.count(),
+        "watchlist_count": connect_watchlist.count(),
+        "holiday_count": holiday_mode.count(),
+    }
+    return render(request, "admin_portal/feature_d_dashboard.html", context)
+
+
+@admin_required
+def feature_d_verification_action(request, verification_id, decision):
+    if request.method != "POST":
+        return redirect("admin_portal:feature_d_dashboard")
+    try:
+        if decision == "approve":
+            result = approve_verification(verification_id)
+            messages.success(request, "Breeder verification approved in the backend.")
+        else:
+            reason = (request.POST.get("rejection_reason") or "").strip() or "Admin requested a resubmission."
+            result = reject_verification(verification_id, reason)
+            messages.success(request, "Breeder verification rejected in the backend.")
+        audit.record_write(
+            request.user,
+            f"feature_d.verification.{decision}",
+            summary=f"Feature D verification {verification_id} {decision}d",
+            target_type="feature_d_verification",
+            target_id=str(verification_id),
+            request=request,
+            backend_result=result.get("data", {}),
+        )
+    except FeatureDBackendError as exc:
+        messages.error(request, str(exc))
+    return redirect("admin_portal:feature_d_dashboard")
+
+
+@admin_required
+def feature_d_dispute_action(request, dispute_id):
+    if request.method != "POST":
+        return redirect("admin_portal:feature_d_dashboard")
+    resolution = (request.POST.get("resolution") or "").strip() or "refund_buyer"
+    summary = (request.POST.get("summary") or "").strip() or "Resolved from admin control plane."
+    try:
+        result = resolve_dispute(dispute_id, resolution, summary)
+        audit.record_write(
+            request.user,
+            "feature_d.dispute.resolve",
+            summary=f"Resolved Feature D dispute {dispute_id}",
+            target_type="feature_d_dispute",
+            target_id=str(dispute_id),
+            request=request,
+            resolution=resolution,
+            backend_result=result.get("data", {}),
+        )
+        messages.success(request, "Dispute resolution sent to the backend.")
+    except FeatureDBackendError as exc:
+        messages.error(request, str(exc))
+    return redirect("admin_portal:feature_d_dashboard")
+
+
+@admin_required
+def feature_d_delivery_toggle(request, seller_id):
+    if request.method != "POST":
+        return redirect("admin_portal:feature_d_dashboard")
+    enabled = (request.POST.get("enabled") or "").lower() == "true"
+    try:
+        result = toggle_delivery(seller_id, enabled)
+        audit.record_write(
+            request.user,
+            "feature_d.delivery.toggle",
+            summary=f"{'Enabled' if enabled else 'Suspended'} delivery for breeder {seller_id}",
+            target_type="feature_d_seller",
+            target_id=str(seller_id),
+            request=request,
+            enabled=enabled,
+            backend_result=result.get("data", {}),
+        )
+        messages.success(request, "Delivery override sent to the backend.")
+    except FeatureDBackendError as exc:
+        messages.error(request, str(exc))
+    return redirect("admin_portal:feature_d_dashboard")
+
+
+@admin_required
+def feature_d_audit(request):
+    q = (request.GET.get("q") or "").strip()
+    action = (request.GET.get("action") or "").strip()
+    qs = ExternalFeatureDAuditLog.objects.all().order_by("-timestamp")
+    if q:
+        qs = qs.filter(
+            Q(entity_id__icontains=q)
+            | Q(badge_type__icontains=q)
+            | Q(action_reason__icontains=q)
+            | Q(triggered_by__icontains=q)
+        )
+    if action:
+        qs = qs.filter(action=action)
+    paginator = Paginator(qs, 40)
+    page_obj = paginator.get_page(request.GET.get("page"))
+    return render(
+        request,
+        "admin_portal/feature_d_audit.html",
+        {
+            "page_obj": page_obj,
+            "q": q,
+            "action": action,
+        },
+    )
 
 
 @admin_required
@@ -624,6 +823,7 @@ def operational_settings_view(request):
         settings_obj = form.save(commit=False)
         settings_obj.updated_by = request.user
         settings_obj.save()
+        clear_gmail_service_cache()
         audit.record_write(
             request.user,
             "settings.update",
@@ -643,9 +843,12 @@ def operational_settings_view(request):
 
 @operational_admin_required
 def support_inbox_list(request):
+    mailbox = (request.GET.get("mailbox") or "general").strip()
     q = (request.GET.get("q") or "").strip()
     status = (request.GET.get("status") or "").strip()
     qs = SupportInquiry.objects.all()
+    if mailbox in {"general", "privacy", "providers"}:
+        qs = qs.filter(mailbox_kind=mailbox)
     if q:
         qs = qs.filter(
             Q(from_email__icontains=q)
@@ -656,16 +859,28 @@ def support_inbox_list(request):
     if status in {"new", "triaged", "actioned", "replied", "archived", "error"}:
         qs = qs.filter(status=status)
     page = Paginator(qs, 25).get_page(request.GET.get("page"))
+    mailbox_counts = {
+        "general": SupportInquiry.objects.filter(mailbox_kind="general").count(),
+        "privacy": SupportInquiry.objects.filter(mailbox_kind="privacy").count(),
+        "providers": SupportInquiry.objects.filter(mailbox_kind="providers").count(),
+    }
     return render(
         request,
         "admin_portal/support_inbox_list.html",
-        {"page": page, "q": q, "status": status},
+        {
+            "page": page,
+            "q": q,
+            "status": status,
+            "mailbox": mailbox,
+            "mailbox_counts": mailbox_counts,
+        },
     )
 
 
 @operational_admin_required
 def support_inbox_refresh(request):
     if request.method == "POST":
+        mailbox = (request.POST.get("mailbox") or "general").strip()
         try:
             result = fetch_support_inbox(limit=25)
         except Exception as exc:
@@ -677,21 +892,36 @@ def support_inbox_refresh(request):
                 target_type="support_inbox",
                 target_id="support",
                 request=request,
-                summary=f"Fetched support inbox messages: {result['added']} added, {result['updated']} updated.",
+                summary=(
+                    f"Fetched inbox messages: {result['added']} added, {result['updated']} updated, "
+                    f"{result.get('dsar_created', 0)} DSAR requests created."
+                ),
                 **result,
             )
-            messages.success(request, f"Inbox refreshed: {result['added']} added, {result['updated']} updated.")
-    return redirect("admin_portal:support_inbox_list")
+            messages.success(
+                request,
+                f"Inbox refreshed: {result['added']} added, {result['updated']} updated, "
+                f"{result.get('dsar_created', 0)} privacy requests converted to DSAR cases.",
+            )
+    else:
+        mailbox = (request.GET.get("mailbox") or "general").strip()
+    return redirect(f"{reverse('admin_portal:support_inbox_list')}?mailbox={mailbox}")
 
 
 @operational_admin_required
 def support_inbox_detail(request, inquiry_id):
     inquiry = get_object_or_404(SupportInquiry, pk=inquiry_id)
+    dsar_request = inquiry.dsar_requests.order_by("-created_at").first()
     reply_form = SupportReplyForm(initial={"body": inquiry.response_draft})
     return render(
         request,
         "admin_portal/support_inbox_detail.html",
-        {"inquiry": inquiry, "reply_form": reply_form},
+        {
+            "inquiry": inquiry,
+            "reply_form": reply_form,
+            "dsar_request": dsar_request,
+            "mailbox": inquiry.mailbox_kind,
+        },
     )
 
 
@@ -700,6 +930,7 @@ def support_inbox_analyse(request, inquiry_id):
     inquiry = get_object_or_404(SupportInquiry, pk=inquiry_id)
     if request.method == "POST":
         persist_inquiry_analysis(inquiry)
+        dsar_request, _ = ensure_dsar_request_from_inquiry(inquiry)
         audit.record_write(
             request.user,
             "inbox.analyse",
@@ -707,6 +938,7 @@ def support_inbox_analyse(request, inquiry_id):
             target_id=inquiry.id,
             request=request,
             summary=f"Analysed support enquiry from {inquiry.from_email}.",
+            dsar_request_id=str(dsar_request.id) if dsar_request else "",
         )
         if inquiry.ai_error:
             messages.warning(request, f"Enquiry analysed with fallback logic: {inquiry.ai_error}")
@@ -758,6 +990,125 @@ def support_inbox_send_reply(request, inquiry_id):
         else:
             messages.error(request, f"Reply failed: {result['error']}")
     return redirect("admin_portal:support_inbox_detail", inquiry_id=inquiry.id)
+
+
+@operational_admin_required
+def dsar_request_list(request):
+    status = (request.GET.get("status") or "").strip()
+    q = (request.GET.get("q") or "").strip()
+    qs = DSARRequest.objects.select_related("inquiry", "dpo_actor").all()
+    if status:
+        qs = qs.filter(status=status)
+    if q:
+        qs = qs.filter(
+            Q(submitted_email__icontains=q)
+            | Q(submitted_name__icontains=q)
+            | Q(detail__icontains=q)
+        )
+    summary = qs.aggregate(
+        total=Count("id"),
+        awaiting=Count("id", filter=Q(status="awaiting_dpo_approval")),
+        verifying=Count("id", filter=Q(status="verifying")),
+        overdue=Count("id", filter=Q(due_at__lt=timezone.now()) & ~Q(status__in=["fulfilled", "rejected", "withdrawn"])),
+    )
+    page = Paginator(qs.order_by("due_at", "-received_at"), 25).get_page(request.GET.get("page"))
+    return render(
+        request,
+        "admin_portal/dsar_request_list.html",
+        {
+            "page": page,
+            "status": status,
+            "q": q,
+            "summary": summary,
+            "status_choices": DSARRequest._meta.get_field("status").choices,
+        },
+    )
+
+
+@operational_admin_required
+def dsar_request_detail(request, request_id):
+    dsar_request = get_object_or_404(
+        DSARRequest.objects.select_related("inquiry", "dpo_actor"),
+        pk=request_id,
+    )
+    return render(
+        request,
+        "admin_portal/dsar_request_detail.html",
+        {
+            "dsar_request": dsar_request,
+            "deliverables": dsar_request.deliverables.all(),
+            "events": dsar_request.events.select_related("actor").all(),
+        },
+    )
+
+
+def dsar_verify(request, token):
+    dsar_request, outcome = verify_dsar_token(token)
+    return render(
+        request,
+        "admin_portal/dsar_verify_result.html",
+        {"dsar_request": dsar_request, "outcome": outcome},
+    )
+
+
+@super_admin_required
+def dsar_prepare(request, request_id):
+    dsar_request = get_object_or_404(DSARRequest, pk=request_id)
+    if request.method == "POST":
+        try:
+            prepare_dsar_request(dsar_request, actor=request.user)
+        except Exception as exc:
+            messages.error(request, f"Could not prepare the data request package: {exc}")
+        else:
+            messages.success(request, "The DSAR export package is ready for DPO approval.")
+    return redirect("admin_portal:dsar_request_detail", request_id=dsar_request.id)
+
+
+@super_admin_required
+def dsar_approve(request, request_id):
+    dsar_request = get_object_or_404(DSARRequest, pk=request_id)
+    if request.method == "POST":
+        result = approve_and_send_dsar(dsar_request, actor=request.user)
+        if result["ok"]:
+            messages.success(request, "The DSAR package was emailed successfully.")
+        else:
+            messages.error(request, f"The DSAR package could not be sent: {result['error']}")
+    return redirect("admin_portal:dsar_request_detail", request_id=dsar_request.id)
+
+
+@super_admin_required
+def dsar_reject(request, request_id):
+    dsar_request = get_object_or_404(DSARRequest, pk=request_id)
+    if request.method == "POST":
+        reason = (request.POST.get("reason") or "").strip() or "Rejected by DPO."
+        reject_dsar_request(dsar_request, actor=request.user, reason=reason)
+        messages.success(request, "The data request was rejected.")
+    return redirect("admin_portal:dsar_request_detail", request_id=dsar_request.id)
+
+
+@super_admin_required
+def dsar_extend(request, request_id):
+    dsar_request = get_object_or_404(DSARRequest, pk=request_id)
+    if request.method == "POST":
+        reason = (request.POST.get("reason") or "").strip() or "Extended while the fulfilment package is completed."
+        try:
+            days = int(request.POST.get("days") or "30")
+        except ValueError:
+            days = 30
+        extend_dsar_request(dsar_request, actor=request.user, reason=reason, days=days)
+        messages.success(request, f"The request was extended by {days} days.")
+    return redirect("admin_portal:dsar_request_detail", request_id=dsar_request.id)
+
+
+@operational_admin_required
+def dsar_deliverable_download(request, deliverable_id):
+    deliverable = get_object_or_404(DSARDeliverable, pk=deliverable_id)
+    path = Path(deliverable.storage_ref)
+    if not path.exists():
+        raise Http404("This DSAR file is no longer available.")
+    deliverable.retrieved_at = timezone.now()
+    deliverable.save(update_fields=["retrieved_at"])
+    return FileResponse(path.open("rb"), as_attachment=True, filename=deliverable.file_name or path.name)
 
 
 @admin_required

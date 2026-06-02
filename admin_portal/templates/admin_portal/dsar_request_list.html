@@ -1,0 +1,88 @@
+{% extends "admin_portal/base.html" %}
+{% block title %}Data Requests | {{ APP_NAME }}{% endblock %}
+{% block topbar_title %}Data Requests{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Data requests</h1>
+    <p class="page-subtitle">Track privacy and DSAR cases from intake through verification, export preparation, DPO approval, and fulfilment.</p>
+  </div>
+</div>
+
+<div class="stats-grid compact">
+  <div class="stat-card">
+    <div class="stat-label">Total</div>
+    <div class="stat-value">{{ summary.total }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Awaiting DPO</div>
+    <div class="stat-value">{{ summary.awaiting }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Verifying</div>
+    <div class="stat-value">{{ summary.verifying }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Overdue</div>
+    <div class="stat-value">{{ summary.overdue }}</div>
+  </div>
+</div>
+
+<div class="card">
+  <form method="get" class="filter-row">
+    <div class="form-group" style="flex:1;">
+      <label for="id_q">Search</label>
+      <input id="id_q" name="q" value="{{ q }}" placeholder="Search by requester email, name, or detail">
+    </div>
+    <div class="form-group">
+      <label for="id_status">Status</label>
+      <select id="id_status" name="status">
+        <option value="">All statuses</option>
+        {% for key, label in status_choices %}
+        <option value="{{ key }}" {% if status == key %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit">Apply filters</button>
+  </form>
+</div>
+
+<div class="card">
+  <div class="table-wrap">
+    <table class="table">
+      <tr>
+        <th>Received</th>
+        <th>Requester</th>
+        <th>Type</th>
+        <th>Status</th>
+        <th>Due</th>
+        <th></th>
+      </tr>
+      {% for item in page.object_list %}
+      <tr>
+        <td class="mono">{{ item.received_at|date:"d M Y H:i" }}</td>
+        <td>
+          <div class="cell-name">{{ item.submitted_name|default:item.submitted_email }}</div>
+          <div class="cell-sub">{{ item.submitted_email }}</div>
+        </td>
+        <td>{{ item.get_request_type_display }}</td>
+        <td>
+          <span class="badge {% if item.status == 'fulfilled' %}ok{% elif item.status == 'rejected' %}danger{% elif item.status == 'awaiting_dpo_approval' %}warning{% else %}info{% endif %}">
+            {{ item.get_status_display }}
+          </span>
+        </td>
+        <td>
+          <div class="cell-name">{{ item.due_at|date:"d M Y" }}</div>
+          <div class="cell-sub {% if item.is_overdue %}danger-text{% endif %}">{{ item.days_remaining }} days remaining</div>
+        </td>
+        <td><a class="btn btn-sm" href="{% url 'admin_portal:dsar_request_detail' item.id %}">Open</a></td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="6" class="empty-state">No DSAR or privacy requests have been created yet.</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}

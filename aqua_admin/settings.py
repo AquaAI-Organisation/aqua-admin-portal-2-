@@ -139,6 +139,8 @@ OPENAI_EDGE_FUNCTION_URL = os.getenv("OPENAI_EDGE_FUNCTION_URL", "")
 SUPABASE_FUNCTION_SIGNUP_REVIEW_URL = os.getenv("SUPABASE_FUNCTION_SIGNUP_REVIEW_URL", "")
 SUPABASE_FUNCTION_ISSUE_TRIAGE_URL = os.getenv("SUPABASE_FUNCTION_ISSUE_TRIAGE_URL", "")
 SUPABASE_FUNCTION_INQUIRY_TRIAGE_URL = os.getenv("SUPABASE_FUNCTION_INQUIRY_TRIAGE_URL", "")
+AQUAAI_BACKEND_API_URL = os.getenv("AQUAAI_BACKEND_API_URL", "")
+AQUAAI_BACKEND_API_TOKEN = os.getenv("AQUAAI_BACKEND_API_TOKEN", "")
 
 SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN", "")
 SLACK_CHANNEL = os.getenv("SLACK_CHANNEL", "#aqua-admin-alerts")
@@ -150,6 +152,18 @@ EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True").lower() == "true"
 EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Aqua Admin <admin@humara.io>")
+
+GMAIL_CLIENT_ID = os.getenv("GMAIL_CLIENT_ID", "")
+GMAIL_CLIENT_SECRET = os.getenv("GMAIL_CLIENT_SECRET", "")
+GMAIL_REFRESH_TOKEN = os.getenv("GMAIL_REFRESH_TOKEN", "")
+GMAIL_SENDER = os.getenv("GMAIL_SENDER", "support@aquaai.uk")
+SUPPORT_ALIAS_EMAIL = os.getenv("SUPPORT_ALIAS_EMAIL", "support@aquaai.uk")
+PRIVACY_ALIAS_EMAIL = os.getenv("PRIVACY_ALIAS_EMAIL", "privacy@aquaai.uk")
+PROVIDERS_ALIAS_EMAIL = os.getenv("PROVIDERS_ALIAS_EMAIL", "providers@aquaai.uk")
+GMAIL_SCOPES = [
+    "https://www.googleapis.com/auth/gmail.modify",
+    "https://www.googleapis.com/auth/gmail.send",
+]
 
 LOGGING = {
     "version": 1,

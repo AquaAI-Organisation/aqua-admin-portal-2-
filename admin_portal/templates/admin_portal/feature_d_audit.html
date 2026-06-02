@@ -1,0 +1,65 @@
+{% extends "admin_portal/base.html" %}
+{% block title %}Feature D Audit | {{ APP_NAME }}{% endblock %}
+{% block topbar_title %}Feature D Audit Trail{% endblock %}
+{% block content %}
+
+<section class="card">
+  <div class="card-header">
+    <div>
+      <div class="card-title">Hash-chain marketplace audit</div>
+      <div class="card-subtitle">Reservation state transitions and Feature D badge events pulled from the shared `badges_badgeauditlog` table.</div>
+    </div>
+  </div>
+
+  <form method="get" class="filter-bar">
+    <input class="input" type="text" name="q" placeholder="Search entity, badge, reason, actor" value="{{ q }}">
+    <select class="input" name="action">
+      <option value="">All actions</option>
+      <option value="STATE_TRANSITION" {% if action == "STATE_TRANSITION" %}selected{% endif %}>State transition</option>
+      <option value="BADGE_AWARDED" {% if action == "BADGE_AWARDED" %}selected{% endif %}>Badge awarded</option>
+      <option value="BADGE_REVOKED" {% if action == "BADGE_REVOKED" %}selected{% endif %}>Badge revoked</option>
+    </select>
+    <button class="btn" type="submit">Filter</button>
+  </form>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Action</th>
+          <th>Badge</th>
+          <th>Entity</th>
+          <th>Reason</th>
+          <th>Actor</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in page_obj %}
+        <tr>
+          <td class="mono">{{ item.timestamp|date:"d M Y H:i" }}</td>
+          <td><span class="badge muted">{{ item.action }}</span></td>
+          <td class="mono">{{ item.badge_type }}</td>
+          <td class="mono">{{ item.entity_type }} / {{ item.entity_id }}</td>
+          <td class="cell-sub">{{ item.action_reason|truncatechars:120 }}</td>
+          <td class="cell-sub">{{ item.triggered_by_type }} / {{ item.triggered_by }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="empty-state">No Feature D audit entries matched this filter.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="pagination">
+    {% if page_obj.has_previous %}
+    <a class="btn btn-sm" href="?q={{ q|urlencode }}&action={{ action|urlencode }}&page={{ page_obj.previous_page_number }}">Previous</a>
+    {% endif %}
+    <span class="cell-sub">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}
+    <a class="btn btn-sm" href="?q={{ q|urlencode }}&action={{ action|urlencode }}&page={{ page_obj.next_page_number }}">Next</a>
+    {% endif %}
+  </div>
+</section>
+
+{% endblock %}

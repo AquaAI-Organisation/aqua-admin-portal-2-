@@ -1,21 +1,40 @@
 {% extends "admin_portal/base.html" %}
 {% load portal_tags %}
-{% block title %}Support Enquiry | {{ APP_NAME }}{% endblock %}
-{% block topbar_title %}Support Enquiry{% endblock %}
+{% block title %}Inbox Message | {{ APP_NAME }}{% endblock %}
+{% block topbar_title %}Inbox Message{% endblock %}
 {% block content %}
 <div class="page-header">
   <div>
-    <h1>{{ inquiry.subject|default:"Support enquiry" }}</h1>
+    <h1>{{ inquiry.subject|default:"Inbox message" }}</h1>
     <p class="page-subtitle">{{ inquiry.from_name|default:inquiry.from_email }} · {{ inquiry.from_email }} · {{ inquiry.received_at|date:"d M Y H:i" }}</p>
   </div>
   <div class="page-actions">
+    <span class="badge info">{{ inquiry.mailbox_label }}</span>
     <span class="badge {% if inquiry.status == 'new' %}muted{% elif inquiry.status == 'error' %}danger{% elif inquiry.status == 'replied' %}ok{% else %}info{% endif %}">{{ inquiry.status }}</span>
     <form method="post" action="{% url 'admin_portal:support_inbox_analyse' inquiry.id %}">
       {% csrf_token %}
-      <button class="btn-primary" type="submit">Analyse enquiry</button>
+      <button class="btn-primary" type="submit">Analyse message</button>
     </form>
   </div>
 </div>
+
+{% if dsar_request %}
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">Linked data request</div>
+  </div>
+  <div class="kv-grid">
+    <div class="kv-label">Request type</div>
+    <div class="kv-value">{{ dsar_request.get_request_type_display }}</div>
+    <div class="kv-label">Status</div>
+    <div class="kv-value"><a href="{% url 'admin_portal:dsar_request_detail' dsar_request.id %}">{{ dsar_request.get_status_display }}</a></div>
+    <div class="kv-label">Days remaining</div>
+    <div class="kv-value">{{ dsar_request.days_remaining }}</div>
+    <div class="kv-label">Verification email</div>
+    <div class="kv-value">{{ dsar_request.verification_email|default:"-" }}</div>
+  </div>
+</div>
+{% endif %}
 
 <div class="grid-2-equal">
   <div class="card">
@@ -27,9 +46,13 @@
 
   <div class="card">
     <div class="card-header">
-      <div class="card-title">Match</div>
+      <div class="card-title">Routing and match</div>
     </div>
     <div class="kv-grid">
+      <div class="kv-label">Mailbox</div>
+      <div class="kv-value">{{ inquiry.mailbox_label }}</div>
+      <div class="kv-label">Delivered to</div>
+      <div class="kv-value">{{ inquiry.to_email|default:"-" }}</div>
       <div class="kv-label">Matched entity type</div>
       <div class="kv-value">{{ inquiry.matched_entity_type|default:"-" }}</div>
       <div class="kv-label">Matched entity id</div>
@@ -49,7 +72,7 @@
   <div class="detail-list">
     <div class="detail-item">
       <strong>Summary</strong>
-      <div class="helper-text" style="margin-top:8px;">{{ inquiry.ai_summary|default:"Analyse this enquiry to get AI options." }}</div>
+      <div class="helper-text" style="margin-top:8px;">{{ inquiry.ai_summary|default:"Analyse this message to get AI options." }}</div>
     </div>
     <div class="detail-item">
       <strong>Rationale</strong>
@@ -83,7 +106,7 @@
       </tr>
       {% empty %}
       <tr>
-        <td colspan="3" class="empty-state">No AI actions yet. Run Analyse enquiry first.</td>
+        <td colspan="3" class="empty-state">No AI actions yet. Run Analyse message first.</td>
       </tr>
       {% endfor %}
     </table>

@@ -76,6 +76,15 @@
           {% if OPEN_ISSUE_COUNT %}<span class="count-pill">{{ OPEN_ISSUE_COUNT }}</span>{% endif %}
         </a>
 
+        <a href="{% url 'admin_portal:feature_d_dashboard' %}" class="nav-link {% if 'feature_d' in request.resolver_match.url_name %}active{% endif %}">
+          <span class="nav-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 19h16"/><path d="M6 16V8"/><path d="M12 16V5"/><path d="M18 16v-3"/><path d="M8 8h8"/><path d="M12 5l3 3"/><path d="M12 5L9 8"/>
+            </svg>
+          </span>
+          <span>Feature D Ops</span>
+        </a>
+
         {% if IS_SUPER_ADMIN or IS_ADMIN %}
         <a href="{% url 'admin_portal:support_inbox_list' %}" class="nav-link {% if 'support_inbox' in request.resolver_match.url_name %}active{% endif %}">
           <span class="nav-icon">
@@ -84,7 +93,7 @@
               <polyline points="22,6 12,13 2,6"/>
             </svg>
           </span>
-          <span>Support Inbox</span>
+          <span>Inbox</span>
         </a>
         {% endif %}
 
@@ -96,6 +105,19 @@
           </span>
           <span>Daily Reports</span>
         </a>
+
+        {% if IS_SUPER_ADMIN or IS_ADMIN %}
+        <a href="{% url 'admin_portal:dsar_request_list' %}" class="nav-link {% if 'dsar_' in request.resolver_match.url_name %}active{% endif %}">
+          <span class="nav-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+              <path d="M14 2v6h6"/><path d="M9 13h6"/><path d="M9 17h6"/><path d="M9 9h1"/>
+            </svg>
+          </span>
+          <span>Data Requests</span>
+          {% if OPEN_DSAR_COUNT %}<span class="count-pill">{{ OPEN_DSAR_COUNT }}</span>{% endif %}
+        </a>
+        {% endif %}
 
         {% if IS_SUPER_ADMIN %}
         <a href="{% url 'admin_portal:admin_user_list' %}" class="nav-link {% if 'admin_user' in request.resolver_match.url_name or 'change_user_role' in request.resolver_match.url_name %}active{% endif %}">
@@ -115,6 +137,15 @@
             </svg>
           </span>
           <span>Audit Log</span>
+        </a>
+
+        <a href="{% url 'admin_portal:feature_d_audit' %}" class="nav-link {% if request.resolver_match.url_name == 'feature_d_audit' %}active{% endif %}">
+          <span class="nav-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M9 12l2 2 4-4"/><path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z"/>
+            </svg>
+          </span>
+          <span>Feature D Audit</span>
         </a>
 
         <a href="{% url 'admin_portal:operational_settings' %}" class="nav-link {% if 'operational_settings' in request.resolver_match.url_name %}active{% endif %}">

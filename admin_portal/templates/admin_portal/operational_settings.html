@@ -5,7 +5,7 @@
 <div class="page-header">
   <div>
     <h1>Operational settings</h1>
-    <p class="page-subtitle">Super admins can update email delivery, Slack alerts, and mailbox inbox settings here. These values are used by the control plane immediately after saving.</p>
+    <p class="page-subtitle">Connect the Aqua AI Google Workspace mailbox through OAuth, route support aliases into the right inbox lanes, and configure Slack alerts for operational notifications.</p>
   </div>
 </div>
 
@@ -14,13 +14,99 @@
   <div class="card">
     <div class="card-header">
       <div>
-        <div class="card-title">Email delivery</div>
-        <div class="card-subtitle">Use your company mailbox here for invites and replies. Enter the SMTP host, username, and password for the mailbox provider behind <span class="mono">support@aquaai.uk</span>.</div>
+        <div class="card-title">Account approval mode</div>
+        <div class="card-subtitle">Choose whether new breeder and consultant accounts should be auto-approved immediately or routed through the normal AI review flow.</div>
       </div>
     </div>
     <div class="helper-text" style="margin-bottom:16px;">
-      Microsoft 365 / GoDaddy note:
-      if this mailbox uses MFA, device approval, or tenant-level SMTP restrictions, the portal may still fail to send until the mailbox owner approves the sign-in path or provides the correct app-password / SMTP AUTH access. The portal is ready for the integration, but Microsoft must allow the mailbox to authenticate from the server.
+      When this toggle is on, the review processor will approve every new breeder or consultant account automatically. Turn it off to return to the usual AI-based approval and risk review logic.
+    </div>
+    <div class="form-row" style="align-items:center;">
+      <div class="form-group" style="max-width:320px;">
+        <label for="id_auto_activate_new_accounts">Automatic account activation</label>
+        {{ form.auto_activate_new_accounts }}
+      </div>
+      <div class="helper-text">
+        On = approve all new accounts automatically. Off = AI-enabled approval.
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-title">Google Workspace OAuth</div>
+        <div class="card-subtitle">Use Gmail API access for sending invites, replying to inbox messages, and pulling support, privacy, and provider mailbox traffic into the control plane.</div>
+      </div>
+    </div>
+    <div class="helper-text" style="margin-bottom:16px;">
+      The refresh token should be created for <span class="mono">support@aquaai.uk</span>. The Gmail account must have the aliases
+      <span class="mono">privacy@aquaai.uk</span> and <span class="mono">providers@aquaai.uk</span> configured as send-as addresses in Google Workspace.
+    </div>
+    <div class="form-row">
+      <div class="form-group" style="flex:1;">
+        <label for="id_gmail_client_id">Google client ID</label>
+        {{ form.gmail_client_id }}
+      </div>
+      <div class="form-group" style="flex:1;">
+        <label for="id_gmail_client_secret">Google client secret</label>
+        {{ form.gmail_client_secret }}
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group" style="flex:1;">
+        <label for="id_gmail_refresh_token">Refresh token</label>
+        {{ form.gmail_refresh_token }}
+      </div>
+      <div class="form-group" style="flex:1;">
+        <label for="id_gmail_sender">Primary sender mailbox</label>
+        {{ form.gmail_sender }}
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group" style="flex:1;">
+        <label for="id_support_alias_email">General support alias</label>
+        {{ form.support_alias_email }}
+      </div>
+      <div class="form-group" style="flex:1;">
+        <label for="id_privacy_alias_email">Privacy alias</label>
+        {{ form.privacy_alias_email }}
+      </div>
+      <div class="form-group" style="flex:1;">
+        <label for="id_providers_alias_email">Providers alias</label>
+        {{ form.providers_alias_email }}
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-title">Slack alerts</div>
+        <div class="card-subtitle">Notify operations leaders when critical flags, DSAR escalations, or inbox incidents need review.</div>
+      </div>
+    </div>
+    <div class="helper-text" style="margin-bottom:16px;">
+      Recommended Slack scopes: <span class="mono">chat:write</span>, <span class="mono">im:write</span>, and <span class="mono">users:read.email</span>.
+    </div>
+    <div class="form-row">
+      <div class="form-group" style="flex:1;">
+        <label for="id_slack_bot_token">Slack bot token</label>
+        {{ form.slack_bot_token }}
+      </div>
+      <div class="form-group" style="flex:1;">
+        <label for="id_slack_channel">Fallback Slack channel</label>
+        {{ form.slack_channel }}
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-title">Compatibility fallback</div>
+        <div class="card-subtitle">These legacy SMTP and IMAP values remain available as a fallback, but the preferred production path is Google Workspace OAuth above.</div>
+      </div>
     </div>
     <div class="form-row">
       <div class="form-group" style="flex:1;">
@@ -45,48 +131,10 @@
         <label for="id_smtp_password">SMTP password</label>
         {{ form.smtp_password }}
       </div>
-    </div>
-    <div class="form-group">
-      <label for="id_default_from_email">Default from email</label>
-      {{ form.default_from_email }}
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-header">
-      <div>
-        <div class="card-title">Slack alerts</div>
-        <div class="card-subtitle">Create a Slack app and paste its bot token here so the portal can DM Steven and Ben or use a channel fallback.</div>
-      </div>
-    </div>
-    <div class="helper-text" style="margin-bottom:16px;">
-      Recommended Slack scopes:
-      <span class="mono">chat:write</span>,
-      <span class="mono">im:write</span>,
-      and <span class="mono">users:read.email</span>.
-      Paste the bot token that starts with <span class="mono">xoxb-</span>.
-    </div>
-    <div class="form-row">
       <div class="form-group" style="flex:1;">
-        <label for="id_slack_bot_token">Slack bot token</label>
-        {{ form.slack_bot_token }}
+        <label for="id_default_from_email">Default from email</label>
+        {{ form.default_from_email }}
       </div>
-      <div class="form-group" style="flex:1;">
-        <label for="id_slack_channel">Fallback Slack channel</label>
-        {{ form.slack_channel }}
-      </div>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-header">
-      <div>
-        <div class="card-title">Support inbox</div>
-        <div class="card-subtitle">These IMAP values let the portal fetch enquiries from the support mailbox so they appear in Support Inbox.</div>
-      </div>
-    </div>
-    <div class="helper-text" style="margin-bottom:16px;">
-      If the inbox still cannot connect after you save these values, the mailbox owner may need to approve the new device, allow IMAP access, or use an app password depending on the Microsoft 365 security policy.
     </div>
     <div class="form-row">
       <div class="form-group" style="flex:1;">

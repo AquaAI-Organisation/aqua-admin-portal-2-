@@ -8,15 +8,19 @@ This Django project is the hardened admin control plane for Aqua AI. It runs as 
 - Auto-applies safe actions only: approve, reject, verify, deactivate, and safe verification-level updates
 - Triages post-signup incidents and consultant warnings into a dedicated Flagged Issues queue
 - Sends email and Slack alerts to `steven@humara.io` and `ben@humara.io`
+- Pulls the Aqua AI mailbox through Google Workspace OAuth and separates messages into General Support, Providers, and Privacy inbox lanes
+- Converts privacy mailbox DSAR requests into verified data-request cases with export preparation and DPO approval
 - Produces daily drill-down reports for review decisions and issue triage
 - Restricts admin access so only Steven and Ben can invite, revoke, or change other control-plane users
 
 ## Main areas in the UI
 
 - `Dashboard`
+- `Inbox`
 - `Pending Reviews`
 - `Flagged Issues`
 - `Daily Reports`
+- `Data Requests`
 - `Team Access`
 
 ## Shared-database approach
@@ -36,17 +40,16 @@ Copy `.env.example` to `.env` and fill in real values.
 Required:
 
 - `DATABASE_URL`
-- `OPENAI_API_KEY`
-- `OPENAI_MODEL`
 - `SUPERADMIN_EMAILS`
 - `SLACK_BOT_TOKEN`
 - `SLACK_CHANNEL`
-- `EMAIL_HOST`
-- `EMAIL_PORT`
-- `EMAIL_USE_TLS`
-- `EMAIL_HOST_USER`
-- `EMAIL_HOST_PASSWORD`
-- `DEFAULT_FROM_EMAIL`
+- `GMAIL_CLIENT_ID`
+- `GMAIL_CLIENT_SECRET`
+- `GMAIL_REFRESH_TOKEN`
+- `GMAIL_SENDER`
+- `SUPPORT_ALIAS_EMAIL`
+- `PRIVACY_ALIAS_EMAIL`
+- `PROVIDERS_ALIAS_EMAIL`
 - `LEGACY_ADMIN_REDIRECT_URL`
 - `LEGACY_ADMIN_INTERNAL_PATH`
 
@@ -71,7 +74,7 @@ Run these on a scheduler:
 - `python manage.py process_pending_reviews --limit 25`
 - `python manage.py generate_daily_report`
 
-The review command now processes both new account signups and new incident/warning triage.
+The review command now processes both new account signups and new incident/warning triage. Inbox refresh can also create DSAR requests from the privacy mailbox automatically.
 
 ## Main backend redirect
 
