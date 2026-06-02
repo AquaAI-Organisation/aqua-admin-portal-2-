@@ -8,7 +8,12 @@ from django.conf import settings
 from django.core.mail import EmailMessage, get_connection
 from django.utils import timezone
 
-from .runtime_config import get_email_runtime_config, get_slack_runtime_config
+from .google_oauth import gmail_configured, send_gmail_message
+from .runtime_config import (
+    get_email_runtime_config,
+    get_gmail_runtime_config,
+    get_slack_runtime_config,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +32,16 @@ def _email_ok() -> bool:
 
 
 def email_config_status() -> dict[str, str | bool]:
+    gmail = get_gmail_runtime_config()
+    if gmail.configured:
+        return {
+            "configured": True,
+            "detail": (
+                "Gmail OAuth configured for "
+                f"{gmail.sender} with aliases {gmail.support_alias}, {gmail.privacy_alias}, "
+                f"and {gmail.providers_alias}."
+            ),
+        }
     config = get_email_runtime_config()
     host = config.host
     user = config.username
@@ -199,7 +214,14 @@ def _send_email(subject: str, body: str, recipients: Iterable[str]) -> bool:
     return _send_email_result(subject, body, recipients)["ok"]
 
 
-def _send_email_result(subject: str, body: str, recipients: Iterable[str]) -> dict[str, str | bool]:
+def _send_email_result(
+    subject: str,
+    body: str,
+    recipients: Iterable[str],
+    *,
+    from_email: str | None = None,
+    attachments: list[dict] | None = None,
+) -> dict[str, str | bool]:
     recipients = [r for r in recipients if r]
     if not recipients:
         return {"ok": False, "error": "No recipients were provided."}
@@ -207,6 +229,15 @@ def _send_email_result(subject: str, body: str, recipients: Iterable[str]) -> di
         logger.warning("SMTP not configured; skipping email %r -> %s", subject, recipients)
         return {"ok": False, "error": str(email_config_status()["detail"])}
     try:
+        if gmail_configured():
+            send_gmail_message(
+                subject=subject,
+                body=body,
+                recipients=recipients,
+                from_email=from_email,
+                attachments=attachments,
+            )
+            return {"ok": True, "error": ""}
         config = get_email_runtime_config()
         connection = get_connection(
             host=config.host,
@@ -219,10 +250,12 @@ def _send_email_result(subject: str, body: str, recipients: Iterable[str]) -> di
         email = EmailMessage(
             subject,
             body,
-            config.default_from_email,
+            from_email or config.default_from_email,
             recipients,
             connection=connection,
         )
+        for item in attachments or []:
+            email.attach_file(item["path"], mimetype=item.get("mime_type"))
         email.send(fail_silently=False)
         return {"ok": True, "error": ""}
     except Exception as exc:
@@ -263,8 +296,21 @@ def _send_slack_to_super_admins(text: str) -> bool:
         return False
 
 
-def send_custom_email(*, subject: str, body: str, recipients: Iterable[str]) -> dict[str, str | bool]:
-    return _send_email_result(subject, body, recipients)
+def send_custom_email(
+    *,
+    subject: str,
+    body: str,
+    recipients: Iterable[str],
+    from_email: str | None = None,
+    attachments: list[dict] | None = None,
+) -> dict[str, str | bool]:
+    return _send_email_result(
+        subject,
+        body,
+        recipients,
+        from_email=from_email,
+        attachments=attachments,
+    )
 
 
 def _friendly_email_error(error: str) -> str:
@@ -273,6 +319,16 @@ def _friendly_email_error(error: str) -> str:
         return (
             "Microsoft 365 blocked SMTP login because authenticated SMTP is disabled for this mailbox or tenant. "
             "Enable SMTP AUTH for support@aquaai.uk in Microsoft 365 / Exchange Online, then resend the invite."
+        )
+    if "invalid_grant" in lowered or "token has been expired or revoked" in lowered:
+        return (
+            "Google rejected the saved Gmail refresh token. Reconnect the Google Workspace OAuth credentials "
+            "and save a fresh refresh token in Settings."
+        )
+    if "unauthorized_client" in lowered or "invalid_client" in lowered:
+        return (
+            "Google rejected the Gmail OAuth client credentials. Re-check the client ID, client secret, "
+            "and that the OAuth app has Gmail API access enabled."
         )
     if "authentication unsuccessful" in lowered:
         return (

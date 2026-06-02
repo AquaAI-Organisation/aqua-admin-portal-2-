@@ -1,25 +1,35 @@
 {% extends "admin_portal/base.html" %}
-{% block title %}Support Inbox | {{ APP_NAME }}{% endblock %}
-{% block topbar_title %}Support Inbox{% endblock %}
+{% block title %}Inbox | {{ APP_NAME }}{% endblock %}
+{% block topbar_title %}Inbox{% endblock %}
 {% block content %}
 <div class="page-header">
   <div>
-    <h1>Support enquiries</h1>
-    <p class="page-subtitle">Refresh the support mailbox, review imported enquiries, and open any message for AI triage and response handling.</p>
+    <h1>Inbox</h1>
+    <p class="page-subtitle">General support, privacy requests, and provider-facing enquiries all route through the Aqua AI mailbox and are separated here by alias.</p>
   </div>
   <div class="page-actions">
     <form method="post" action="{% url 'admin_portal:support_inbox_refresh' %}">
       {% csrf_token %}
+      <input type="hidden" name="mailbox" value="{{ mailbox }}">
       <button class="btn-primary" type="submit">Refresh inbox</button>
     </form>
   </div>
 </div>
 
 <div class="card">
+  <div class="pill-row">
+    <a class="pill {% if mailbox == 'general' %}active{% endif %}" href="{% url 'admin_portal:support_inbox_list' %}?mailbox=general">General Support Inbox <span class="count-pill">{{ mailbox_counts.general }}</span></a>
+    <a class="pill {% if mailbox == 'providers' %}active{% endif %}" href="{% url 'admin_portal:support_inbox_list' %}?mailbox=providers">Providers Inbox <span class="count-pill">{{ mailbox_counts.providers }}</span></a>
+    <a class="pill {% if mailbox == 'privacy' %}active{% endif %}" href="{% url 'admin_portal:support_inbox_list' %}?mailbox=privacy">Privacy Inbox <span class="count-pill">{{ mailbox_counts.privacy }}</span></a>
+  </div>
+</div>
+
+<div class="card">
   <form method="get" class="filter-row">
+    <input type="hidden" name="mailbox" value="{{ mailbox }}">
     <div class="form-group" style="flex:1;">
       <label for="id_q">Search</label>
-      <input id="id_q" name="q" value="{{ q }}" placeholder="Search by sender, subject, or content">
+      <input id="id_q" name="q" value="{{ q }}" placeholder="Search by sender, subject, or message text">
     </div>
     <div class="form-group">
       <label for="id_status">Status</label>
@@ -42,6 +52,7 @@
       <tr>
         <th>Received</th>
         <th>Sender</th>
+        <th>Inbox lane</th>
         <th>Subject</th>
         <th>Status</th>
         <th></th>
@@ -54,17 +65,26 @@
           <div class="cell-sub">{{ inquiry.from_email }}</div>
         </td>
         <td>
+          <div class="cell-name">{{ inquiry.mailbox_label }}</div>
+          <div class="cell-sub">{{ inquiry.to_email|default:"Support alias not detected" }}</div>
+        </td>
+        <td>
           <div class="cell-name">{{ inquiry.subject|default:"(no subject)" }}</div>
           <div class="cell-sub">{{ inquiry.body_text|truncatechars:120 }}</div>
         </td>
         <td>
           <span class="badge {% if inquiry.status == 'new' %}muted{% elif inquiry.status == 'error' %}danger{% elif inquiry.status == 'replied' %}ok{% else %}info{% endif %}">{{ inquiry.status }}</span>
+          {% with linked_request=inquiry.latest_dsar_request %}
+          {% if linked_request %}
+          <div class="cell-sub" style="margin-top:8px;">DSAR: <a href="{% url 'admin_portal:dsar_request_detail' linked_request.id %}">{{ linked_request.get_status_display }}</a></div>
+          {% endif %}
+          {% endwith %}
         </td>
         <td><a class="btn btn-sm" href="{% url 'admin_portal:support_inbox_detail' inquiry.id %}">Open</a></td>
       </tr>
       {% empty %}
       <tr>
-        <td colspan="5" class="empty-state">No support enquiries imported yet.</td>
+        <td colspan="6" class="empty-state">No messages are currently loaded in this inbox lane.</td>
       </tr>
       {% endfor %}
     </table>

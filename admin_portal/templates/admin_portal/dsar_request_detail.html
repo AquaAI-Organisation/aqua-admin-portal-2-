@@ -1,0 +1,149 @@
+{% extends "admin_portal/base.html" %}
+{% load portal_tags %}
+{% block title %}Data Request | {{ APP_NAME }}{% endblock %}
+{% block topbar_title %}Data Request{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>{{ dsar_request.get_request_type_display }} request</h1>
+    <p class="page-subtitle">{{ dsar_request.submitted_email }} · received {{ dsar_request.received_at|date:"d M Y H:i" }}</p>
+  </div>
+  <div class="page-actions">
+    <span class="badge {% if dsar_request.status == 'fulfilled' %}ok{% elif dsar_request.status == 'rejected' %}danger{% elif dsar_request.status == 'awaiting_dpo_approval' %}warning{% else %}info{% endif %}">
+      {{ dsar_request.get_status_display }}
+    </span>
+    {% if IS_SUPER_ADMIN %}
+    <form method="post" action="{% url 'admin_portal:dsar_prepare' dsar_request.id %}">
+      {% csrf_token %}
+      <button class="btn" type="submit">Prepare export</button>
+    </form>
+    <form method="post" action="{% url 'admin_portal:dsar_approve' dsar_request.id %}">
+      {% csrf_token %}
+      <button class="btn-primary" type="submit">Approve and send</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="grid-2-equal">
+  <div class="card">
+    <div class="card-header"><div class="card-title">Request profile</div></div>
+    <div class="kv-grid">
+      <div class="kv-label">Requester</div>
+      <div class="kv-value">{{ dsar_request.submitted_name|default:"-" }}</div>
+      <div class="kv-label">Email</div>
+      <div class="kv-value">{{ dsar_request.submitted_email }}</div>
+      <div class="kv-label">Linked user ID</div>
+      <div class="kv-value mono">{{ dsar_request.subject_user_id|default:"-" }}</div>
+      <div class="kv-label">Verification email</div>
+      <div class="kv-value">{{ dsar_request.verification_email|default:"-" }}</div>
+      <div class="kv-label">Due date</div>
+      <div class="kv-value">{{ dsar_request.due_at|date:"d M Y H:i" }}</div>
+      <div class="kv-label">Days remaining</div>
+      <div class="kv-value {% if dsar_request.is_overdue %}danger-text{% endif %}">{{ dsar_request.days_remaining }}</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><div class="card-title">Source and notes</div></div>
+    <div class="detail-list">
+      <div class="detail-item">
+        <strong>Channel</strong>
+        <div class="helper-text" style="margin-top:8px;">{{ dsar_request.get_channel_display }}</div>
+      </div>
+      <div class="detail-item">
+        <strong>Detail</strong>
+        <pre class="json">{{ dsar_request.detail|default:"-" }}</pre>
+      </div>
+      <div class="detail-item">
+        <strong>Export summary</strong>
+        <pre class="json">{{ dsar_request.export_summary|jsonify }}</pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if deliverables %}
+<div class="card">
+  <div class="card-header"><div class="card-title">Prepared deliverables</div></div>
+  <div class="table-wrap">
+    <table class="table">
+      <tr>
+        <th>Type</th>
+        <th>File</th>
+        <th>Generated</th>
+        <th>Expires</th>
+        <th></th>
+      </tr>
+      {% for deliverable in deliverables %}
+      <tr>
+        <td>{{ deliverable.get_artefact_type_display }}</td>
+        <td class="mono">{{ deliverable.file_name }}</td>
+        <td class="mono">{{ deliverable.generated_at|date:"d M Y H:i" }}</td>
+        <td class="mono">{{ deliverable.expires_at|date:"d M Y H:i" }}</td>
+        <td><a class="btn btn-sm" href="{% url 'admin_portal:dsar_deliverable_download' deliverable.id %}">Download</a></td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% if IS_SUPER_ADMIN %}
+<div class="grid-2-equal">
+  <div class="card">
+    <div class="card-header"><div class="card-title">Extend request</div></div>
+    <form method="post" action="{% url 'admin_portal:dsar_extend' dsar_request.id %}" class="stack">
+      {% csrf_token %}
+      <div class="form-row">
+        <div class="form-group">
+          <label for="id_days">Days</label>
+          <input id="id_days" type="number" name="days" min="1" value="30">
+        </div>
+        <div class="form-group" style="flex:1;">
+          <label for="id_extend_reason">Reason</label>
+          <input id="id_extend_reason" type="text" name="reason" placeholder="Explain why the DSAR is being extended">
+        </div>
+      </div>
+      <button class="btn" type="submit">Extend</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><div class="card-title">Reject request</div></div>
+    <form method="post" action="{% url 'admin_portal:dsar_reject' dsar_request.id %}" class="stack">
+      {% csrf_token %}
+      <div class="form-group">
+        <label for="id_reject_reason">Reason</label>
+        <textarea id="id_reject_reason" name="reason" rows="4" placeholder="Explain why this request is being rejected"></textarea>
+      </div>
+      <button class="btn-danger" type="submit">Reject request</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-header"><div class="card-title">Event log</div></div>
+  <div class="table-wrap">
+    <table class="table">
+      <tr>
+        <th>When</th>
+        <th>Action</th>
+        <th>Actor</th>
+        <th>Details</th>
+      </tr>
+      {% for event in events %}
+      <tr>
+        <td class="mono">{{ event.created_at|date:"d M Y H:i" }}</td>
+        <td>{{ event.action }}</td>
+        <td>{{ event.actor.email|default:"System" }}</td>
+        <td><pre class="json">{{ event.details|jsonify }}</pre></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="4" class="empty-state">No DSAR events yet.</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}

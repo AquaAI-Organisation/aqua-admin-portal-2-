@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy Verification | Aqua AI Admin</title>
+  <link rel="stylesheet" href="/static/admin_portal/styles.css">
+</head>
+<body class="app-body" data-theme="dark">
+  <main class="main-panel" style="margin:0;min-height:100vh;">
+    <div class="main-panel-inner" style="max-width:960px;margin:0 auto;padding-top:64px;">
+      <div class="page-header">
+        <div>
+          <h1>Privacy request verification</h1>
+          {% if outcome == "verified" %}
+          <p class="page-subtitle">Your verification succeeded. Aqua AI has started preparing your data request package for final DPO approval and delivery.</p>
+          {% elif outcome == "already_verified" %}
+          <p class="page-subtitle">This privacy request has already been verified.</p>
+          {% elif outcome == "expired" %}
+          <p class="page-subtitle">This verification link has expired. Please reply to privacy@aquaai.uk and request a fresh verification email.</p>
+          {% else %}
+          <p class="page-subtitle">This verification link is invalid. Please reply to privacy@aquaai.uk if you need help.</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><div class="card-title">Request status</div></div>
+        {% if dsar_request %}
+        <div class="kv-grid">
+          <div class="kv-label">Request type</div>
+          <div class="kv-value">{{ dsar_request.get_request_type_display }}</div>
+          <div class="kv-label">Current status</div>
+          <div class="kv-value">{{ dsar_request.get_status_display }}</div>
+          <div class="kv-label">Received</div>
+          <div class="kv-value">{{ dsar_request.received_at|date:"d M Y H:i" }}</div>
+          <div class="kv-label">Email</div>
+          <div class="kv-value">{{ dsar_request.submitted_email }}</div>
+        </div>
+        {% else %}
+        <div class="empty-state">No matching request could be found for this verification link.</div>
+        {% endif %}
+      </div>
+    </div>
+  </main>
+</body>
+</html>

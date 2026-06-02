@@ -11,7 +11,7 @@ from typing import Iterable
 from django.utils import timezone
 
 from ..models import (
-    AIAccountReview, AIFlag,
+    AIAccountReview, AIFlag, OperationalSettings,
     ExternalBreederProfile, ExternalConsultantProfile, ExternalUser,
 )
 from .notifier import notify_flag
@@ -22,6 +22,43 @@ from .openai_review import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _global_auto_activate_enabled() -> bool:
+    try:
+        return bool(OperationalSettings.get_solo().auto_activate_new_accounts)
+    except Exception:
+        logger.exception("Could not read operational auto-activation setting")
+        return False
+
+
+def _auto_activate_outcome(subject_type: str, profile, user) -> AIReviewOutcome:
+    display = (profile.company_name or user.name or f"{user.first_name} {user.last_name}").strip()
+    evidence = {
+        "operational_mode": "global_auto_activate",
+        "auto_activated_by_setting": True,
+        "subject_type": subject_type,
+        "subject_display_name": display[:255],
+        "decision_basis": {
+            "risk_bucket": "unreviewed",
+            "hard_blocks": [],
+            "operational_policy": "global_auto_activate",
+        },
+    }
+    return AIReviewOutcome(
+        decision="approved",
+        confidence=1.0,
+        rationale=(
+            "Automatically approved because the global automatic account activation toggle "
+            "is enabled in operational settings."
+        ),
+        evidence=evidence,
+        recommended_actions=[{"action": "approve_account", "mode": "global_auto_activate"}],
+        flags=[],
+        raw={"source": "operational_settings", "mode": "global_auto_activate"},
+        model="operational:auto-activate",
+        error="",
+    )
 
 
 def _max_flag_severity(flags: list[dict] | None) -> str:
@@ -142,13 +179,15 @@ def discover_pending_consultants(limit: int = 50):
 # ---------------------------------------------------------------------------
 
 def run_review(subject_type: str, profile, user) -> AIAccountReview:
-    if subject_type == "breeder":
-        dossier = build_breeder_dossier(profile, user)
+    if _global_auto_activate_enabled():
+        outcome = _auto_activate_outcome(subject_type, profile, user)
     else:
-        dossier = build_consultant_dossier(profile, user)
-
-    outcome = call_gpt4(dossier)
-    outcome = _operationalise_outcome(outcome)
+        if subject_type == "breeder":
+            dossier = build_breeder_dossier(profile, user)
+        else:
+            dossier = build_consultant_dossier(profile, user)
+        outcome = call_gpt4(dossier)
+        outcome = _operationalise_outcome(outcome)
 
     display = (profile.company_name or user.name or f"{user.first_name} {user.last_name}").strip()
     review, _ = AIAccountReview.objects.update_or_create(

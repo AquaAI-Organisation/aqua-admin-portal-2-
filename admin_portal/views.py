@@ -36,6 +36,8 @@ from .models import (
     AIFlag,
     AIFlaggedIssue,
     DailyReport,
+    DSARDeliverable,
+    DSARRequest,
     ExternalBreederShippingProfile,
     ExternalBreederReservation,
     ExternalBreederVerification,
@@ -50,6 +52,14 @@ from .models import (
 )
 from .permissions import admin_required, operational_admin_required, super_admin_required
 from .services import audit
+from .services.dsar import (
+    approve_and_send_dsar,
+    ensure_dsar_request_from_inquiry,
+    extend_dsar_request,
+    prepare_dsar_request,
+    reject_dsar_request,
+    verify_dsar_token,
+)
 from .services.feature_d_backend import (
     FeatureDBackendError,
     approve_verification,
@@ -59,6 +69,7 @@ from .services.feature_d_backend import (
     resolve_dispute,
     toggle_delivery,
 )
+from .services.google_oauth import clear_gmail_service_cache
 from .services.health import get_health_snapshot
 from .services.inquiry_intelligence import apply_inquiry_action, persist_inquiry_analysis
 from .services.mailbox import fetch_support_inbox, send_support_reply
@@ -812,6 +823,7 @@ def operational_settings_view(request):
         settings_obj = form.save(commit=False)
         settings_obj.updated_by = request.user
         settings_obj.save()
+        clear_gmail_service_cache()
         audit.record_write(
             request.user,
             "settings.update",
@@ -831,9 +843,12 @@ def operational_settings_view(request):
 
 @operational_admin_required
 def support_inbox_list(request):
+    mailbox = (request.GET.get("mailbox") or "general").strip()
     q = (request.GET.get("q") or "").strip()
     status = (request.GET.get("status") or "").strip()
     qs = SupportInquiry.objects.all()
+    if mailbox in {"general", "privacy", "providers"}:
+        qs = qs.filter(mailbox_kind=mailbox)
     if q:
         qs = qs.filter(
             Q(from_email__icontains=q)
@@ -844,16 +859,28 @@ def support_inbox_list(request):
     if status in {"new", "triaged", "actioned", "replied", "archived", "error"}:
         qs = qs.filter(status=status)
     page = Paginator(qs, 25).get_page(request.GET.get("page"))
+    mailbox_counts = {
+        "general": SupportInquiry.objects.filter(mailbox_kind="general").count(),
+        "privacy": SupportInquiry.objects.filter(mailbox_kind="privacy").count(),
+        "providers": SupportInquiry.objects.filter(mailbox_kind="providers").count(),
+    }
     return render(
         request,
         "admin_portal/support_inbox_list.html",
-        {"page": page, "q": q, "status": status},
+        {
+            "page": page,
+            "q": q,
+            "status": status,
+            "mailbox": mailbox,
+            "mailbox_counts": mailbox_counts,
+        },
     )
 
 
 @operational_admin_required
 def support_inbox_refresh(request):
     if request.method == "POST":
+        mailbox = (request.POST.get("mailbox") or "general").strip()
         try:
             result = fetch_support_inbox(limit=25)
         except Exception as exc:
@@ -865,21 +892,36 @@ def support_inbox_refresh(request):
                 target_type="support_inbox",
                 target_id="support",
                 request=request,
-                summary=f"Fetched support inbox messages: {result['added']} added, {result['updated']} updated.",
+                summary=(
+                    f"Fetched inbox messages: {result['added']} added, {result['updated']} updated, "
+                    f"{result.get('dsar_created', 0)} DSAR requests created."
+                ),
                 **result,
             )
-            messages.success(request, f"Inbox refreshed: {result['added']} added, {result['updated']} updated.")
-    return redirect("admin_portal:support_inbox_list")
+            messages.success(
+                request,
+                f"Inbox refreshed: {result['added']} added, {result['updated']} updated, "
+                f"{result.get('dsar_created', 0)} privacy requests converted to DSAR cases.",
+            )
+    else:
+        mailbox = (request.GET.get("mailbox") or "general").strip()
+    return redirect(f"{reverse('admin_portal:support_inbox_list')}?mailbox={mailbox}")
 
 
 @operational_admin_required
 def support_inbox_detail(request, inquiry_id):
     inquiry = get_object_or_404(SupportInquiry, pk=inquiry_id)
+    dsar_request = inquiry.dsar_requests.order_by("-created_at").first()
     reply_form = SupportReplyForm(initial={"body": inquiry.response_draft})
     return render(
         request,
         "admin_portal/support_inbox_detail.html",
-        {"inquiry": inquiry, "reply_form": reply_form},
+        {
+            "inquiry": inquiry,
+            "reply_form": reply_form,
+            "dsar_request": dsar_request,
+            "mailbox": inquiry.mailbox_kind,
+        },
     )
 
 
@@ -888,6 +930,7 @@ def support_inbox_analyse(request, inquiry_id):
     inquiry = get_object_or_404(SupportInquiry, pk=inquiry_id)
     if request.method == "POST":
         persist_inquiry_analysis(inquiry)
+        dsar_request, _ = ensure_dsar_request_from_inquiry(inquiry)
         audit.record_write(
             request.user,
             "inbox.analyse",
@@ -895,6 +938,7 @@ def support_inbox_analyse(request, inquiry_id):
             target_id=inquiry.id,
             request=request,
             summary=f"Analysed support enquiry from {inquiry.from_email}.",
+            dsar_request_id=str(dsar_request.id) if dsar_request else "",
         )
         if inquiry.ai_error:
             messages.warning(request, f"Enquiry analysed with fallback logic: {inquiry.ai_error}")
@@ -946,6 +990,125 @@ def support_inbox_send_reply(request, inquiry_id):
         else:
             messages.error(request, f"Reply failed: {result['error']}")
     return redirect("admin_portal:support_inbox_detail", inquiry_id=inquiry.id)
+
+
+@operational_admin_required
+def dsar_request_list(request):
+    status = (request.GET.get("status") or "").strip()
+    q = (request.GET.get("q") or "").strip()
+    qs = DSARRequest.objects.select_related("inquiry", "dpo_actor").all()
+    if status:
+        qs = qs.filter(status=status)
+    if q:
+        qs = qs.filter(
+            Q(submitted_email__icontains=q)
+            | Q(submitted_name__icontains=q)
+            | Q(detail__icontains=q)
+        )
+    summary = qs.aggregate(
+        total=Count("id"),
+        awaiting=Count("id", filter=Q(status="awaiting_dpo_approval")),
+        verifying=Count("id", filter=Q(status="verifying")),
+        overdue=Count("id", filter=Q(due_at__lt=timezone.now()) & ~Q(status__in=["fulfilled", "rejected", "withdrawn"])),
+    )
+    page = Paginator(qs.order_by("due_at", "-received_at"), 25).get_page(request.GET.get("page"))
+    return render(
+        request,
+        "admin_portal/dsar_request_list.html",
+        {
+            "page": page,
+            "status": status,
+            "q": q,
+            "summary": summary,
+            "status_choices": DSARRequest._meta.get_field("status").choices,
+        },
+    )
+
+
+@operational_admin_required
+def dsar_request_detail(request, request_id):
+    dsar_request = get_object_or_404(
+        DSARRequest.objects.select_related("inquiry", "dpo_actor"),
+        pk=request_id,
+    )
+    return render(
+        request,
+        "admin_portal/dsar_request_detail.html",
+        {
+            "dsar_request": dsar_request,
+            "deliverables": dsar_request.deliverables.all(),
+            "events": dsar_request.events.select_related("actor").all(),
+        },
+    )
+
+
+def dsar_verify(request, token):
+    dsar_request, outcome = verify_dsar_token(token)
+    return render(
+        request,
+        "admin_portal/dsar_verify_result.html",
+        {"dsar_request": dsar_request, "outcome": outcome},
+    )
+
+
+@super_admin_required
+def dsar_prepare(request, request_id):
+    dsar_request = get_object_or_404(DSARRequest, pk=request_id)
+    if request.method == "POST":
+        try:
+            prepare_dsar_request(dsar_request, actor=request.user)
+        except Exception as exc:
+            messages.error(request, f"Could not prepare the data request package: {exc}")
+        else:
+            messages.success(request, "The DSAR export package is ready for DPO approval.")
+    return redirect("admin_portal:dsar_request_detail", request_id=dsar_request.id)
+
+
+@super_admin_required
+def dsar_approve(request, request_id):
+    dsar_request = get_object_or_404(DSARRequest, pk=request_id)
+    if request.method == "POST":
+        result = approve_and_send_dsar(dsar_request, actor=request.user)
+        if result["ok"]:
+            messages.success(request, "The DSAR package was emailed successfully.")
+        else:
+            messages.error(request, f"The DSAR package could not be sent: {result['error']}")
+    return redirect("admin_portal:dsar_request_detail", request_id=dsar_request.id)
+
+
+@super_admin_required
+def dsar_reject(request, request_id):
+    dsar_request = get_object_or_404(DSARRequest, pk=request_id)
+    if request.method == "POST":
+        reason = (request.POST.get("reason") or "").strip() or "Rejected by DPO."
+        reject_dsar_request(dsar_request, actor=request.user, reason=reason)
+        messages.success(request, "The data request was rejected.")
+    return redirect("admin_portal:dsar_request_detail", request_id=dsar_request.id)
+
+
+@super_admin_required
+def dsar_extend(request, request_id):
+    dsar_request = get_object_or_404(DSARRequest, pk=request_id)
+    if request.method == "POST":
+        reason = (request.POST.get("reason") or "").strip() or "Extended while the fulfilment package is completed."
+        try:
+            days = int(request.POST.get("days") or "30")
+        except ValueError:
+            days = 30
+        extend_dsar_request(dsar_request, actor=request.user, reason=reason, days=days)
+        messages.success(request, f"The request was extended by {days} days.")
+    return redirect("admin_portal:dsar_request_detail", request_id=dsar_request.id)
+
+
+@operational_admin_required
+def dsar_deliverable_download(request, deliverable_id):
+    deliverable = get_object_or_404(DSARDeliverable, pk=deliverable_id)
+    path = Path(deliverable.storage_ref)
+    if not path.exists():
+        raise Http404("This DSAR file is no longer available.")
+    deliverable.retrieved_at = timezone.now()
+    deliverable.save(update_fields=["retrieved_at"])
+    return FileResponse(path.open("rb"), as_attachment=True, filename=deliverable.file_name or path.name)
 
 
 @admin_required

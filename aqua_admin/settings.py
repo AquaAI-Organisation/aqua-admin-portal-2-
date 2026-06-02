@@ -153,6 +153,18 @@ EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Aqua Admin <admin@humara.io>")
 
+GMAIL_CLIENT_ID = os.getenv("GMAIL_CLIENT_ID", "")
+GMAIL_CLIENT_SECRET = os.getenv("GMAIL_CLIENT_SECRET", "")
+GMAIL_REFRESH_TOKEN = os.getenv("GMAIL_REFRESH_TOKEN", "")
+GMAIL_SENDER = os.getenv("GMAIL_SENDER", "support@aquaai.uk")
+SUPPORT_ALIAS_EMAIL = os.getenv("SUPPORT_ALIAS_EMAIL", "support@aquaai.uk")
+PRIVACY_ALIAS_EMAIL = os.getenv("PRIVACY_ALIAS_EMAIL", "privacy@aquaai.uk")
+PROVIDERS_ALIAS_EMAIL = os.getenv("PROVIDERS_ALIAS_EMAIL", "providers@aquaai.uk")
+GMAIL_SCOPES = [
+    "https://www.googleapis.com/auth/gmail.modify",
+    "https://www.googleapis.com/auth/gmail.send",
+]
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,

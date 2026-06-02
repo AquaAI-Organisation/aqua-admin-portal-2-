@@ -8,6 +8,7 @@ Two kinds of tables live here:
    `consultant_consultantprofile`, `breeders_breederprofile`). The `managed = False`
    flag guarantees migrations here will never touch the main backend's schema.
 """
+from datetime import timedelta
 import uuid
 
 from django.conf import settings
@@ -61,6 +62,11 @@ ISSUE_STATUS_CHOICES = [
     ("resolved", "Resolved"),
     ("error", "Error"),
 ]
+MAILBOX_KIND_CHOICES = [
+    ("general", "General Support"),
+    ("privacy", "Privacy"),
+    ("providers", "Providers"),
+]
 INQUIRY_STATUS_CHOICES = [
     ("new", "New"),
     ("triaged", "Triaged"),
@@ -68,6 +74,37 @@ INQUIRY_STATUS_CHOICES = [
     ("replied", "Replied"),
     ("archived", "Archived"),
     ("error", "Error"),
+]
+DSAR_REQUEST_TYPE_CHOICES = [
+    ("access", "Access"),
+    ("portability", "Portability"),
+    ("rectification", "Rectification"),
+    ("erasure", "Erasure"),
+    ("restriction", "Restriction"),
+    ("objection", "Objection"),
+]
+DSAR_STATUS_CHOICES = [
+    ("received", "Received"),
+    ("verifying", "Verifying"),
+    ("verified", "Verified"),
+    ("in_progress", "In progress"),
+    ("awaiting_dpo_approval", "Awaiting DPO approval"),
+    ("fulfilled", "Fulfilled"),
+    ("rejected", "Rejected"),
+    ("extended", "Extended"),
+    ("withdrawn", "Withdrawn"),
+    ("unmatched", "Unmatched"),
+]
+DSAR_CHANNEL_CHOICES = [
+    ("web_form", "Web form"),
+    ("email", "Email"),
+    ("in_app", "In app"),
+]
+DSAR_DELIVERABLE_CHOICES = [
+    ("access_export_json", "Access export JSON"),
+    ("access_export_html", "Access export HTML"),
+    ("deletion_report_json", "Deletion report JSON"),
+    ("deletion_report_html", "Deletion report HTML"),
 ]
 
 
@@ -182,6 +219,21 @@ class AdminInvite(models.Model):
 
 
 class OperationalSettings(models.Model):
+    auto_activate_new_accounts = models.BooleanField(
+        default=False,
+        help_text=(
+            "When enabled, new breeder and consultant accounts are automatically approved "
+            "without AI review as soon as the review processor picks them up."
+        ),
+    )
+    gmail_client_id = models.CharField(max_length=255, blank=True)
+    gmail_client_secret = models.CharField(max_length=255, blank=True)
+    gmail_refresh_token = models.CharField(max_length=255, blank=True)
+    gmail_sender = models.CharField(max_length=255, blank=True, default="support@aquaai.uk")
+    support_alias_email = models.CharField(max_length=255, blank=True, default="support@aquaai.uk")
+    privacy_alias_email = models.CharField(max_length=255, blank=True, default="privacy@aquaai.uk")
+    providers_alias_email = models.CharField(max_length=255, blank=True, default="providers@aquaai.uk")
+
     smtp_host = models.CharField(max_length=255, blank=True)
     smtp_port = models.PositiveIntegerField(default=587)
     smtp_use_tls = models.BooleanField(default=True)
@@ -229,10 +281,14 @@ class OperationalSettings(models.Model):
 
 class SupportInquiry(models.Model):
     message_id = models.CharField(max_length=255, unique=True)
+    gmail_thread_id = models.CharField(max_length=255, blank=True)
     from_email = models.EmailField()
     from_name = models.CharField(max_length=255, blank=True)
+    to_email = models.CharField(max_length=255, blank=True)
+    mailbox_kind = models.CharField(max_length=20, choices=MAILBOX_KIND_CHOICES, default="general")
     subject = models.CharField(max_length=255, blank=True)
     body_text = models.TextField(blank=True)
+    gmail_label_ids = models.JSONField(default=list, blank=True)
     received_at = models.DateTimeField(default=timezone.now)
     status = models.CharField(max_length=20, choices=INQUIRY_STATUS_CHOICES, default="new")
     matched_entity_type = models.CharField(max_length=32, blank=True)
@@ -253,10 +309,109 @@ class SupportInquiry(models.Model):
         ordering = ["-received_at", "-created_at"]
         indexes = [
             models.Index(fields=["status", "-received_at"], name="admin_porta_inquiry_status_idx"),
+            models.Index(fields=["mailbox_kind", "-received_at"], name="admp_inquiry_mailbox_idx"),
         ]
 
     def __str__(self):
         return self.subject or self.from_email
+
+    @property
+    def mailbox_label(self):
+        return dict(MAILBOX_KIND_CHOICES).get(self.mailbox_kind, self.mailbox_kind)
+
+    @property
+    def latest_dsar_request(self):
+        return self.dsar_requests.order_by("-created_at").first()
+
+
+class DSARRequest(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    inquiry = models.ForeignKey(
+        SupportInquiry, null=True, blank=True, on_delete=models.SET_NULL, related_name="dsar_requests"
+    )
+    request_type = models.CharField(max_length=20, choices=DSAR_REQUEST_TYPE_CHOICES, default="access")
+    status = models.CharField(max_length=32, choices=DSAR_STATUS_CHOICES, default="received")
+    subject_user_id = models.UUIDField(null=True, blank=True)
+    submitted_email = models.EmailField()
+    submitted_name = models.CharField(max_length=255, blank=True)
+    detail = models.TextField(blank=True)
+    channel = models.CharField(max_length=16, choices=DSAR_CHANNEL_CHOICES, default="email")
+    received_at = models.DateTimeField(default=timezone.now)
+    verified_at = models.DateTimeField(null=True, blank=True)
+    dpo_actioned_at = models.DateTimeField(null=True, blank=True)
+    fulfilled_at = models.DateTimeField(null=True, blank=True)
+    due_at = models.DateTimeField(null=True, blank=True)
+    extended = models.BooleanField(default=False)
+    extension_reason = models.TextField(blank=True)
+    dpo_actor = models.ForeignKey(
+        AdminUser, null=True, blank=True, on_delete=models.SET_NULL, related_name="dsar_actions"
+    )
+    verification_token_hash = models.CharField(max_length=128, blank=True)
+    verification_sent_at = models.DateTimeField(null=True, blank=True)
+    verification_expires_at = models.DateTimeField(null=True, blank=True)
+    verification_email = models.EmailField(blank=True)
+    export_summary = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["received_at", "-created_at"]
+        indexes = [
+            models.Index(fields=["status", "due_at"], name="admp_dsar_status_due_idx"),
+            models.Index(fields=["submitted_email"], name="admin_porta_dsar_email_idx"),
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self.due_at and self.received_at:
+            self.due_at = self.received_at + timedelta(days=30)
+        super().save(*args, **kwargs)
+
+    @property
+    def days_remaining(self) -> int:
+        if not self.due_at:
+            return 0
+        delta = self.due_at - timezone.now()
+        return int(delta.total_seconds() // 86400)
+
+    @property
+    def is_overdue(self) -> bool:
+        return bool(self.due_at and timezone.now() > self.due_at and self.status not in {"fulfilled", "rejected", "withdrawn"})
+
+    @property
+    def request_type_label(self):
+        return dict(DSAR_REQUEST_TYPE_CHOICES).get(self.request_type, self.request_type)
+
+
+class DSAREvent(models.Model):
+    request = models.ForeignKey(DSARRequest, on_delete=models.CASCADE, related_name="events")
+    action = models.CharField(max_length=64)
+    actor = models.ForeignKey(
+        AdminUser, null=True, blank=True, on_delete=models.SET_NULL, related_name="dsar_events"
+    )
+    details = models.JSONField(default=dict, blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["created_at", "id"]
+        indexes = [
+            models.Index(fields=["request", "created_at"], name="admin_porta_dsar_event_idx"),
+        ]
+
+
+class DSARDeliverable(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    request = models.ForeignKey(DSARRequest, on_delete=models.CASCADE, related_name="deliverables")
+    artefact_type = models.CharField(max_length=32, choices=DSAR_DELIVERABLE_CHOICES)
+    storage_ref = models.TextField()
+    file_name = models.CharField(max_length=255, blank=True)
+    mime_type = models.CharField(max_length=128, blank=True)
+    generated_at = models.DateTimeField(default=timezone.now)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    retrieved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-generated_at"]
 
 
 # ---------------------------------------------------------------------------

@@ -1512,6 +1512,64 @@ canvas {
 
 .invite-link-input { min-width: 0; }
 
+.pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(125,212,255,0.14);
+  color: var(--soft);
+  background: rgba(255,255,255,0.03);
+  text-decoration: none;
+  transition: transform var(--t-fast), border-color var(--t-fast), color var(--t-fast), background var(--t-fast);
+}
+
+.pill:hover,
+.pill.active {
+  color: var(--text);
+  border-color: rgba(125,212,255,0.28);
+  background: rgba(125,212,255,0.08);
+  transform: translateY(-1px);
+}
+
+.stats-grid.compact {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.stat-card {
+  padding: 16px 18px;
+  border-radius: var(--radius);
+  border: 1px solid rgba(125,212,255,0.10);
+  background: rgba(255,255,255,0.03);
+}
+
+.stat-label {
+  color: var(--soft);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.stat-value {
+  margin-top: 8px;
+  font-size: 1.8rem;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+
+.danger-text { color: var(--danger); }
+
 /* ── Details / Summary ────────────────────────────────────── */
 details summary {
   cursor: pointer;
