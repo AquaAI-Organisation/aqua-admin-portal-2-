@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 import email
 import imaplib
+import logging
 from datetime import datetime, timedelta, timezone as dt_timezone
 from email.header import decode_header, make_header
 from email.utils import parsedate_to_datetime, parseaddr
@@ -15,6 +16,8 @@ from ..models import ExternalBreederProfile, ExternalConsultantProfile, External
 from .google_oauth import get_gmail_service, gmail_configured, pick_alias_for_mailbox
 from .notifier import send_custom_email
 from .runtime_config import get_gmail_runtime_config, get_mailbox_runtime_config
+
+logger = logging.getLogger(__name__)
 
 
 def fetch_support_inbox(limit: int = 25) -> dict[str, int]:
@@ -59,32 +62,38 @@ def _fetch_gmail_inbox(limit: int = 25) -> dict[str, int]:
     updated = 0
     dsar_created = 0
     for entry in messages:
-        payload = service.users().messages().get(
-            userId="me",
-            id=entry["id"],
-            format="full",
-        ).execute()
-        parsed = _parse_gmail_message(payload)
-        if not parsed["message_id"]:
-            continue
-        defaults = _inquiry_defaults(parsed)
         try:
-            inquiry, created = SupportInquiry.objects.update_or_create(
-                message_id=parsed["message_id"],
-                defaults=defaults,
-            )
-        except IntegrityError:
-            continue
-        if created:
-            added += 1
-        else:
-            updated += 1
-        if inquiry.mailbox_kind == "privacy":
-            from .dsar import ensure_dsar_request_from_inquiry
+            payload = service.users().messages().get(
+                userId="me",
+                id=entry["id"],
+                format="full",
+            ).execute()
+            parsed = _parse_gmail_message(payload)
+            if not parsed["message_id"]:
+                continue
+            defaults = _inquiry_defaults(parsed)
+            try:
+                inquiry, created = SupportInquiry.objects.update_or_create(
+                    message_id=parsed["message_id"],
+                    defaults=defaults,
+                )
+            except IntegrityError:
+                continue
+            if created:
+                added += 1
+            else:
+                updated += 1
+            if inquiry.mailbox_kind == "privacy":
+                from .dsar import ensure_dsar_request_from_inquiry
 
-            dsar_request, created_request = ensure_dsar_request_from_inquiry(inquiry)
-            if dsar_request and created_request:
-                dsar_created += 1
+                dsar_request, created_request = ensure_dsar_request_from_inquiry(inquiry)
+                if dsar_request and created_request:
+                    dsar_created += 1
+        except Exception:
+            # A single malformed or ambiguous message must not abort the sync;
+            # log and move on so the rest of the inbox still ingests.
+            logger.exception("Skipped a Gmail message during inbox sync (id=%s)", entry.get("id"))
+            continue
     return {"added": added, "updated": updated, "dsar_created": dsar_created}
 
 
@@ -280,20 +289,19 @@ def _inquiry_defaults(parsed):
 def _match_sender(sender_email: str) -> tuple[str, str]:
     if not sender_email:
         return "", ""
-    try:
-        user = ExternalUser.objects.get(email__iexact=sender_email)
-    except ExternalUser.DoesNotExist:
+    # The shared Supabase table can contain duplicate or case-variant rows for
+    # the same email, so use filter().first() instead of get() to stay resilient
+    # — one ambiguous sender must never abort the whole inbox sync.
+    user = ExternalUser.objects.filter(email__iexact=sender_email).order_by("id").first()
+    if not user:
         return "", ""
-    try:
-        consultant = ExternalConsultantProfile.objects.get(user_id=user.id)
+    consultant = ExternalConsultantProfile.objects.filter(user_id=user.id).order_by("id").first()
+    if consultant:
         return "consultant", str(consultant.id)
-    except ExternalConsultantProfile.DoesNotExist:
-        pass
-    try:
-        breeder = ExternalBreederProfile.objects.get(user_id=user.id)
+    breeder = ExternalBreederProfile.objects.filter(user_id=user.id).order_by("id").first()
+    if breeder:
         return "breeder", str(breeder.id)
-    except ExternalBreederProfile.DoesNotExist:
-        return "user", str(user.id)
+    return "user", str(user.id)
 
 
 def _friendly_mailbox_error(error: str) -> str:
