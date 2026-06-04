@@ -80,12 +80,17 @@ Together, `poll_inbox` + `confirm_dsar_logins` make the privacy/DSAR pipeline fu
 
 The review command now processes both new account signups and new incident/warning triage. Inbox refresh can also create DSAR requests from the privacy mailbox automatically.
 
-### DSAR login watcher — two options
+### Running the automation — two options
 
-- **Heroku Scheduler (recommended):** add a job running `python manage.py confirm_dsar_logins` every 10 minutes. Free, no extra dyno.
-- **Always-on worker:** the `Procfile` defines a `worker` process running the watcher continuously. It stays at 0 dynos (no cost) until you enable it with `heroku ps:scale worker=1`; lower latency than the 10-minute scheduler.
+The pipeline only runs hands-off if something triggers it on a schedule. Pick one:
 
-Confirmation also happens automatically whenever an admin opens a data request, and via the **Re-check login** button — the scheduler just makes it hands-off.
+- **Always-on worker (simplest, turnkey):** the `Procfile` defines a `worker` that runs `run_automation` — it polls the mailbox **and** confirms/delivers DSARs every 2 minutes. It stays at 0 dynos (no cost) until you switch it on once with:
+  ```
+  heroku ps:scale worker=1
+  ```
+- **Heroku Scheduler (no extra dyno):** add two jobs every 10 minutes — `python manage.py poll_inbox` and `python manage.py confirm_dsar_logins`.
+
+Inbox refresh and login confirmation also still happen when an admin opens the inbox / a data request, and via the **Refresh inbox** and **Re-check login** buttons — the worker/scheduler just removes the manual step.
 
 ## Main backend redirect
 
