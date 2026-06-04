@@ -54,11 +54,13 @@ from .permissions import admin_required, operational_admin_required, super_admin
 from .services import audit
 from .services.dsar import (
     approve_and_send_dsar,
+    attempts_remaining,
     ensure_dsar_request_from_inquiry,
     extend_dsar_request,
+    peek_dsar_token,
     prepare_dsar_request,
     reject_dsar_request,
-    verify_dsar_token,
+    verify_dsar_credentials,
 )
 from .services.feature_d_backend import (
     FeatureDBackendError,
@@ -1194,11 +1196,26 @@ def dsar_request_detail(request, request_id):
 
 
 def dsar_verify(request, token):
-    dsar_request, outcome = verify_dsar_token(token)
+    ip = request.META.get("REMOTE_ADDR", "")
+    if request.method == "POST":
+        identifier = request.POST.get("identifier", "")
+        password = request.POST.get("password", "")
+        dsar_request, outcome = verify_dsar_credentials(token, identifier, password, ip=ip)
+        # Keep the form on screen only while the requester can still retry.
+        show_form = outcome == "invalid_credentials"
+    else:
+        dsar_request, outcome = peek_dsar_token(token)
+        show_form = outcome == "ok"
     return render(
         request,
         "admin_portal/dsar_verify_result.html",
-        {"dsar_request": dsar_request, "outcome": outcome},
+        {
+            "dsar_request": dsar_request,
+            "outcome": outcome,
+            "show_form": show_form,
+            "token": token,
+            "attempts_left": attempts_remaining(dsar_request),
+        },
     )
 
 
