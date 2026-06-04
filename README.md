@@ -80,12 +80,42 @@ Together, `poll_inbox` + `confirm_dsar_logins` make the privacy/DSAR pipeline fu
 
 The review command now processes both new account signups and new incident/warning triage. Inbox refresh can also create DSAR requests from the privacy mailbox automatically.
 
-### DSAR login watcher — two options
+### Running the automation
 
-- **Heroku Scheduler (recommended):** add a job running `python manage.py confirm_dsar_logins` every 10 minutes. Free, no extra dyno.
-- **Always-on worker:** the `Procfile` defines a `worker` process running the watcher continuously. It stays at 0 dynos (no cost) until you enable it with `heroku ps:scale worker=1`; lower latency than the 10-minute scheduler.
+**Default — built into the web app (works on any host):** the web process runs an
+in-process scheduler that refreshes the mailbox and processes DSARs every
+`INBOX_AUTOREFRESH_INTERVAL` seconds (default 120). Nothing extra to run — just
+deploy the web app. It is safe with multiple web workers/instances (a PostgreSQL
+advisory lock ensures only one runs each cycle). This works identically on
+Heroku, a VPS, Docker, Render, etc. Disable with `INBOX_AUTOREFRESH=false`.
 
-Confirmation also happens automatically whenever an admin opens a data request, and via the **Re-check login** button — the scheduler just makes it hands-off.
+**Optional — dedicated worker/scheduler (for higher scale):** instead of the
+in-process scheduler you can run the loop in its own process:
+
+- **Heroku worker dyno:** the `Procfile` defines a `worker` running `run_automation`. Enable with `heroku ps:scale worker=1` (and set `INBOX_AUTOREFRESH=false` on the web dyno).
+- **Heroku Scheduler:** add `python manage.py poll_inbox` and `python manage.py confirm_dsar_logins` every 10 minutes.
+- **Any other host (systemd, Docker, Render, etc.):** run `python manage.py run_automation` as a long-lived process (see "Deploying off Heroku").
+
+Inbox refresh and login confirmation also still happen when an admin opens the
+inbox / a data request, and via the **Refresh inbox** and **Re-check login**
+buttons.
+
+### Deploying off Heroku
+
+The app is a standard Django/gunicorn app, so it runs anywhere. The automation
+needs no Heroku-specific pieces:
+
+- **In-process (recommended):** keep `INBOX_AUTOREFRESH=true` (the default). As
+  long as the web app is running under gunicorn/uvicorn, the mailbox
+  auto-refreshes — no cron, worker, or scheduler required.
+- **Dedicated process (optional):** run `python manage.py run_automation`
+  supervised by whatever your host uses (a systemd service, a second Docker/
+  Compose service, a Render/Railway background worker, a Kubernetes Deployment),
+  and set `INBOX_AUTOREFRESH=false` on the web app.
+
+Run the web app with e.g. `gunicorn aqua_admin.wsgi --bind 0.0.0.0:$PORT --workers 3`.
+Avoid gunicorn `--preload` if you rely on the in-process scheduler (start it
+post-fork so each worker hosts it).
 
 ## Main backend redirect
 

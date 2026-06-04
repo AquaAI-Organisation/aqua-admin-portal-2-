@@ -195,6 +195,26 @@ def check_dsar_login(dsar_request: DSARRequest) -> bool:
     return True
 
 
+def run_due_login_checks() -> tuple[int, int]:
+    """Check every pending DSAR for a fresh aquaai.uk login. Returns
+    (checked, confirmed). Shared by the management command and worker loop."""
+    pending = DSARRequest.objects.filter(
+        login_confirmed_at__isnull=True,
+        subject_user_id__isnull=False,
+        verification_expires_at__gte=timezone.now(),
+    ).exclude(status__in=["fulfilled", "rejected", "withdrawn"])
+    checked = 0
+    confirmed = 0
+    for dsar_request in pending.iterator():
+        checked += 1
+        try:
+            if check_dsar_login(dsar_request):
+                confirmed += 1
+        except Exception:  # pragma: no cover - defensive, keep the loop alive
+            pass
+    return checked, confirmed
+
+
 def prepare_dsar_request(dsar_request: DSARRequest, actor=None) -> DSARRequest:
     if not dsar_request.subject_user_id:
         raise RuntimeError("This data request is not linked to a platform user yet.")
