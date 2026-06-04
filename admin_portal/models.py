@@ -351,6 +351,11 @@ class DSARRequest(models.Model):
     verification_expires_at = models.DateTimeField(null=True, blank=True)
     verification_email = models.EmailField(blank=True)
     verification_attempts = models.PositiveIntegerField(default=0)
+    # Set once the requester proves identity by logging in on the main aquaai.uk
+    # platform and the signed confirmation is received. Data may only be sent
+    # after this is populated.
+    login_confirmed_at = models.DateTimeField(null=True, blank=True)
+    login_confirmed_email = models.EmailField(blank=True)
     export_summary = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
@@ -381,6 +386,10 @@ class DSARRequest(models.Model):
     @property
     def request_type_label(self):
         return dict(DSAR_REQUEST_TYPE_CHOICES).get(self.request_type, self.request_type)
+
+    @property
+    def login_confirmed(self) -> bool:
+        return self.login_confirmed_at is not None
 
 
 class DSAREvent(models.Model):

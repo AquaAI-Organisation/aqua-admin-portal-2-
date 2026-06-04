@@ -54,13 +54,11 @@ from .permissions import admin_required, operational_admin_required, super_admin
 from .services import audit
 from .services.dsar import (
     approve_and_send_dsar,
-    attempts_remaining,
+    confirm_dsar_login,
     ensure_dsar_request_from_inquiry,
     extend_dsar_request,
-    peek_dsar_token,
     prepare_dsar_request,
     reject_dsar_request,
-    verify_dsar_credentials,
 )
 from .services.feature_d_backend import (
     FeatureDBackendError,
@@ -1195,27 +1193,20 @@ def dsar_request_detail(request, request_id):
     )
 
 
-def dsar_verify(request, token):
+def dsar_login_callback(request):
     ip = request.META.get("REMOTE_ADDR", "")
-    if request.method == "POST":
-        identifier = request.POST.get("identifier", "")
-        password = request.POST.get("password", "")
-        dsar_request, outcome = verify_dsar_credentials(token, identifier, password, ip=ip)
-        # Keep the form on screen only while the requester can still retry.
-        show_form = outcome == "invalid_credentials"
-    else:
-        dsar_request, outcome = peek_dsar_token(token)
-        show_form = outcome == "ok"
+    dsar_request, outcome = confirm_dsar_login(
+        request.GET.get("token", ""),
+        request.GET.get("uid", ""),
+        request.GET.get("email", ""),
+        request.GET.get("ts", ""),
+        request.GET.get("sig", ""),
+        ip=ip,
+    )
     return render(
         request,
         "admin_portal/dsar_verify_result.html",
-        {
-            "dsar_request": dsar_request,
-            "outcome": outcome,
-            "show_form": show_form,
-            "token": token,
-            "attempts_left": attempts_remaining(dsar_request),
-        },
+        {"dsar_request": dsar_request, "outcome": outcome},
     )
 
 
@@ -1236,6 +1227,13 @@ def dsar_prepare(request, request_id):
 def dsar_approve(request, request_id):
     dsar_request = get_object_or_404(DSARRequest, pk=request_id)
     if request.method == "POST":
+        if not dsar_request.login_confirmed_at:
+            messages.error(
+                request,
+                "Cannot send yet: the requester has not confirmed their identity by logging in "
+                "at aquaai.uk. The data can only be released after that login is confirmed.",
+            )
+            return redirect("admin_portal:dsar_request_detail", request_id=dsar_request.id)
         result = approve_and_send_dsar(dsar_request, actor=request.user)
         if result["ok"]:
             messages.success(request, "The DSAR package was emailed successfully.")

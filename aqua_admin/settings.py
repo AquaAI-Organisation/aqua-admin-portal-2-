@@ -132,6 +132,14 @@ SUPERADMIN_EMAILS = [
 LEGACY_ADMIN_REDIRECT_URL = os.getenv("LEGACY_ADMIN_REDIRECT_URL", "https://admin-control.aquaai.uk")
 LEGACY_ADMIN_INTERNAL_PATH = os.getenv("LEGACY_ADMIN_INTERNAL_PATH", "/django-internal-admin-8x7k/")
 
+# DSAR identity verification via a real login on the main platform.
+# The requester is sent to PLATFORM_LOGIN_URL; after a successful login the
+# platform redirects to our signed callback. DSAR_LOGIN_SIGNING_SECRET is the
+# HMAC secret shared between this admin portal and the aquaai.uk platform.
+PLATFORM_LOGIN_URL = os.getenv("PLATFORM_LOGIN_URL", "https://aquaai.uk/login")
+DSAR_LOGIN_SIGNING_SECRET = os.getenv("DSAR_LOGIN_SIGNING_SECRET", "")
+DSAR_LOGIN_CALLBACK_MAX_AGE = int(os.getenv("DSAR_LOGIN_CALLBACK_MAX_AGE", "600"))
+
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "sk-REPLACE-WITH-YOUR-GPT-4-KEY").strip()
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o").strip()
 AI_APPROVE_THRESHOLD = float(os.getenv("AI_APPROVE_THRESHOLD", "0.09"))

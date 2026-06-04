@@ -22,119 +22,51 @@
         </div>
       </div>
 
-      {% if show_form %}
-      {# ── Identity check: cross-match account credentials ── #}
-      <div class="auth-title-block">
-        <h1>Confirm it&rsquo;s you</h1>
-        <span class="auth-underline" aria-hidden="true"></span>
-      </div>
-      <p class="page-subtitle" style="margin:0 0 20px;">
-        To protect your personal data, sign in with the <strong>same email or username and password
-        you use at aquaai.uk</strong>. We match them against your account before releasing any data.
-      </p>
-
-      {% if outcome == "invalid_credentials" %}
-      <div class="message error" style="margin-bottom:18px;">
-        The email/username or password didn&rsquo;t match this account.
-        {% if attempts_left %}You have {{ attempts_left }} attempt{{ attempts_left|pluralize }} left.{% endif %}
-      </div>
-      {% endif %}
-
-      <form method="post" action="{% url 'admin_portal:dsar_verify' token %}" class="auth-form">
-        {% csrf_token %}
-        <div class="auth-field">
-          <label for="id_identifier">Account email or username</label>
-          <div class="auth-input-wrap">
-            <span class="auth-field-icon" aria-hidden="true">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-            </span>
-            <input id="id_identifier" class="auth-input" type="text" name="identifier" placeholder="you@example.com" required autofocus autocomplete="username">
-          </div>
-        </div>
-        <div class="auth-field">
-          <label for="id_password">Account password</label>
-          <div class="auth-input-wrap">
-            <span class="auth-field-icon" aria-hidden="true">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-            </span>
-            <input id="id_password" class="auth-input" type="password" name="password" placeholder="Your account password" required autocomplete="current-password">
-            <button class="auth-eye" type="button" id="togglePw" aria-label="Show or hide password">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
-            </button>
-          </div>
-        </div>
-        <button class="auth-submit" type="submit">
-          <span>Verify &amp; release my data</span>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
-        </button>
-      </form>
-      <p class="meta-text" style="margin-top:16px;text-align:center;">
-        We never store the password you enter here. Connection is encrypted.
-      </p>
-
-      {% else %}
-      {# ── Outcome screens ── #}
       <div class="auth-title-block">
         <h1>
-          {% if outcome == "fulfilled" %}Verified — data sent
-          {% elif outcome == "verified_manual" %}Identity verified
-          {% elif outcome == "send_failed" %}Almost done
-          {% elif outcome == "already_verified" %}Already completed
+          {% if outcome == "confirmed" %}Identity confirmed
+          {% elif outcome == "already_confirmed" %}Already confirmed
+          {% elif outcome == "already_done" %}Already completed
           {% elif outcome == "expired" %}Link expired
-          {% elif outcome == "locked" %}Verification locked
+          {% elif outcome == "mismatch" %}Account mismatch
           {% elif outcome == "unmatched" %}No account found
-          {% else %}Invalid link{% endif %}
+          {% elif outcome == "misconfigured" %}Verification unavailable
+          {% else %}Verification failed{% endif %}
         </h1>
         <span class="auth-underline" aria-hidden="true"></span>
       </div>
 
-      <p class="page-subtitle" style="margin:0 0 20px;">
-        {% if outcome == "fulfilled" %}
-          Your identity was confirmed and your Aqua AI data package has been compiled and emailed to you. Please keep it secure.
-        {% elif outcome == "verified_manual" %}
-          Your identity was confirmed and your request has been logged. Our privacy team will action it and follow up by email.
-        {% elif outcome == "send_failed" %}
-          Your identity was confirmed and your data was compiled, but the delivery email could not be sent. Our privacy team has been alerted and will send it shortly.
-        {% elif outcome == "already_verified" %}
+      <p class="page-subtitle" style="margin:0 0 18px;">
+        {% if outcome == "confirmed" %}
+          Thanks &mdash; we&rsquo;ve confirmed you signed in to your Aqua AI account. Our privacy team will now verify and send your data to you by email. You can close this page.
+        {% elif outcome == "already_confirmed" %}
+          Your identity was already confirmed for this request. Our privacy team is processing it and will email your data. You can close this page.
+        {% elif outcome == "already_done" %}
           This privacy request has already been completed. If you need anything further, contact privacy@aquaai.uk.
         {% elif outcome == "expired" %}
-          This verification link has expired. Please reply to privacy@aquaai.uk to request a fresh verification email.
-        {% elif outcome == "locked" %}
-          Too many failed attempts, so this link has been locked for your security. Please contact privacy@aquaai.uk to continue.
+          This confirmation link has expired. Please reply to privacy@aquaai.uk to request a fresh verification email.
+        {% elif outcome == "mismatch" %}
+          The account you signed in with does not match the account this request is for. Please sign in with the account that submitted the request, or contact privacy@aquaai.uk.
         {% elif outcome == "unmatched" %}
           We could not link this request to an Aqua AI account. Please reply to privacy@aquaai.uk so we can help.
+        {% elif outcome == "misconfigured" %}
+          Identity verification is temporarily unavailable. Please contact privacy@aquaai.uk and we&rsquo;ll help you complete your request.
         {% else %}
-          This verification link is invalid. Please reply to privacy@aquaai.uk if you need help.
+          We couldn&rsquo;t verify this confirmation link. Please use the link from your verification email, or contact privacy@aquaai.uk.
         {% endif %}
       </p>
 
-      {% if dsar_request %}
-      <div class="card" style="margin-top:8px;">
+      {% if dsar_request and outcome == "confirmed" or outcome == "already_confirmed" %}
+      <div class="card" style="margin-top:6px;">
         <div class="kv-grid">
           <div class="kv-label">Request type</div>
           <div class="kv-value">{{ dsar_request.get_request_type_display }}</div>
           <div class="kv-label">Status</div>
           <div class="kv-value">{{ dsar_request.get_status_display }}</div>
-          <div class="kv-label">Received</div>
-          <div class="kv-value">{{ dsar_request.received_at|date:"d M Y H:i" }}</div>
         </div>
       </div>
       {% endif %}
-      {% endif %}
     </main>
   </div>
-
-  <script>
-  (function () {
-    var btn = document.getElementById("togglePw");
-    var pw = document.getElementById("id_password");
-    if (btn && pw) {
-      btn.addEventListener("click", function () {
-        pw.type = pw.type === "password" ? "text" : "password";
-        btn.classList.toggle("is-on");
-      });
-    }
-  })();
-  </script>
 </body>
 </html>

@@ -2,13 +2,15 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import secrets
+import time
 from datetime import timedelta
 from pathlib import Path
+from urllib.parse import urlencode
 
 from django.conf import settings
-from django.contrib.auth.hashers import check_password
 from django.db import transaction
 from django.urls import reverse
 from django.utils import timezone
@@ -134,46 +136,27 @@ def issue_verification_token(dsar_request: DSARRequest) -> str:
     return raw_token
 
 
-# Maximum credential attempts allowed against a single verification link before
-# it is locked. Protects against someone brute-forcing an account password
-# through the public verification page.
-MAX_VERIFICATION_ATTEMPTS = 6
+def dsar_login_signature(token: str, uid: str, email: str, ts: str) -> str:
+    """HMAC-SHA256 over the canonical message, shared with the aquaai.uk platform.
 
-
-def attempts_remaining(dsar_request: DSARRequest | None) -> int:
-    if not dsar_request:
-        return 0
-    return max(0, MAX_VERIFICATION_ATTEMPTS - (dsar_request.verification_attempts or 0))
-
-
-def peek_dsar_token(raw_token: str) -> tuple[DSARRequest | None, str]:
-    """Validate a verification link without changing state. Drives the GET form."""
-    token_hash = _hash_token(raw_token)
-    dsar_request = (
-        DSARRequest.objects.filter(verification_token_hash=token_hash)
-        .order_by("-created_at")
-        .first()
-    )
-    if not dsar_request:
-        return None, "invalid"
-    if dsar_request.status == "fulfilled":
-        return dsar_request, "already_verified"
-    if dsar_request.verification_expires_at and dsar_request.verification_expires_at < timezone.now():
-        return dsar_request, "expired"
-    if (dsar_request.verification_attempts or 0) >= MAX_VERIFICATION_ATTEMPTS:
-        return dsar_request, "locked"
-    if not dsar_request.subject_user_id:
-        return dsar_request, "unmatched"
-    return dsar_request, "ok"
+    Canonical message:  f"{token}|{uid}|{email_lowercased}|{ts}"
+    """
+    secret = (getattr(settings, "DSAR_LOGIN_SIGNING_SECRET", "") or "").encode("utf-8")
+    message = f"{token}|{uid}|{(email or '').strip().lower()}|{ts}".encode("utf-8")
+    return hmac.new(secret, message, hashlib.sha256).hexdigest()
 
 
 @transaction.atomic
-def verify_dsar_credentials(
-    raw_token: str, identifier: str, password: str, ip: str = ""
+def confirm_dsar_login(
+    raw_token: str, uid: str, email: str, ts: str, sig: str, ip: str = ""
 ) -> tuple[DSARRequest | None, str]:
-    """Cross-match the requester's account email/username + password against the
-    platform database before releasing their data. On success the export is
-    compiled and (for access/portability requests) emailed automatically."""
+    """Validate the signed redirect the aquaai.uk platform sends after the
+    requester logs in. On success the request is marked login-confirmed so an
+    admin can release the data. This never sends data on its own."""
+    secret = getattr(settings, "DSAR_LOGIN_SIGNING_SECRET", "") or ""
+    if not secret:
+        return None, "misconfigured"
+
     token_hash = _hash_token(raw_token)
     dsar_request = (
         DSARRequest.objects.select_for_update()
@@ -184,57 +167,56 @@ def verify_dsar_credentials(
     if not dsar_request:
         return None, "invalid"
     if dsar_request.status == "fulfilled":
-        return dsar_request, "already_verified"
+        return dsar_request, "already_done"
+    if dsar_request.login_confirmed_at:
+        return dsar_request, "already_confirmed"
     if dsar_request.verification_expires_at and dsar_request.verification_expires_at < timezone.now():
         return dsar_request, "expired"
-    if (dsar_request.verification_attempts or 0) >= MAX_VERIFICATION_ATTEMPTS:
-        return dsar_request, "locked"
     if not dsar_request.subject_user_id:
         return dsar_request, "unmatched"
 
-    subject_user = ExternalUser.objects.filter(id=dsar_request.subject_user_id).first()
-    identifier = (identifier or "").strip()
-    identifier_ok = bool(subject_user) and identifier.lower() in {
-        (subject_user.email or "").lower(),
-        (subject_user.username or "").lower(),
-    }
-    # check_password safely verifies the raw input against the stored
-    # pbkdf2_sha256 hash; a plaintext or unrecognised stored value simply fails.
-    password_ok = bool(subject_user) and bool(password) and check_password(
-        password, subject_user.password or ""
-    )
+    # The signed timestamp must be fresh, to stop an old signed link being replayed.
+    try:
+        ts_int = int(ts)
+    except (TypeError, ValueError):
+        return dsar_request, "invalid"
+    max_age = int(getattr(settings, "DSAR_LOGIN_CALLBACK_MAX_AGE", 600))
+    if abs(time.time() - ts_int) > max_age:
+        return dsar_request, "expired"
 
-    if not (identifier_ok and password_ok):
-        dsar_request.verification_attempts = (dsar_request.verification_attempts or 0) + 1
-        dsar_request.save(update_fields=["verification_attempts", "updated_at"])
+    expected_sig = dsar_login_signature(raw_token, uid or "", email or "", ts or "")
+    if not (sig and hmac.compare_digest(expected_sig, sig)):
+        record_dsar_event(dsar_request, "login_confirmation_rejected", details={"reason": "bad_signature", "ip": ip or ""})
+        return dsar_request, "invalid"
+
+    # Bind the authenticated identity to the account this request is for.
+    subject_user = ExternalUser.objects.filter(id=dsar_request.subject_user_id).first()
+    subject_email = (getattr(subject_user, "email", "") or dsar_request.verification_email or "").lower()
+    uid_ok = bool(uid) and str(uid) == str(dsar_request.subject_user_id)
+    email_ok = bool(email) and email.strip().lower() == subject_email
+    if not (uid_ok or email_ok):
         record_dsar_event(
             dsar_request,
-            "verification_failed",
-            details={
-                # Never store the submitted password; only the failure reason.
-                "reason": "identifier_mismatch" if not identifier_ok else "password_mismatch",
-                "attempts": dsar_request.verification_attempts,
-                "ip": ip or "",
-            },
+            "login_confirmation_rejected",
+            details={"reason": "identity_mismatch", "uid": uid or "", "ip": ip or ""},
         )
-        if dsar_request.verification_attempts >= MAX_VERIFICATION_ATTEMPTS:
-            return dsar_request, "locked"
-        return dsar_request, "invalid_credentials"
+        return dsar_request, "mismatch"
 
-    dsar_request.status = "verified"
-    dsar_request.verified_at = timezone.now()
-    dsar_request.save(update_fields=["status", "verified_at", "updated_at"])
-    record_dsar_event(dsar_request, "verified", details={"method": "credentials", "ip": ip or ""})
-
-    prepare_dsar_request(dsar_request, actor=None)
-    dsar_request.refresh_from_db()
-
-    if dsar_request.status == "awaiting_dpo_approval" and dsar_request.deliverables.exists():
-        result = approve_and_send_dsar(dsar_request, actor=None)
-        return dsar_request, "fulfilled" if result["ok"] else "send_failed"
-    # Erasure / rectification / restriction / objection cannot be auto-fulfilled
-    # with a data package — they are queued for manual DPO handling.
-    return dsar_request, "verified_manual"
+    now = timezone.now()
+    dsar_request.login_confirmed_at = now
+    dsar_request.login_confirmed_email = (email or subject_email)[:254]
+    dsar_request.verified_at = dsar_request.verified_at or now
+    if dsar_request.status in ("received", "verifying", "unmatched"):
+        dsar_request.status = "verified"
+    dsar_request.save(
+        update_fields=["login_confirmed_at", "login_confirmed_email", "verified_at", "status", "updated_at"]
+    )
+    record_dsar_event(
+        dsar_request,
+        "login_confirmed",
+        details={"via": "aquaai_login", "uid": uid or "", "email": email or "", "ip": ip or ""},
+    )
+    return dsar_request, "confirmed"
 
 
 def prepare_dsar_request(dsar_request: DSARRequest, actor=None) -> DSARRequest:
@@ -415,12 +397,20 @@ def record_dsar_event(dsar_request: DSARRequest, action: str, actor=None, detail
     )
 
 
-def build_verification_url(raw_token: str) -> str:
-    path = reverse("admin_portal:dsar_verify", args=[raw_token])
+def build_callback_url(raw_token: str) -> str:
+    """Absolute admin-portal callback the platform redirects to after login."""
+    path = reverse("admin_portal:dsar_login_callback")
     base = (getattr(settings, "LEGACY_ADMIN_REDIRECT_URL", "") or "").rstrip("/")
-    if base:
-        return f"{base}{path}"
-    return path
+    query = urlencode({"token": raw_token})
+    return f"{base}{path}?{query}" if base else f"{path}?{query}"
+
+
+def build_verification_url(raw_token: str) -> str:
+    """Link placed in the verification email: send the requester to the real
+    aquaai.uk login, asking it to return to our callback once authenticated."""
+    callback = build_callback_url(raw_token)
+    login_url = (getattr(settings, "PLATFORM_LOGIN_URL", "") or "https://aquaai.uk/login").rstrip("/")
+    return f"{login_url}?{urlencode({'next': callback})}"
 
 
 def _hash_token(raw_token: str) -> str:
@@ -505,9 +495,9 @@ def _serialize_support_inquiry(inquiry: SupportInquiry):
 def _verification_email_body(dsar_request: DSARRequest, verify_url: str) -> str:
     return (
         "We received a privacy or data request for your Aqua AI account.\n\n"
-        "To protect your personal data, open the secure link below and sign in with the same "
-        "email or username and password you use at aquaai.uk. We verify these against your "
-        "account before any data is released:\n"
+        "To protect your personal data, please confirm it is you by logging in to your "
+        "Aqua AI account using the secure link below. Once you have signed in successfully, "
+        "our privacy team will verify and release your data:\n"
         f"{verify_url}\n\n"
         "This link expires in 48 hours. If you did not submit this request, you can ignore this message."
     )

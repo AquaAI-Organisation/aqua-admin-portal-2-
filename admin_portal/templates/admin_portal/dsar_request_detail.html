@@ -12,18 +12,46 @@
     <span class="badge {% if dsar_request.status == 'fulfilled' %}ok{% elif dsar_request.status == 'rejected' %}danger{% elif dsar_request.status == 'awaiting_dpo_approval' %}warning{% else %}info{% endif %}">
       {{ dsar_request.get_status_display }}
     </span>
+    {% if dsar_request.login_confirmed %}
+    <span class="badge ok">Login confirmed</span>
+    {% else %}
+    <span class="badge warn">Awaiting aquaai.uk login</span>
+    {% endif %}
     {% if IS_SUPER_ADMIN %}
     <form method="post" action="{% url 'admin_portal:dsar_prepare' dsar_request.id %}">
       {% csrf_token %}
       <button class="btn" type="submit">Prepare export</button>
     </form>
+    {% if dsar_request.login_confirmed %}
     <form method="post" action="{% url 'admin_portal:dsar_approve' dsar_request.id %}">
       {% csrf_token %}
       <button class="btn-primary" type="submit">Approve and send</button>
     </form>
+    {% else %}
+    <button class="btn-primary" type="button" disabled title="The requester must confirm their identity by logging in at aquaai.uk before data can be sent.">Approve and send</button>
+    {% endif %}
     {% endif %}
   </div>
 </div>
+
+{% if not dsar_request.login_confirmed %}
+<div class="card" style="border-color:rgba(245,201,110,0.30);">
+  <div class="helper-text">
+    <strong>Identity not yet confirmed.</strong> The requester was emailed a secure link to sign in
+    at <span class="mono">aquaai.uk</span>. The data can only be sent once that login is confirmed here —
+    you'll see a <span class="badge ok">Login confirmed</span> badge and the <em>Approve and send</em> button will unlock.
+  </div>
+</div>
+{% else %}
+<div class="card" style="border-color:rgba(109,232,159,0.30);">
+  <div class="kv-grid">
+    <div class="kv-label">Identity confirmed</div>
+    <div class="kv-value">{{ dsar_request.login_confirmed_at|date:"d M Y H:i" }}</div>
+    <div class="kv-label">Confirmed account</div>
+    <div class="kv-value mono">{{ dsar_request.login_confirmed_email|default:dsar_request.verification_email }}</div>
+  </div>
+</div>
+{% endif %}
 
 <div class="grid-2-equal">
   <div class="card">
