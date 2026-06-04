@@ -505,9 +505,9 @@ def _serialize_support_inquiry(inquiry: SupportInquiry):
 def _verification_email_body(dsar_request: DSARRequest, verify_url: str) -> str:
     return (
         "We received a privacy or data request for your Aqua AI account.\n\n"
-        "To protect your personal data, open the secure link below and confirm the email or "
-        "username and password of your Aqua AI account. We verify these against your account "
-        "before any data is released:\n"
+        "To protect your personal data, open the secure link below and sign in with the same "
+        "email or username and password you use at aquaai.uk. We verify these against your "
+        "account before any data is released:\n"
         f"{verify_url}\n\n"
         "This link expires in 48 hours. If you did not submit this request, you can ignore this message."
     )
