@@ -31,6 +31,7 @@ from ..models import (
 )
 from .google_oauth import pick_alias_for_mailbox
 from .platform_sessions import active_session_keys_for_user, has_new_login_since_baseline
+from .runtime_config import get_operational_settings
 from .json_utils import sanitize_json
 from .notifier import send_custom_email
 
@@ -175,6 +176,22 @@ def check_dsar_login(dsar_request: DSARRequest) -> bool:
         "login_confirmed",
         details={"via": "aquaai_session", "subject_user_id": str(dsar_request.subject_user_id)},
     )
+
+    # Full automation: once identity is confirmed, compile and email the data
+    # package automatically for access/portability requests (toggleable).
+    if (
+        get_operational_settings().dsar_auto_send
+        and dsar_request.request_type in {"access", "portability"}
+    ):
+        try:
+            result = approve_and_send_dsar(dsar_request, actor=None)
+            record_dsar_event(
+                dsar_request,
+                "auto_send" if result["ok"] else "auto_send_failed",
+                details={"error": result.get("error", "")},
+            )
+        except Exception as exc:  # pragma: no cover - defensive; admin can resend
+            record_dsar_event(dsar_request, "auto_send_failed", details={"error": str(exc)})
     return True
 
 
@@ -191,15 +208,16 @@ def prepare_dsar_request(dsar_request: DSARRequest, actor=None) -> DSARRequest:
     export_bundle = build_subject_export(subject_user)
     runtime_dir = Path(settings.BASE_DIR) / "runtime_exports" / "dsar" / str(dsar_request.id)
     runtime_dir.mkdir(parents=True, exist_ok=True)
-    json_path = runtime_dir / "aquaai-dsar-export.json"
-    html_path = runtime_dir / "aquaai-dsar-export.html"
+    pdf_path = runtime_dir / "aquaai-data-export.pdf"
+    json_path = runtime_dir / "aquaai-data-export.json"
 
+    pdf_path.write_bytes(_render_export_pdf(export_bundle))
+    # JSON kept for the data-portability right (machine-readable copy).
     json_path.write_text(json.dumps(export_bundle, indent=2, default=str), encoding="utf-8")
-    html_path.write_text(_render_export_html(export_bundle), encoding="utf-8")
 
     expires_at = timezone.now() + timedelta(days=7)
+    _upsert_deliverable(dsar_request, "access_export_pdf", pdf_path, "application/pdf", expires_at)
     _upsert_deliverable(dsar_request, "access_export_json", json_path, "application/json", expires_at)
-    _upsert_deliverable(dsar_request, "access_export_html", html_path, "text/html", expires_at)
 
     dsar_request.export_summary = sanitize_json(export_bundle.get("summary", {}))
     dsar_request.status = "awaiting_dpo_approval"
@@ -454,21 +472,139 @@ def _verification_email_body(dsar_request: DSARRequest, verify_url: str) -> str:
 def _fulfilment_email_body(dsar_request: DSARRequest) -> str:
     return (
         "Your Aqua AI privacy request has been fulfilled.\n\n"
-        "We have attached the current export package available from the shared platform database.\n"
+        "Attached is your personal data export as a PDF, along with a machine-readable JSON copy.\n"
         "Please keep these files secure and contact privacy@aquaai.uk if you need anything clarified."
     )
 
 
-def _render_export_html(bundle: dict) -> str:
-    pretty = json.dumps(bundle, indent=2)
-    return (
-        "<!doctype html><html><head><meta charset='utf-8'>"
-        "<title>Aqua AI DSAR Export</title>"
-        "<style>body{font-family:Arial,sans-serif;background:#f6f8fb;color:#10243c;padding:32px;}"
-        "pre{white-space:pre-wrap;background:#fff;border:1px solid #dce4f0;border-radius:12px;padding:20px;}"
-        "h1{margin-top:0;} p{max-width:780px;line-height:1.6;}</style></head><body>"
-        "<h1>Aqua AI Data Request Export</h1>"
-        "<p>This package was generated from the Aqua AI shared application database. "
-        "Counterparty identifiers are redacted where needed to protect other users' personal data.</p>"
-        f"<pre>{pretty}</pre></body></html>"
+# Friendly section titles for the PDF. Internal storage/table names are never
+# used — only these human-readable labels and humanised field names.
+_SECTION_TITLES = {
+    "subject": "Your account",
+    "profiles": "Your profiles",
+    "regulatory_and_trust": "Trust & regulatory record",
+    "commercial_and_support": "Payments & support history",
+    "provider_activity": "Marketplace & provider activity",
+    "messaging": "Messages & conversations",
+}
+_FIELD_LABEL_OVERRIDES = {
+    "id": "Reference",
+    "current_trust_score": "Trust score",
+    "current_regulatory_tier": "Regulatory tier",
+}
+# Fields that are internal plumbing and add no value for the data subject.
+_FIELD_HIDE = {"password", "_state"}
+
+
+def _humanize(key: str) -> str:
+    return _FIELD_LABEL_OVERRIDES.get(key, key.replace("_", " ").strip().capitalize())
+
+
+def _render_export_pdf(bundle: dict) -> bytes:
+    """Render the export bundle as a clean, human-readable PDF.
+
+    Uses friendly section titles and humanised field labels only — no database
+    or table names are ever written into the document.
+    """
+    from io import BytesIO
+
+    from reportlab.lib.enums import TA_LEFT
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.platypus import (
+        HRFlowable,
+        Paragraph,
+        SimpleDocTemplate,
+        Spacer,
+        Table,
+        TableStyle,
     )
+    from reportlab.lib import colors
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4,
+        leftMargin=20 * mm, rightMargin=20 * mm, topMargin=18 * mm, bottomMargin=18 * mm,
+        title="Aqua AI Data Export",
+    )
+    styles = getSampleStyleSheet()
+    h1 = ParagraphStyle("h1", parent=styles["Heading1"], fontSize=18, spaceAfter=4, textColor=colors.HexColor("#0c2233"))
+    h2 = ParagraphStyle("h2", parent=styles["Heading2"], fontSize=13, spaceBefore=14, spaceAfter=6, textColor=colors.HexColor("#0c2233"))
+    body = ParagraphStyle("body", parent=styles["Normal"], fontSize=9.5, leading=14, alignment=TA_LEFT)
+    meta = ParagraphStyle("meta", parent=body, textColor=colors.HexColor("#5a6b7a"))
+
+    def esc(value) -> str:
+        text = "" if value is None else str(value)
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    flow = []
+    flow.append(Paragraph("Aqua AI — Personal Data Export", h1))
+    flow.append(Paragraph(
+        "This document contains the personal data Aqua AI holds about you. Where information about "
+        "other people would otherwise be revealed, it has been redacted to protect their privacy.",
+        meta,
+    ))
+    flow.append(Paragraph(f"Generated: {esc(bundle.get('generated_at', ''))}", meta))
+    flow.append(Spacer(1, 6))
+    flow.append(HRFlowable(width="100%", thickness=0.6, color=colors.HexColor("#cdd8e3")))
+
+    def render_record(record: dict):
+        rows = []
+        for key, val in record.items():
+            if key in _FIELD_HIDE:
+                continue
+            if isinstance(val, (dict, list)):
+                val = json.dumps(val, default=str, ensure_ascii=False)
+            rows.append([Paragraph(esc(_humanize(key)), body), Paragraph(esc(val), body)])
+        if not rows:
+            return
+        table = Table(rows, colWidths=[55 * mm, 110 * mm])
+        table.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LINEBELOW", (0, 0), (-1, -1), 0.25, colors.HexColor("#e6ecf2")),
+            ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f4f7fa")),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ]))
+        flow.append(table)
+        flow.append(Spacer(1, 6))
+
+    def render_value(value):
+        if isinstance(value, dict):
+            render_record(value)
+        elif isinstance(value, list):
+            if not value:
+                flow.append(Paragraph("None on record.", meta))
+                flow.append(Spacer(1, 4))
+            for idx, item in enumerate(value, 1):
+                if isinstance(item, dict):
+                    flow.append(Paragraph(f"Item {idx}", ParagraphStyle("item", parent=body, fontName="Helvetica-Bold")))
+                    render_record(item)
+                else:
+                    flow.append(Paragraph(esc(item), body))
+        else:
+            flow.append(Paragraph(esc(value), body))
+
+    # Summary first
+    summary = bundle.get("summary") or {}
+    if summary:
+        flow.append(Paragraph("Summary", h2))
+        render_record(summary)
+
+    for section_key, title in _SECTION_TITLES.items():
+        if section_key not in bundle:
+            continue
+        flow.append(Paragraph(title, h2))
+        render_value(bundle[section_key])
+
+    notes = bundle.get("notes") or []
+    if notes:
+        flow.append(Paragraph("Notes", h2))
+        for note in notes:
+            flow.append(Paragraph(f"• {esc(note)}", body))
+
+    doc.build(flow)
+    return buf.getvalue()

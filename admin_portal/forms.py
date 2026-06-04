@@ -139,6 +139,7 @@ class OperationalSettingsForm(forms.ModelForm):
         model = OperationalSettings
         fields = [
             "auto_activate_new_accounts",
+            "dsar_auto_send",
             "gmail_client_id",
             "gmail_client_secret",
             "gmail_refresh_token",

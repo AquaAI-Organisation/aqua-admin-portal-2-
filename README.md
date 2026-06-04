@@ -73,7 +73,10 @@ Run these on a scheduler:
 
 - `python manage.py process_pending_reviews --limit 25`
 - `python manage.py generate_daily_report`
-- `python manage.py confirm_dsar_logins` — detects when a DSAR requester has logged in at aquaai.uk and marks the request login-confirmed so it can be sent. Run every ~5–10 minutes.
+- `python manage.py poll_inbox` — fetches the mailbox, auto-runs AI triage on new messages, and for privacy-lane emails auto-creates DSAR requests and sends the requester a verification link. Run every ~5–10 minutes.
+- `python manage.py confirm_dsar_logins` — detects when a DSAR requester has logged in at aquaai.uk, marks the request login-confirmed, and (if auto-delivery is on) emails their data PDF automatically. Run every ~5–10 minutes.
+
+Together, `poll_inbox` + `confirm_dsar_logins` make the privacy/DSAR pipeline fully hands-off: intake → AI analysis → identity verification email → login confirmation → PDF delivery.
 
 The review command now processes both new account signups and new incident/warning triage. Inbox refresh can also create DSAR requests from the privacy mailbox automatically.
 

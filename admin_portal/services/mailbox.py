@@ -81,6 +81,14 @@ def _fetch_gmail_inbox(limit: int = 25) -> dict[str, int]:
                 continue
             if created:
                 added += 1
+                # Auto-run AI triage on new messages so analysis is hands-off.
+                # analyse_inquiry falls back to heuristics if OpenAI is unavailable.
+                try:
+                    from .inquiry_intelligence import persist_inquiry_analysis
+
+                    persist_inquiry_analysis(inquiry)
+                except Exception:
+                    logger.exception("Auto analysis failed for inquiry %s", inquiry.pk)
             else:
                 updated += 1
             if inquiry.mailbox_kind == "privacy":

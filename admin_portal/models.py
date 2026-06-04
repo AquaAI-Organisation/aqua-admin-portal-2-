@@ -101,6 +101,7 @@ DSAR_CHANNEL_CHOICES = [
     ("in_app", "In app"),
 ]
 DSAR_DELIVERABLE_CHOICES = [
+    ("access_export_pdf", "Access export PDF"),
     ("access_export_json", "Access export JSON"),
     ("access_export_html", "Access export HTML"),
     ("deletion_report_json", "Deletion report JSON"),
@@ -224,6 +225,14 @@ class OperationalSettings(models.Model):
         help_text=(
             "When enabled, new breeder and consultant accounts are automatically approved "
             "without AI review as soon as the review processor picks them up."
+        ),
+    )
+    dsar_auto_send = models.BooleanField(
+        default=True,
+        help_text=(
+            "When enabled, an access/portability data request is compiled and emailed to the "
+            "requester automatically as soon as their aquaai.uk login is confirmed. Turn off to "
+            "require an admin to press Approve and send."
         ),
     )
     gmail_client_id = models.CharField(max_length=255, blank=True)
