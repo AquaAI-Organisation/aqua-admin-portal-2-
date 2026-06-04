@@ -3,45 +3,49 @@
 {% block topbar_title %}Operations Dashboard{% endblock %}
 {% block content %}
 
-{# ── Hero section ── #}
-<section class="hero-shell">
-  <div class="hero-copy">
-    <div class="hero-kicker">Live governance layer</div>
-    <h1>AI governance control&nbsp;room</h1>
-    <p class="page-subtitle">Automated onboarding, issue triage, health diagnostics, and super‑admin oversight for the shared Aqua AI backend.</p>
-    <div class="page-actions" style="margin-top:22px;">
-      {% if IS_SUPER_ADMIN %}
-      <form method="post" action="{% url 'admin_portal:process_now' %}">
-        {% csrf_token %}
-        <button class="btn-primary" type="submit">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-          Run full AI scan
-        </button>
-      </form>
-      {% endif %}
-      <a class="btn" href="{% url 'admin_portal:intake_list' %}">View pending accounts</a>
-      <a class="btn" href="{% url 'admin_portal:issue_list' %}">Open flagged issues</a>
-    </div>
+{# ── Cinematic hero (Stitch control-room) ── #}
+<section class="hero-cinematic">
+  <div class="hero-cine-kicker">
+    <span class="hero-cine-line" aria-hidden="true"></span>
+    <span class="hero-cine-pip" aria-hidden="true"></span>
+    Live governance active
+  </div>
+  <h1 class="hero-cine-title">AI Governance<br>Control Room</h1>
+  <p class="hero-cine-lede">Automated onboarding, issue triage, health diagnostics, and super&#8209;admin oversight for the shared Aqua AI backend.</p>
+
+  <div class="hero-cine-actions">
+    {% if IS_SUPER_ADMIN %}
+    <form method="post" action="{% url 'admin_portal:process_now' %}">
+      {% csrf_token %}
+      <button class="btn-primary" type="submit">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        Run full AI scan
+      </button>
+    </form>
+    {% endif %}
+    <a class="btn" href="{% url 'admin_portal:intake_list' %}">View pending accounts</a>
+    <a class="btn" href="{% url 'admin_portal:issue_list' %}">Open flagged issues</a>
   </div>
 
-  <div class="hero-rail">
-    <div class="hero-stat">
-      <span class="hero-stat-label">Pending intake</span>
-      <strong>{{ pending_breeder_count|add:pending_consultant_count }}</strong>
-      <span class="hero-stat-note">Breeders {{ pending_breeder_count }} &middot; Consultants {{ pending_consultant_count }}</span>
+  <div class="hero-cine-stats">
+    <div class="cine-stat accent-green">
+      <div class="cine-stat-label">Pending intake</div>
+      <div class="cine-stat-value">{{ pending_breeder_count|add:pending_consultant_count }}</div>
+      <div class="cine-stat-note">Breeders {{ pending_breeder_count }} &middot; Consultants {{ pending_consultant_count }}</div>
     </div>
-    <div class="hero-stat">
-      <span class="hero-stat-label">Open issues</span>
-      <strong>{{ issue_counts.open }}</strong>
-      <span class="hero-stat-note">Critical {{ issue_counts.critical }}</span>
+    <div class="cine-stat accent-blue">
+      <div class="cine-stat-label">Open issues</div>
+      <div class="cine-stat-value">{{ issue_counts.open }}</div>
+      <div class="cine-stat-note">Critical {{ issue_counts.critical }}</div>
     </div>
-    <div class="hero-stat">
-      <span class="hero-stat-label">Today reviewed</span>
-      <strong>{{ today_counts.total }}</strong>
-      <span class="hero-stat-note">Approved {{ today_counts.approved }} &middot; Flagged {{ today_counts.flagged }}</span>
+    <div class="cine-stat accent-lime">
+      <div class="cine-stat-label">Reviewed today</div>
+      <div class="cine-stat-value">{{ today_counts.total }}</div>
+      <div class="cine-stat-note">Approved {{ today_counts.approved }} &middot; Flagged {{ today_counts.flagged }}</div>
     </div>
   </div>
 </section>
+
 
 {# ── Metric cards ── #}
 <div class="metrics-grid">

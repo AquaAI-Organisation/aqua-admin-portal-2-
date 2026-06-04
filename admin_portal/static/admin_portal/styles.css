@@ -747,6 +747,123 @@ body[data-theme="light"] .theme-toggle-icon {
   font-size: 0.82rem;
 }
 
+/* ── Cinematic hero (Stitch control-room) ─────────────────── */
+.hero-cinematic {
+  position: relative;
+  margin-bottom: 26px;
+  padding: 40px 36px 36px;
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(ellipse at 85% 0%, rgba(125,212,255,0.12), transparent 42%),
+    linear-gradient(180deg, rgba(7,18,30,0.40) 0%, rgba(4,11,19,0.86) 78%);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.hero-cine-kicker {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+  margin-bottom: 18px;
+}
+.hero-cine-line {
+  width: 38px;
+  height: 1px;
+  background: var(--accent-2);
+}
+.hero-cine-pip {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-2);
+  box-shadow: 0 0 8px var(--accent-2);
+  animation: pulse-live 2.4s ease-in-out infinite;
+}
+
+.hero-cine-title {
+  margin: 0 0 16px;
+  font-size: clamp(2.4rem, 5vw, 4rem);
+  font-weight: 800;
+  line-height: 0.98;
+  letter-spacing: -0.045em;
+  color: var(--text);
+}
+
+.hero-cine-lede {
+  max-width: 560px;
+  margin: 0;
+  color: var(--soft);
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.hero-cine-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 24px;
+}
+.hero-cine-actions form { margin: 0; }
+
+.hero-cine-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 32px;
+}
+
+.cine-stat {
+  position: relative;
+  padding: 20px 22px;
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-left-width: 4px;
+  transition: transform var(--t-fast), background var(--t-fast);
+}
+.cine-stat:hover { transform: translateY(-2px); background: rgba(255, 255, 255, 0.06); }
+.cine-stat.accent-green { border-left-color: var(--accent); }
+.cine-stat.accent-blue  { border-left-color: var(--accent-2); }
+.cine-stat.accent-lime  { border-left-color: var(--accent-3); }
+
+.cine-stat-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.cine-stat-value {
+  margin-top: 8px;
+  font-size: 2.6rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: var(--text);
+}
+.cine-stat.accent-green .cine-stat-value { color: var(--accent); }
+.cine-stat.accent-blue .cine-stat-value  { color: var(--accent-2); }
+.cine-stat.accent-lime .cine-stat-value  { color: var(--accent-3); }
+.cine-stat-note {
+  margin-top: 10px;
+  font-size: 0.78rem;
+  color: var(--soft);
+}
+
+@media (max-width: 900px) {
+  .hero-cine-stats { grid-template-columns: 1fr; }
+  .hero-cinematic { padding: 30px 22px 28px; }
+}
+
 /* ── Cards ────────────────────────────────────────────────── */
 .card, .metric-card, .login-card {
   position: relative;
@@ -1438,6 +1555,205 @@ canvas {
 }
 
 .login-grid { display: grid; gap: 14px; margin-top: 22px; }
+
+/* ── Auth / Control-Room sign-in (Stitch) ─────────────────── */
+.auth-page {
+  background:
+    radial-gradient(ellipse at 12% 6%,  rgba(94,232,197,0.16), transparent 30%),
+    radial-gradient(ellipse at 88% 94%, rgba(125,212,255,0.14), transparent 30%),
+    linear-gradient(180deg, #06121c 0%, #040c15 100%);
+}
+
+.auth-card {
+  position: relative;
+  z-index: 1;
+  width: min(440px, 100%);
+  padding: 38px 34px 30px;
+  border-radius: var(--radius-xl);
+  background: rgba(21, 28, 35, 0.55);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 25px 60px -12px rgba(0, 0, 0, 0.6),
+    inset 0 0 24px rgba(115, 252, 174, 0.05);
+}
+
+.auth-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+.auth-logo {
+  width: 60px;
+  height: 60px;
+  border-radius: var(--radius);
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+  font-size: 34px;
+  letter-spacing: -0.04em;
+  color: var(--accent);
+  background: rgba(46, 53, 61, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow: 0 0 22px rgba(94, 232, 197, 0.35);
+}
+
+.auth-brand { text-align: center; }
+.auth-brand-title {
+  font-size: 1.45rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--accent);
+}
+.auth-brand-sub {
+  margin-top: 3px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.auth-title-block { margin-bottom: 24px; }
+.auth-title-block h1 {
+  margin: 0 0 10px;
+  font-size: 1.2rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.auth-underline {
+  display: block;
+  width: 46px;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent-3), var(--accent));
+}
+
+.auth-form { display: grid; gap: 18px; }
+
+.auth-field { display: grid; gap: 7px; }
+.auth-field label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.auth-input-wrap { position: relative; display: flex; align-items: center; }
+.auth-field-icon {
+  position: absolute;
+  left: 14px;
+  display: inline-flex;
+  color: var(--accent);
+  pointer-events: none;
+}
+.auth-input {
+  width: 100%;
+  padding: 13px 14px 13px 42px;
+  border-radius: var(--radius-sm);
+  background: rgba(8, 15, 22, 0.75);
+  border: 1px solid rgba(125, 212, 255, 0.16);
+  color: var(--text);
+  font-size: 0.92rem;
+  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+}
+.auth-input::placeholder { color: rgba(141, 176, 197, 0.5); }
+.auth-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(94, 232, 197, 0.14);
+}
+.auth-eye {
+  position: absolute;
+  right: 8px;
+  padding: 6px;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+.auth-eye:hover { color: var(--accent); background: transparent; box-shadow: none; transform: none; }
+.auth-eye.is-on { color: var(--accent); }
+
+.auth-submit {
+  margin-top: 4px;
+  width: 100%;
+  padding: 14px;
+  border: none;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #021c2e;
+  background: linear-gradient(135deg, var(--accent-3), var(--accent) 38%, var(--accent-2));
+  box-shadow: 0 0 18px rgba(83, 223, 148, 0.32);
+  cursor: pointer;
+  transition: box-shadow var(--t-fast), transform var(--t-fast);
+}
+.auth-submit:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 30px rgba(83, 223, 148, 0.5);
+  color: #021c2e;
+}
+.auth-submit:active { transform: scale(0.99); }
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 26px 0 16px;
+}
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.07);
+}
+.auth-divider span {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.auth-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+}
+.auth-status-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+.auth-status-item svg { color: var(--accent); }
+.auth-pip {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+  animation: pulse-live 2.4s ease-in-out infinite;
+}
+
+@media (max-width: 480px) {
+  .auth-card { padding: 30px 22px 26px; }
+  .auth-status { flex-direction: column; gap: 10px; }
+}
 
 /* ── Invite Cards ─────────────────────────────────────────── */
 .invite-board { display: grid; gap: 12px; }
