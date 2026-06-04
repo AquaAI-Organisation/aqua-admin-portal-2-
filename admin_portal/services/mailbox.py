@@ -81,6 +81,17 @@ def _fetch_gmail_inbox(limit: int = 25) -> dict[str, int]:
                 continue
             if created:
                 added += 1
+                # Auto-run AI triage on new privacy-lane messages so DSAR intake
+                # is hands-off. Scoped to privacy to control OpenAI token spend;
+                # other lanes can still be analysed on demand. Falls back to
+                # heuristics if OpenAI is unavailable.
+                if inquiry.mailbox_kind == "privacy":
+                    try:
+                        from .inquiry_intelligence import persist_inquiry_analysis
+
+                        persist_inquiry_analysis(inquiry)
+                    except Exception:
+                        logger.exception("Auto analysis failed for inquiry %s", inquiry.pk)
             else:
                 updated += 1
             if inquiry.mailbox_kind == "privacy":

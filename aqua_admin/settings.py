@@ -132,6 +132,11 @@ SUPERADMIN_EMAILS = [
 LEGACY_ADMIN_REDIRECT_URL = os.getenv("LEGACY_ADMIN_REDIRECT_URL", "https://admin-control.aquaai.uk")
 LEGACY_ADMIN_INTERNAL_PATH = os.getenv("LEGACY_ADMIN_INTERNAL_PATH", "/django-internal-admin-8x7k/")
 
+# DSAR identity verification: the requester is emailed this login URL and must
+# sign in to their real account. The admin portal detects the resulting login
+# by reading the shared django_session table — no platform code change needed.
+PLATFORM_LOGIN_URL = os.getenv("PLATFORM_LOGIN_URL", "https://aquaai.uk/login")
+
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "sk-REPLACE-WITH-YOUR-GPT-4-KEY").strip()
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o").strip()
 AI_APPROVE_THRESHOLD = float(os.getenv("AI_APPROVE_THRESHOLD", "0.09"))

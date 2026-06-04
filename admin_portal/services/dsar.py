@@ -9,7 +9,6 @@ from pathlib import Path
 
 from django.conf import settings
 from django.db import transaction
-from django.urls import reverse
 from django.utils import timezone
 
 from ..models import (
@@ -31,6 +30,8 @@ from ..models import (
     SupportInquiry,
 )
 from .google_oauth import pick_alias_for_mailbox
+from .platform_sessions import active_session_keys_for_user, has_new_login_since_baseline
+from .runtime_config import get_operational_settings
 from .json_utils import sanitize_json
 from .notifier import send_custom_email
 
@@ -79,11 +80,14 @@ def ensure_dsar_request_from_inquiry(inquiry: SupportInquiry) -> tuple[DSARReque
         },
     )
     if matched_user:
-        raw_token = issue_verification_token(dsar_request)
-        verify_url = build_verification_url(raw_token)
+        issue_verification_token(dsar_request)
+        # Snapshot the sessions the subject already has, so a later *new* session
+        # is recognised as a fresh login made in response to this request.
+        dsar_request.login_baseline_keys = sorted(active_session_keys_for_user(matched_user.id))
+        dsar_request.save(update_fields=["login_baseline_keys", "updated_at"])
         result = send_custom_email(
             subject="Verify your Aqua AI privacy request",
-            body=_verification_email_body(dsar_request, verify_url),
+            body=_verification_email_body(dsar_request, settings.PLATFORM_LOGIN_URL),
             recipients=[matched_user.email],
             from_email=pick_alias_for_mailbox("privacy"),
         )
@@ -92,6 +96,8 @@ def ensure_dsar_request_from_inquiry(inquiry: SupportInquiry) -> tuple[DSARReque
             "verification_sent",
             details={
                 "verification_email": matched_user.email,
+                "login_url": settings.PLATFORM_LOGIN_URL,
+                "baseline_sessions": len(dsar_request.login_baseline_keys),
                 "delivery_ok": result["ok"],
                 "delivery_error": result["error"],
             },
@@ -134,27 +140,59 @@ def issue_verification_token(dsar_request: DSARRequest) -> str:
 
 
 @transaction.atomic
-def verify_dsar_token(raw_token: str) -> tuple[DSARRequest | None, str]:
-    token_hash = _hash_token(raw_token)
-    dsar_request = (
-        DSARRequest.objects.select_for_update()
-        .filter(verification_token_hash=token_hash)
-        .order_by("-created_at")
-        .first()
-    )
-    if not dsar_request:
-        return None, "invalid"
-    if dsar_request.verification_expires_at and dsar_request.verification_expires_at < timezone.now():
-        return dsar_request, "expired"
-    if dsar_request.status == "fulfilled":
-        return dsar_request, "already_verified"
+def check_dsar_login(dsar_request: DSARRequest) -> bool:
+    """Confirm identity by detecting a fresh aquaai.uk login for the subject.
 
-    dsar_request.status = "verified"
-    dsar_request.verified_at = timezone.now()
-    dsar_request.save(update_fields=["status", "verified_at", "updated_at"])
-    record_dsar_event(dsar_request, "verified", details={"auto_prepare": True})
-    prepare_dsar_request(dsar_request, actor=None)
-    return dsar_request, "verified"
+    Returns True if the request is (now or already) login-confirmed. Looks for a
+    platform session that did not exist when the request was raised, within the
+    48-hour verification window. Never sends data — only flips the gate."""
+    if dsar_request.login_confirmed_at:
+        return True
+    if not dsar_request.subject_user_id:
+        return False
+    if dsar_request.status in ("fulfilled", "rejected", "withdrawn"):
+        return False
+    # Enforce the window: only confirm while the verification link is valid.
+    if dsar_request.verification_expires_at and dsar_request.verification_expires_at < timezone.now():
+        return False
+
+    if not has_new_login_since_baseline(dsar_request.subject_user_id, dsar_request.login_baseline_keys):
+        return False
+
+    now = timezone.now()
+    subject_user = ExternalUser.objects.filter(id=dsar_request.subject_user_id).first()
+    dsar_request.login_confirmed_at = now
+    dsar_request.login_confirmed_email = (
+        getattr(subject_user, "email", "") or dsar_request.verification_email or ""
+    )[:254]
+    dsar_request.verified_at = dsar_request.verified_at or now
+    if dsar_request.status in ("received", "verifying", "unmatched"):
+        dsar_request.status = "verified"
+    dsar_request.save(
+        update_fields=["login_confirmed_at", "login_confirmed_email", "verified_at", "status", "updated_at"]
+    )
+    record_dsar_event(
+        dsar_request,
+        "login_confirmed",
+        details={"via": "aquaai_session", "subject_user_id": str(dsar_request.subject_user_id)},
+    )
+
+    # Full automation: once identity is confirmed, compile and email the data
+    # package automatically for access/portability requests (toggleable).
+    if (
+        get_operational_settings().dsar_auto_send
+        and dsar_request.request_type in {"access", "portability"}
+    ):
+        try:
+            result = approve_and_send_dsar(dsar_request, actor=None)
+            record_dsar_event(
+                dsar_request,
+                "auto_send" if result["ok"] else "auto_send_failed",
+                details={"error": result.get("error", "")},
+            )
+        except Exception as exc:  # pragma: no cover - defensive; admin can resend
+            record_dsar_event(dsar_request, "auto_send_failed", details={"error": str(exc)})
+    return True
 
 
 def prepare_dsar_request(dsar_request: DSARRequest, actor=None) -> DSARRequest:
@@ -170,15 +208,16 @@ def prepare_dsar_request(dsar_request: DSARRequest, actor=None) -> DSARRequest:
     export_bundle = build_subject_export(subject_user)
     runtime_dir = Path(settings.BASE_DIR) / "runtime_exports" / "dsar" / str(dsar_request.id)
     runtime_dir.mkdir(parents=True, exist_ok=True)
-    json_path = runtime_dir / "aquaai-dsar-export.json"
-    html_path = runtime_dir / "aquaai-dsar-export.html"
+    pdf_path = runtime_dir / "aquaai-data-export.pdf"
+    json_path = runtime_dir / "aquaai-data-export.json"
 
+    pdf_path.write_bytes(_render_export_pdf(export_bundle))
+    # JSON kept for the data-portability right (machine-readable copy).
     json_path.write_text(json.dumps(export_bundle, indent=2, default=str), encoding="utf-8")
-    html_path.write_text(_render_export_html(export_bundle), encoding="utf-8")
 
     expires_at = timezone.now() + timedelta(days=7)
+    _upsert_deliverable(dsar_request, "access_export_pdf", pdf_path, "application/pdf", expires_at)
     _upsert_deliverable(dsar_request, "access_export_json", json_path, "application/json", expires_at)
-    _upsert_deliverable(dsar_request, "access_export_html", html_path, "text/html", expires_at)
 
     dsar_request.export_summary = sanitize_json(export_bundle.get("summary", {}))
     dsar_request.status = "awaiting_dpo_approval"
@@ -335,12 +374,9 @@ def record_dsar_event(dsar_request: DSARRequest, action: str, actor=None, detail
     )
 
 
-def build_verification_url(raw_token: str) -> str:
-    path = reverse("admin_portal:dsar_verify", args=[raw_token])
-    base = (getattr(settings, "LEGACY_ADMIN_REDIRECT_URL", "") or "").rstrip("/")
-    if base:
-        return f"{base}{path}"
-    return path
+def build_verification_url(raw_token: str = "") -> str:
+    """The aquaai.uk login link placed in the verification email."""
+    return getattr(settings, "PLATFORM_LOGIN_URL", "") or "https://aquaai.uk/login"
 
 
 def _hash_token(raw_token: str) -> str:
@@ -425,30 +461,167 @@ def _serialize_support_inquiry(inquiry: SupportInquiry):
 def _verification_email_body(dsar_request: DSARRequest, verify_url: str) -> str:
     return (
         "We received a privacy or data request for your Aqua AI account.\n\n"
-        "To protect your personal data, please verify this request by opening the secure link below:\n"
+        "To protect your personal data, please confirm it is you by logging in to your "
+        "Aqua AI account at the link below within the next 48 hours. Once we see that you have "
+        "signed in successfully, our privacy team will verify and release your data:\n"
         f"{verify_url}\n\n"
-        "This link expires in 48 hours. If you did not submit this request, you can ignore this message."
+        "If you did not submit this request, you can ignore this message and no data will be shared."
     )
 
 
 def _fulfilment_email_body(dsar_request: DSARRequest) -> str:
     return (
         "Your Aqua AI privacy request has been fulfilled.\n\n"
-        "We have attached the current export package available from the shared platform database.\n"
+        "Attached is your personal data export as a PDF, along with a machine-readable JSON copy.\n"
         "Please keep these files secure and contact privacy@aquaai.uk if you need anything clarified."
     )
 
 
-def _render_export_html(bundle: dict) -> str:
-    pretty = json.dumps(bundle, indent=2)
-    return (
-        "<!doctype html><html><head><meta charset='utf-8'>"
-        "<title>Aqua AI DSAR Export</title>"
-        "<style>body{font-family:Arial,sans-serif;background:#f6f8fb;color:#10243c;padding:32px;}"
-        "pre{white-space:pre-wrap;background:#fff;border:1px solid #dce4f0;border-radius:12px;padding:20px;}"
-        "h1{margin-top:0;} p{max-width:780px;line-height:1.6;}</style></head><body>"
-        "<h1>Aqua AI Data Request Export</h1>"
-        "<p>This package was generated from the Aqua AI shared application database. "
-        "Counterparty identifiers are redacted where needed to protect other users' personal data.</p>"
-        f"<pre>{pretty}</pre></body></html>"
+# Friendly section titles for the PDF. Internal storage/table names are never
+# used — only these human-readable labels and humanised field names.
+_SECTION_TITLES = {
+    "subject": "Your account",
+    "profiles": "Your profiles",
+    "regulatory_and_trust": "Trust & regulatory record",
+    "commercial_and_support": "Payments & support history",
+    "provider_activity": "Marketplace & provider activity",
+    "messaging": "Messages & conversations",
+}
+_FIELD_LABEL_OVERRIDES = {
+    "id": "Reference",
+    "current_trust_score": "Trust score",
+    "current_regulatory_tier": "Regulatory tier",
+}
+# Fields that are internal plumbing and add no value for the data subject.
+_FIELD_HIDE = {"password", "_state"}
+
+
+def _humanize(key: str) -> str:
+    return _FIELD_LABEL_OVERRIDES.get(key, key.replace("_", " ").strip().capitalize())
+
+
+def _render_export_pdf(bundle: dict) -> bytes:
+    """Render the export bundle as a clean, human-readable PDF.
+
+    Nested records and lists are laid out as indented sub-sections and tables
+    (no raw JSON). Uses friendly section titles and humanised field labels only —
+    no database or table names are ever written into the document.
+    """
+    from io import BytesIO
+
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_LEFT
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.platypus import (
+        HRFlowable,
+        Indenter,
+        Paragraph,
+        SimpleDocTemplate,
+        Spacer,
+        Table,
+        TableStyle,
     )
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4,
+        leftMargin=20 * mm, rightMargin=20 * mm, topMargin=18 * mm, bottomMargin=18 * mm,
+        title="Aqua AI Data Export",
+    )
+    styles = getSampleStyleSheet()
+    h1 = ParagraphStyle("h1", parent=styles["Heading1"], fontSize=18, spaceAfter=4, textColor=colors.HexColor("#0c2233"))
+    h2 = ParagraphStyle("h2", parent=styles["Heading2"], fontSize=13, spaceBefore=14, spaceAfter=6, textColor=colors.HexColor("#0c2233"))
+    body = ParagraphStyle("body", parent=styles["Normal"], fontSize=9.5, leading=14, alignment=TA_LEFT)
+    label = ParagraphStyle("label", parent=body, fontName="Helvetica-Bold", spaceBefore=4)
+    meta = ParagraphStyle("meta", parent=body, textColor=colors.HexColor("#5a6b7a"))
+
+    INDENT = 12
+
+    def esc(value) -> str:
+        text = "" if value is None else str(value)
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    def is_scalar(v) -> bool:
+        return not isinstance(v, (dict, list))
+
+    flow: list = []
+    flow.append(Paragraph("Aqua AI — Personal Data Export", h1))
+    flow.append(Paragraph(
+        "This document contains the personal data Aqua AI holds about you. Where information about "
+        "other people would otherwise be revealed, it has been redacted to protect their privacy.",
+        meta,
+    ))
+    flow.append(Paragraph(f"Generated: {esc(bundle.get('generated_at', ''))}", meta))
+    flow.append(Spacer(1, 6))
+    flow.append(HRFlowable(width="100%", thickness=0.6, color=colors.HexColor("#cdd8e3")))
+
+    def scalar_table(pairs):
+        rows = [[Paragraph(esc(_humanize(k)), body), Paragraph(esc(v), body)] for k, v in pairs]
+        table = Table(rows, colWidths=[52 * mm, 108 * mm])
+        table.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LINEBELOW", (0, 0), (-1, -1), 0.25, colors.HexColor("#e6ecf2")),
+            ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f4f7fa")),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ]))
+        flow.append(table)
+        flow.append(Spacer(1, 5))
+
+    def add_record(record: dict):
+        # Scalar fields grouped into one table; complex fields recursed below.
+        scalars = [(k, v) for k, v in record.items() if k not in _FIELD_HIDE and is_scalar(v)]
+        complexes = [(k, v) for k, v in record.items() if k not in _FIELD_HIDE and not is_scalar(v)]
+        if scalars:
+            scalar_table(scalars)
+        for key, val in complexes:
+            flow.append(Paragraph(_humanize(key), label))
+            flow.append(Indenter(left=INDENT))
+            add_value(val)
+            flow.append(Indenter(left=-INDENT))
+
+    def add_value(value):
+        if isinstance(value, dict):
+            if value:
+                add_record(value)
+            else:
+                flow.append(Paragraph("None on record.", meta))
+        elif isinstance(value, list):
+            if not value:
+                flow.append(Paragraph("None on record.", meta))
+                flow.append(Spacer(1, 3))
+                return
+            for idx, item in enumerate(value, 1):
+                if isinstance(item, dict):
+                    flow.append(Paragraph(f"Entry {idx}", label))
+                    flow.append(Indenter(left=INDENT))
+                    add_record(item)
+                    flow.append(Indenter(left=-INDENT))
+                else:
+                    flow.append(Paragraph(f"• {esc(item)}", body))
+        else:
+            flow.append(Paragraph(esc(value), body))
+
+    summary = bundle.get("summary") or {}
+    if summary:
+        flow.append(Paragraph("Summary", h2))
+        add_record(summary)
+
+    for section_key, title in _SECTION_TITLES.items():
+        if section_key not in bundle:
+            continue
+        flow.append(Paragraph(title, h2))
+        add_value(bundle[section_key])
+
+    notes = bundle.get("notes") or []
+    if notes:
+        flow.append(Paragraph("Notes", h2))
+        for note in notes:
+            flow.append(Paragraph(f"• {esc(note)}", body))
+
+    doc.build(flow)
+    return buf.getvalue()

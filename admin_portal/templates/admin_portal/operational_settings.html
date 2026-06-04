@@ -101,6 +101,16 @@
         On = approve all new accounts automatically. Off = AI-enabled approval.
       </div>
     </div>
+    <div class="form-row" style="align-items:center;margin-top:14px;">
+      <label class="switch">
+        {{ form.dsar_auto_send }}
+        <span class="switch-track" aria-hidden="true"></span>
+        <span class="switch-text">Automatic data-request delivery</span>
+      </label>
+      <div class="helper-text">
+        On = once a requester confirms their identity by logging in at aquaai.uk, their data PDF is compiled and emailed automatically. Off = an admin must press <em>Approve and send</em>.
+      </div>
+    </div>
   </div>
 
   <div class="card">
