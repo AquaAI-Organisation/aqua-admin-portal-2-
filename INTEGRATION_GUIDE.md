@@ -104,6 +104,7 @@ DEFAULT_FROM_EMAIL=Aqua Admin <admin@humara.io>
 - Add a scheduler for:
   - `python manage.py process_pending_reviews --limit 25`
   - `python manage.py generate_daily_report`
+  - `python manage.py confirm_dsar_logins` (every ~5–10 min; confirms DSAR identity once the requester logs in at aquaai.uk). Or enable the always-on `worker` dyno: `heroku ps:scale worker=1`.
 
 ## 6. Verification checklist
 

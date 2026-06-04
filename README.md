@@ -73,8 +73,16 @@ Run these on a scheduler:
 
 - `python manage.py process_pending_reviews --limit 25`
 - `python manage.py generate_daily_report`
+- `python manage.py confirm_dsar_logins` — detects when a DSAR requester has logged in at aquaai.uk and marks the request login-confirmed so it can be sent. Run every ~5–10 minutes.
 
 The review command now processes both new account signups and new incident/warning triage. Inbox refresh can also create DSAR requests from the privacy mailbox automatically.
+
+### DSAR login watcher — two options
+
+- **Heroku Scheduler (recommended):** add a job running `python manage.py confirm_dsar_logins` every 10 minutes. Free, no extra dyno.
+- **Always-on worker:** the `Procfile` defines a `worker` process running the watcher continuously. It stays at 0 dynos (no cost) until you enable it with `heroku ps:scale worker=1`; lower latency than the 10-minute scheduler.
+
+Confirmation also happens automatically whenever an admin opens a data request, and via the **Re-check login** button — the scheduler just makes it hands-off.
 
 ## Main backend redirect
 
