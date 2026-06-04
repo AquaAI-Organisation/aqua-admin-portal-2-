@@ -503,24 +503,26 @@ def _humanize(key: str) -> str:
 def _render_export_pdf(bundle: dict) -> bytes:
     """Render the export bundle as a clean, human-readable PDF.
 
-    Uses friendly section titles and humanised field labels only — no database
-    or table names are ever written into the document.
+    Nested records and lists are laid out as indented sub-sections and tables
+    (no raw JSON). Uses friendly section titles and humanised field labels only —
+    no database or table names are ever written into the document.
     """
     from io import BytesIO
 
+    from reportlab.lib import colors
     from reportlab.lib.enums import TA_LEFT
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import mm
     from reportlab.platypus import (
         HRFlowable,
+        Indenter,
         Paragraph,
         SimpleDocTemplate,
         Spacer,
         Table,
         TableStyle,
     )
-    from reportlab.lib import colors
 
     buf = BytesIO()
     doc = SimpleDocTemplate(
@@ -532,13 +534,19 @@ def _render_export_pdf(bundle: dict) -> bytes:
     h1 = ParagraphStyle("h1", parent=styles["Heading1"], fontSize=18, spaceAfter=4, textColor=colors.HexColor("#0c2233"))
     h2 = ParagraphStyle("h2", parent=styles["Heading2"], fontSize=13, spaceBefore=14, spaceAfter=6, textColor=colors.HexColor("#0c2233"))
     body = ParagraphStyle("body", parent=styles["Normal"], fontSize=9.5, leading=14, alignment=TA_LEFT)
+    label = ParagraphStyle("label", parent=body, fontName="Helvetica-Bold", spaceBefore=4)
     meta = ParagraphStyle("meta", parent=body, textColor=colors.HexColor("#5a6b7a"))
+
+    INDENT = 12
 
     def esc(value) -> str:
         text = "" if value is None else str(value)
         return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
-    flow = []
+    def is_scalar(v) -> bool:
+        return not isinstance(v, (dict, list))
+
+    flow: list = []
     flow.append(Paragraph("Aqua AI — Personal Data Export", h1))
     flow.append(Paragraph(
         "This document contains the personal data Aqua AI holds about you. Where information about "
@@ -549,17 +557,9 @@ def _render_export_pdf(bundle: dict) -> bytes:
     flow.append(Spacer(1, 6))
     flow.append(HRFlowable(width="100%", thickness=0.6, color=colors.HexColor("#cdd8e3")))
 
-    def render_record(record: dict):
-        rows = []
-        for key, val in record.items():
-            if key in _FIELD_HIDE:
-                continue
-            if isinstance(val, (dict, list)):
-                val = json.dumps(val, default=str, ensure_ascii=False)
-            rows.append([Paragraph(esc(_humanize(key)), body), Paragraph(esc(val), body)])
-        if not rows:
-            return
-        table = Table(rows, colWidths=[55 * mm, 110 * mm])
+    def scalar_table(pairs):
+        rows = [[Paragraph(esc(_humanize(k)), body), Paragraph(esc(v), body)] for k, v in pairs]
+        table = Table(rows, colWidths=[52 * mm, 108 * mm])
         table.setStyle(TableStyle([
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
             ("LINEBELOW", (0, 0), (-1, -1), 0.25, colors.HexColor("#e6ecf2")),
@@ -570,35 +570,52 @@ def _render_export_pdf(bundle: dict) -> bytes:
             ("RIGHTPADDING", (0, 0), (-1, -1), 6),
         ]))
         flow.append(table)
-        flow.append(Spacer(1, 6))
+        flow.append(Spacer(1, 5))
 
-    def render_value(value):
+    def add_record(record: dict):
+        # Scalar fields grouped into one table; complex fields recursed below.
+        scalars = [(k, v) for k, v in record.items() if k not in _FIELD_HIDE and is_scalar(v)]
+        complexes = [(k, v) for k, v in record.items() if k not in _FIELD_HIDE and not is_scalar(v)]
+        if scalars:
+            scalar_table(scalars)
+        for key, val in complexes:
+            flow.append(Paragraph(_humanize(key), label))
+            flow.append(Indenter(left=INDENT))
+            add_value(val)
+            flow.append(Indenter(left=-INDENT))
+
+    def add_value(value):
         if isinstance(value, dict):
-            render_record(value)
+            if value:
+                add_record(value)
+            else:
+                flow.append(Paragraph("None on record.", meta))
         elif isinstance(value, list):
             if not value:
                 flow.append(Paragraph("None on record.", meta))
-                flow.append(Spacer(1, 4))
+                flow.append(Spacer(1, 3))
+                return
             for idx, item in enumerate(value, 1):
                 if isinstance(item, dict):
-                    flow.append(Paragraph(f"Item {idx}", ParagraphStyle("item", parent=body, fontName="Helvetica-Bold")))
-                    render_record(item)
+                    flow.append(Paragraph(f"Entry {idx}", label))
+                    flow.append(Indenter(left=INDENT))
+                    add_record(item)
+                    flow.append(Indenter(left=-INDENT))
                 else:
-                    flow.append(Paragraph(esc(item), body))
+                    flow.append(Paragraph(f"• {esc(item)}", body))
         else:
             flow.append(Paragraph(esc(value), body))
 
-    # Summary first
     summary = bundle.get("summary") or {}
     if summary:
         flow.append(Paragraph("Summary", h2))
-        render_record(summary)
+        add_record(summary)
 
     for section_key, title in _SECTION_TITLES.items():
         if section_key not in bundle:
             continue
         flow.append(Paragraph(title, h2))
-        render_value(bundle[section_key])
+        add_value(bundle[section_key])
 
     notes = bundle.get("notes") or []
     if notes:
