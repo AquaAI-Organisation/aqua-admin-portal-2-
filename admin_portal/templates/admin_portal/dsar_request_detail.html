@@ -36,10 +36,21 @@
 
 {% if not dsar_request.login_confirmed %}
 <div class="card" style="border-color:rgba(245,201,110,0.30);">
+  <div class="card-header">
+    <div>
+      <div class="card-title">Awaiting identity confirmation</div>
+      <div class="card-subtitle">The requester was emailed a link to sign in at <span class="mono">aquaai.uk</span>.</div>
+    </div>
+    {% if IS_SUPER_ADMIN or IS_ADMIN %}
+    <form method="post" action="{% url 'admin_portal:dsar_recheck_login' dsar_request.id %}">
+      {% csrf_token %}
+      <button class="btn btn-sm" type="submit">Re-check login</button>
+    </form>
+    {% endif %}
+  </div>
   <div class="helper-text">
-    <strong>Identity not yet confirmed.</strong> The requester was emailed a secure link to sign in
-    at <span class="mono">aquaai.uk</span>. The data can only be sent once that login is confirmed here —
-    you'll see a <span class="badge ok">Login confirmed</span> badge and the <em>Approve and send</em> button will unlock.
+    Once they successfully log in within 48 hours, this confirms automatically (you can also re-check
+    manually). The <em>Approve and send</em> button unlocks only after a <span class="badge ok">Login confirmed</span> badge appears.
   </div>
 </div>
 {% else %}

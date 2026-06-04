@@ -2,17 +2,13 @@
 from __future__ import annotations
 
 import hashlib
-import hmac
 import json
 import secrets
-import time
 from datetime import timedelta
 from pathlib import Path
-from urllib.parse import urlencode
 
 from django.conf import settings
 from django.db import transaction
-from django.urls import reverse
 from django.utils import timezone
 
 from ..models import (
@@ -34,6 +30,7 @@ from ..models import (
     SupportInquiry,
 )
 from .google_oauth import pick_alias_for_mailbox
+from .platform_sessions import active_session_keys_for_user, has_new_login_since_baseline
 from .json_utils import sanitize_json
 from .notifier import send_custom_email
 
@@ -82,11 +79,14 @@ def ensure_dsar_request_from_inquiry(inquiry: SupportInquiry) -> tuple[DSARReque
         },
     )
     if matched_user:
-        raw_token = issue_verification_token(dsar_request)
-        verify_url = build_verification_url(raw_token)
+        issue_verification_token(dsar_request)
+        # Snapshot the sessions the subject already has, so a later *new* session
+        # is recognised as a fresh login made in response to this request.
+        dsar_request.login_baseline_keys = sorted(active_session_keys_for_user(matched_user.id))
+        dsar_request.save(update_fields=["login_baseline_keys", "updated_at"])
         result = send_custom_email(
             subject="Verify your Aqua AI privacy request",
-            body=_verification_email_body(dsar_request, verify_url),
+            body=_verification_email_body(dsar_request, settings.PLATFORM_LOGIN_URL),
             recipients=[matched_user.email],
             from_email=pick_alias_for_mailbox("privacy"),
         )
@@ -95,6 +95,8 @@ def ensure_dsar_request_from_inquiry(inquiry: SupportInquiry) -> tuple[DSARReque
             "verification_sent",
             details={
                 "verification_email": matched_user.email,
+                "login_url": settings.PLATFORM_LOGIN_URL,
+                "baseline_sessions": len(dsar_request.login_baseline_keys),
                 "delivery_ok": result["ok"],
                 "delivery_error": result["error"],
             },
@@ -136,75 +138,32 @@ def issue_verification_token(dsar_request: DSARRequest) -> str:
     return raw_token
 
 
-def dsar_login_signature(token: str, uid: str, email: str, ts: str) -> str:
-    """HMAC-SHA256 over the canonical message, shared with the aquaai.uk platform.
-
-    Canonical message:  f"{token}|{uid}|{email_lowercased}|{ts}"
-    """
-    secret = (getattr(settings, "DSAR_LOGIN_SIGNING_SECRET", "") or "").encode("utf-8")
-    message = f"{token}|{uid}|{(email or '').strip().lower()}|{ts}".encode("utf-8")
-    return hmac.new(secret, message, hashlib.sha256).hexdigest()
-
-
 @transaction.atomic
-def confirm_dsar_login(
-    raw_token: str, uid: str, email: str, ts: str, sig: str, ip: str = ""
-) -> tuple[DSARRequest | None, str]:
-    """Validate the signed redirect the aquaai.uk platform sends after the
-    requester logs in. On success the request is marked login-confirmed so an
-    admin can release the data. This never sends data on its own."""
-    secret = getattr(settings, "DSAR_LOGIN_SIGNING_SECRET", "") or ""
-    if not secret:
-        return None, "misconfigured"
+def check_dsar_login(dsar_request: DSARRequest) -> bool:
+    """Confirm identity by detecting a fresh aquaai.uk login for the subject.
 
-    token_hash = _hash_token(raw_token)
-    dsar_request = (
-        DSARRequest.objects.select_for_update()
-        .filter(verification_token_hash=token_hash)
-        .order_by("-created_at")
-        .first()
-    )
-    if not dsar_request:
-        return None, "invalid"
-    if dsar_request.status == "fulfilled":
-        return dsar_request, "already_done"
+    Returns True if the request is (now or already) login-confirmed. Looks for a
+    platform session that did not exist when the request was raised, within the
+    48-hour verification window. Never sends data — only flips the gate."""
     if dsar_request.login_confirmed_at:
-        return dsar_request, "already_confirmed"
-    if dsar_request.verification_expires_at and dsar_request.verification_expires_at < timezone.now():
-        return dsar_request, "expired"
+        return True
     if not dsar_request.subject_user_id:
-        return dsar_request, "unmatched"
+        return False
+    if dsar_request.status in ("fulfilled", "rejected", "withdrawn"):
+        return False
+    # Enforce the window: only confirm while the verification link is valid.
+    if dsar_request.verification_expires_at and dsar_request.verification_expires_at < timezone.now():
+        return False
 
-    # The signed timestamp must be fresh, to stop an old signed link being replayed.
-    try:
-        ts_int = int(ts)
-    except (TypeError, ValueError):
-        return dsar_request, "invalid"
-    max_age = int(getattr(settings, "DSAR_LOGIN_CALLBACK_MAX_AGE", 600))
-    if abs(time.time() - ts_int) > max_age:
-        return dsar_request, "expired"
-
-    expected_sig = dsar_login_signature(raw_token, uid or "", email or "", ts or "")
-    if not (sig and hmac.compare_digest(expected_sig, sig)):
-        record_dsar_event(dsar_request, "login_confirmation_rejected", details={"reason": "bad_signature", "ip": ip or ""})
-        return dsar_request, "invalid"
-
-    # Bind the authenticated identity to the account this request is for.
-    subject_user = ExternalUser.objects.filter(id=dsar_request.subject_user_id).first()
-    subject_email = (getattr(subject_user, "email", "") or dsar_request.verification_email or "").lower()
-    uid_ok = bool(uid) and str(uid) == str(dsar_request.subject_user_id)
-    email_ok = bool(email) and email.strip().lower() == subject_email
-    if not (uid_ok or email_ok):
-        record_dsar_event(
-            dsar_request,
-            "login_confirmation_rejected",
-            details={"reason": "identity_mismatch", "uid": uid or "", "ip": ip or ""},
-        )
-        return dsar_request, "mismatch"
+    if not has_new_login_since_baseline(dsar_request.subject_user_id, dsar_request.login_baseline_keys):
+        return False
 
     now = timezone.now()
+    subject_user = ExternalUser.objects.filter(id=dsar_request.subject_user_id).first()
     dsar_request.login_confirmed_at = now
-    dsar_request.login_confirmed_email = (email or subject_email)[:254]
+    dsar_request.login_confirmed_email = (
+        getattr(subject_user, "email", "") or dsar_request.verification_email or ""
+    )[:254]
     dsar_request.verified_at = dsar_request.verified_at or now
     if dsar_request.status in ("received", "verifying", "unmatched"):
         dsar_request.status = "verified"
@@ -214,9 +173,9 @@ def confirm_dsar_login(
     record_dsar_event(
         dsar_request,
         "login_confirmed",
-        details={"via": "aquaai_login", "uid": uid or "", "email": email or "", "ip": ip or ""},
+        details={"via": "aquaai_session", "subject_user_id": str(dsar_request.subject_user_id)},
     )
-    return dsar_request, "confirmed"
+    return True
 
 
 def prepare_dsar_request(dsar_request: DSARRequest, actor=None) -> DSARRequest:
@@ -397,20 +356,9 @@ def record_dsar_event(dsar_request: DSARRequest, action: str, actor=None, detail
     )
 
 
-def build_callback_url(raw_token: str) -> str:
-    """Absolute admin-portal callback the platform redirects to after login."""
-    path = reverse("admin_portal:dsar_login_callback")
-    base = (getattr(settings, "LEGACY_ADMIN_REDIRECT_URL", "") or "").rstrip("/")
-    query = urlencode({"token": raw_token})
-    return f"{base}{path}?{query}" if base else f"{path}?{query}"
-
-
-def build_verification_url(raw_token: str) -> str:
-    """Link placed in the verification email: send the requester to the real
-    aquaai.uk login, asking it to return to our callback once authenticated."""
-    callback = build_callback_url(raw_token)
-    login_url = (getattr(settings, "PLATFORM_LOGIN_URL", "") or "https://aquaai.uk/login").rstrip("/")
-    return f"{login_url}?{urlencode({'next': callback})}"
+def build_verification_url(raw_token: str = "") -> str:
+    """The aquaai.uk login link placed in the verification email."""
+    return getattr(settings, "PLATFORM_LOGIN_URL", "") or "https://aquaai.uk/login"
 
 
 def _hash_token(raw_token: str) -> str:
@@ -496,10 +444,10 @@ def _verification_email_body(dsar_request: DSARRequest, verify_url: str) -> str:
     return (
         "We received a privacy or data request for your Aqua AI account.\n\n"
         "To protect your personal data, please confirm it is you by logging in to your "
-        "Aqua AI account using the secure link below. Once you have signed in successfully, "
-        "our privacy team will verify and release your data:\n"
+        "Aqua AI account at the link below within the next 48 hours. Once we see that you have "
+        "signed in successfully, our privacy team will verify and release your data:\n"
         f"{verify_url}\n\n"
-        "This link expires in 48 hours. If you did not submit this request, you can ignore this message."
+        "If you did not submit this request, you can ignore this message and no data will be shared."
     )
 
 

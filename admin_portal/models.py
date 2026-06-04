@@ -352,10 +352,12 @@ class DSARRequest(models.Model):
     verification_email = models.EmailField(blank=True)
     verification_attempts = models.PositiveIntegerField(default=0)
     # Set once the requester proves identity by logging in on the main aquaai.uk
-    # platform and the signed confirmation is received. Data may only be sent
-    # after this is populated.
+    # platform (a new session is observed). Data may only be sent after this.
     login_confirmed_at = models.DateTimeField(null=True, blank=True)
     login_confirmed_email = models.EmailField(blank=True)
+    # Snapshot of the subject's active platform session keys at request time, so a
+    # later *new* session can be recognised as a fresh login after the request.
+    login_baseline_keys = models.JSONField(default=list, blank=True)
     export_summary = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
@@ -427,6 +429,18 @@ class DSARDeliverable(models.Model):
 # ---------------------------------------------------------------------------
 # Unmanaged mirrors of the main backend's tables
 # ---------------------------------------------------------------------------
+
+class PlatformSession(models.Model):
+    """Read-only mirror of the main platform's django_session table. Used to
+    detect when a DSAR subject has logged in at aquaai.uk."""
+    session_key = models.CharField(max_length=40, primary_key=True)
+    session_data = models.TextField()
+    expire_date = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = "django_session"
+
 
 class ExternalUser(models.Model):
     id = models.UUIDField(primary_key=True)

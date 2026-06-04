@@ -54,7 +54,7 @@ from .permissions import admin_required, operational_admin_required, super_admin
 from .services import audit
 from .services.dsar import (
     approve_and_send_dsar,
-    confirm_dsar_login,
+    check_dsar_login,
     ensure_dsar_request_from_inquiry,
     extend_dsar_request,
     prepare_dsar_request,
@@ -1182,6 +1182,12 @@ def dsar_request_detail(request, request_id):
         DSARRequest.objects.select_related("inquiry", "dpo_actor"),
         pk=request_id,
     )
+    # Opportunistically detect a fresh aquaai.uk login whenever the case is opened.
+    if not dsar_request.login_confirmed_at:
+        try:
+            check_dsar_login(dsar_request)
+        except Exception:
+            pass
     return render(
         request,
         "admin_portal/dsar_request_detail.html",
@@ -1193,21 +1199,15 @@ def dsar_request_detail(request, request_id):
     )
 
 
-def dsar_login_callback(request):
-    ip = request.META.get("REMOTE_ADDR", "")
-    dsar_request, outcome = confirm_dsar_login(
-        request.GET.get("token", ""),
-        request.GET.get("uid", ""),
-        request.GET.get("email", ""),
-        request.GET.get("ts", ""),
-        request.GET.get("sig", ""),
-        ip=ip,
-    )
-    return render(
-        request,
-        "admin_portal/dsar_verify_result.html",
-        {"dsar_request": dsar_request, "outcome": outcome},
-    )
+@operational_admin_required
+def dsar_recheck_login(request, request_id):
+    dsar_request = get_object_or_404(DSARRequest, pk=request_id)
+    if request.method == "POST":
+        if check_dsar_login(dsar_request):
+            messages.success(request, "Login confirmed — the requester has signed in at aquaai.uk. You can now send the data.")
+        else:
+            messages.info(request, "No confirmed aquaai.uk login for this requester yet. Ask them to sign in, then re-check.")
+    return redirect("admin_portal:dsar_request_detail", request_id=dsar_request.id)
 
 
 @super_admin_required
