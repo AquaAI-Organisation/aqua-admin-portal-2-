@@ -38,6 +38,8 @@ urlpatterns = [
     path("settings/google/connect/", views.google_oauth_start, name="google_oauth_start"),
     path("settings/google/callback/", views.google_oauth_callback, name="google_oauth_callback"),
     path("settings/google/disconnect/", views.google_oauth_disconnect, name="google_oauth_disconnect"),
+    path("settings/slack/test/", views.slack_test, name="slack_test"),
+    path("settings/slack/disconnect/", views.slack_disconnect, name="slack_disconnect"),
 
     # AI reviews
     path("reviews/", views.review_list, name="review_list"),
