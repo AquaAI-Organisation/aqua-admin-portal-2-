@@ -52,6 +52,7 @@ from .models import (
 )
 from .permissions import admin_required, operational_admin_required, super_admin_required
 from .services import audit
+from .services import slack as slack_service
 from .services.dsar import (
     approve_and_send_dsar,
     check_dsar_login,
@@ -831,6 +832,7 @@ def operational_settings_view(request):
         settings_obj.updated_by = request.user
         settings_obj.save()
         clear_gmail_service_cache()
+        slack_service.clear_slack_client_cache()
         audit.record_write(
             request.user,
             "settings.update",
@@ -850,6 +852,7 @@ def operational_settings_view(request):
             "gmail_connected": bool(config.gmail_refresh_token),
             "gmail_redirect_uri": _google_redirect_uri(request),
             "gmail_client_ready": bool(config.gmail_client_id and config.gmail_client_secret),
+            "slack_status": slack_service.slack_status(),
         },
     )
 
@@ -984,6 +987,47 @@ def google_oauth_disconnect(request):
             summary="Disconnected the Google Workspace mailbox.",
         )
         messages.success(request, "The Google Workspace mailbox has been disconnected.")
+    return redirect("admin_portal:operational_settings")
+
+
+@super_admin_required
+def slack_test(request):
+    """Send a test message through the Slack integration and report the result."""
+    if request.method == "POST":
+        result = slack_service.send_test_message(actor_email=request.user.email)
+        if result.get("ok"):
+            messages.success(request, "Slack test message sent — check your DMs / the fallback channel.")
+        else:
+            messages.error(request, f"Slack test failed: {result.get('error') or 'unknown error'}.")
+        audit.record_write(
+            request.user,
+            "settings.slack_test",
+            target_type="operational_settings",
+            target_id=OperationalSettings.get_solo().id,
+            request=request,
+            summary="Sent a Slack test message.",
+        )
+    return redirect("admin_portal:operational_settings")
+
+
+@super_admin_required
+def slack_disconnect(request):
+    """Clear the stored Slack bot token so Slack alerts are fully disconnected."""
+    if request.method == "POST":
+        config = OperationalSettings.get_solo()
+        config.slack_bot_token = ""
+        config.updated_by = request.user
+        config.save(update_fields=["slack_bot_token", "updated_by", "updated_at"])
+        slack_service.clear_slack_client_cache()
+        audit.record_write(
+            request.user,
+            "settings.slack_disconnect",
+            target_type="operational_settings",
+            target_id=config.id,
+            request=request,
+            summary="Disconnected the Slack workspace.",
+        )
+        messages.success(request, "Slack has been disconnected. Alerts will fall back to email only.")
     return redirect("admin_portal:operational_settings")
 
 

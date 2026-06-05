@@ -163,13 +163,34 @@
     </details>
   </div>
 
-  <div class="card">
+  <div class="card {% if slack_status.connected %}is-connected{% elif slack_status.configured %}is-disconnected{% endif %}">
     <div class="card-header">
       <div>
         <div class="card-title">Slack alerts</div>
         <div class="card-subtitle">Notify operations leaders when critical flags, DSAR escalations, or inbox incidents need review.</div>
       </div>
+      <span class="conn-status {% if slack_status.connected %}ok{% else %}idle{% endif %}">
+        {% if slack_status.connected %}Connected{% elif slack_status.configured %}Token set — not verified{% else %}Not connected{% endif %}
+      </span>
     </div>
+    <div class="helper-text" style="margin-bottom:12px;">{{ slack_status.note }}</div>
+    {% if slack_status.connected %}
+    <div class="helper-text mono" style="margin-bottom:16px;">
+      Workspace: {{ slack_status.team }} · Bot: {{ slack_status.bot_user }}{% if slack_status.channel %} · Fallback channel: {{ slack_status.channel }}{% endif %}
+    </div>
+    {% endif %}
+    {% if slack_status.configured %}
+    <div class="form-actions" style="display:flex; gap:10px; margin-bottom:16px;">
+      <form method="post" action="{% url 'admin_portal:slack_test' %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-secondary">Send test message</button>
+      </form>
+      <form method="post" action="{% url 'admin_portal:slack_disconnect' %}" onsubmit="return confirm('Disconnect Slack? Critical alerts will fall back to email only until you reconnect.');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger">Disconnect</button>
+      </form>
+    </div>
+    {% endif %}
     <div class="helper-text" style="margin-bottom:16px;">
       Recommended Slack scopes: <span class="mono">chat:write</span>, <span class="mono">im:write</span>, and <span class="mono">users:read.email</span>.
     </div>

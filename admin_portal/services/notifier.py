@@ -12,8 +12,8 @@ from .google_oauth import gmail_configured, send_gmail_message
 from .runtime_config import (
     get_email_runtime_config,
     get_gmail_runtime_config,
-    get_slack_runtime_config,
 )
+from . import slack as slack_service
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +23,7 @@ def _admin_emails() -> list[str]:
 
 
 def _slack_token_ok() -> bool:
-    token = get_slack_runtime_config().token
-    return bool(token) and "REPLACE" not in token.upper()
+    return slack_service.slack_configured()
 
 
 def _email_ok() -> bool:
@@ -264,36 +263,8 @@ def _send_email_result(
 
 
 def _send_slack_to_super_admins(text: str) -> bool:
-    if not _slack_token_ok():
-        logger.warning("Slack not configured; skipping message")
-        return False
-    try:
-        from slack_sdk import WebClient
-        from slack_sdk.errors import SlackApiError
-
-        slack_config = get_slack_runtime_config()
-        client = WebClient(token=slack_config.token)
-        delivered = False
-        for email in _admin_emails():
-            try:
-                lookup = client.users_lookupByEmail(email=email)
-                user_id = lookup["user"]["id"]
-                dm = client.conversations_open(users=user_id)
-                client.chat_postMessage(channel=dm["channel"]["id"], text=text)
-                delivered = True
-            except SlackApiError:
-                logger.exception("Slack DM lookup failed for %s", email)
-            except Exception:
-                logger.exception("Slack DM send failed for %s", email)
-
-        fallback_channel = slack_config.channel
-        if fallback_channel:
-            client.chat_postMessage(channel=fallback_channel, text=text)
-            delivered = True
-        return delivered
-    except Exception:
-        logger.exception("Slack client error")
-        return False
+    # Delegates to the typed Slack service (DM each super-admin + fallback channel).
+    return slack_service.send_to_super_admins(text)
 
 
 def send_custom_email(
