@@ -8,6 +8,12 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
+# Central secrets manager: when SECRETS_SERVICE_TOKEN is set, fetch this service's
+# secrets from Supabase and inject them BEFORE anything below reads the environment.
+# No-op (keeps existing env) until you set the token on the host.
+from . import secrets_loader  # noqa: E402
+secrets_loader.load()
+
 SECRET_KEY = os.getenv("SECRET_KEY", "dev-insecure-change-me")
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 
