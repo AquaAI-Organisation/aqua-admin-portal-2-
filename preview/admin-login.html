@@ -10,57 +10,40 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap">
   <style>
   /* ============================================================
-     Aqua AI · Control Room sign-in (21st.dev-inspired split layout)
-     Scoped under .adminx-login so it never touches other pages.
+     Aqua AI · Control Room sign-in
+     Background: "Dotted Surface" (21st.dev / efferd) ported from
+     React+Three.js to vanilla Three.js. Scoped under .adminx-login.
      Palette: Vault dark blue (#1E3A5F) + Secure green (#059669).
      ============================================================ */
   .adminx-login{
-    --ax-bg:#0b1220; --ax-primary:#1e3a5f; --ax-accent:#059669; --ax-accent-2:#10b981;
+    --ax-accent:#059669; --ax-accent-2:#10b981;
     --ax-fg:#f1f6fb; --ax-muted:#9fb2c8; --ax-faint:#64758c;
     --ax-border:rgba(255,255,255,.09); --ax-border-2:rgba(255,255,255,.16);
     --ax-radius:20px;
-    position:fixed; inset:0; z-index:0;
+    position:fixed; inset:0; z-index:0; overflow:hidden;
     display:grid; grid-template-columns:1.05fr .95fr;
     font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
-    color:var(--ax-fg); overflow:hidden;
+    color:var(--ax-fg);
     background:
-      radial-gradient(1100px 700px at 8% -10%, rgba(30,58,95,.65), transparent 60%),
-      radial-gradient(1000px 700px at 112% 118%, rgba(5,150,105,.30), transparent 55%),
-      radial-gradient(800px 500px at 60% 50%, rgba(14,165,160,.10), transparent 60%),
-      var(--ax-bg);
+      radial-gradient(1100px 700px at 8% -10%, rgba(30,58,95,.55), transparent 60%),
+      radial-gradient(1000px 700px at 112% 118%, rgba(5,150,105,.22), transparent 55%),
+      #080d18;
     background-size:200% 200%;
-    animation:ax-bg-pan 16s ease-in-out infinite alternate;   /* always-moving mesh */
+    animation:ax-bg-pan 18s ease-in-out infinite alternate;
   }
   .adminx-login *{box-sizing:border-box;}
 
-  /* ---------- Left brand / visual panel ---------- */
-  .ax-visual{position:relative; overflow:hidden; isolation:isolate;}
-  .ax-visual-video{position:absolute; inset:0; width:100%; height:100%;
-    object-fit:cover; opacity:.40; filter:saturate(1.1) contrast(1.02); z-index:0;}
-  /* rotating aurora glow — clearly moving */
-  .ax-visual::after{content:""; position:absolute; inset:-40%; z-index:1; pointer-events:none;
-    background:conic-gradient(from 0deg,
-      transparent 0deg, rgba(14,165,160,.55) 60deg, transparent 130deg,
-      rgba(30,58,95,.7) 210deg, transparent 300deg, rgba(16,185,129,.4) 340deg, transparent 360deg);
-    filter:blur(48px); animation:ax-spin 26s linear infinite;}
-  .ax-aurora{position:absolute; inset:-20% -10%; z-index:1; filter:blur(54px); pointer-events:none;}
-  .ax-blob{position:absolute; width:46%; aspect-ratio:1; border-radius:50%;}
-  .ax-blob.b1{left:-6%; top:6%;  background:radial-gradient(circle,#2a5588,transparent 70%); opacity:.7; animation:ax-drift1 11s ease-in-out infinite;}
-  .ax-blob.b2{right:-6%; top:28%; background:radial-gradient(circle,#089b6b,transparent 70%); opacity:.55; animation:ax-drift2 14s ease-in-out infinite;}
-  .ax-blob.b3{left:24%; bottom:-12%; background:radial-gradient(circle,#0ea5a0,transparent 70%); opacity:.45; animation:ax-drift1 17s ease-in-out infinite reverse;}
-  .ax-grid{position:absolute; inset:0; z-index:2; opacity:.45; pointer-events:none;
-    background-image:linear-gradient(rgba(255,255,255,.05) 1px,transparent 1px),
-                     linear-gradient(90deg,rgba(255,255,255,.05) 1px,transparent 1px);
-    background-size:46px 46px;
-    -webkit-mask-image:radial-gradient(120% 80% at 30% 20%, #000 30%, transparent 75%);
-            mask-image:radial-gradient(120% 80% at 30% 20%, #000 30%, transparent 75%);}
-  /* lighter veil so the motion shows through */
-  .ax-visual-veil{position:absolute; inset:0; z-index:3; pointer-events:none;
+  /* Three.js dotted surface canvas host (spans the whole screen, behind content) */
+  .ax-dots{position:absolute; inset:0; z-index:0; pointer-events:none;}
+  .ax-dots canvas{position:absolute; inset:0; display:block;}
+  /* vignette keeps text + form legible over the moving dots */
+  .ax-vignette{position:absolute; inset:0; z-index:1; pointer-events:none;
     background:
-      linear-gradient(180deg, rgba(11,18,32,.12), rgba(11,18,32,.5) 75%, rgba(11,18,32,.8)),
-      linear-gradient(110deg, rgba(30,58,95,.32), transparent 55%);}
-  .ax-visual-content{position:relative; z-index:4; height:100%;
-    display:flex; flex-direction:column; justify-content:space-between;
+      radial-gradient(130% 130% at 50% 45%, transparent 38%, rgba(7,12,22,.62) 100%),
+      linear-gradient(90deg, rgba(7,12,22,.45), transparent 32%, transparent 68%, rgba(7,12,22,.25));}
+
+  /* ---------- Left brand panel ---------- */
+  .ax-visual{position:relative; z-index:2; display:flex; flex-direction:column; justify-content:space-between;
     padding:clamp(28px,4vw,56px);}
   .ax-lockup{display:flex; align-items:center; gap:12px; opacity:0; animation:ax-rise .7s .05s ease-out forwards;}
   .ax-mark{width:42px; height:42px; border-radius:12px; display:grid; place-items:center;
@@ -70,7 +53,7 @@
     animation:ax-float 5s ease-in-out infinite;}
   .ax-lockup-name{font-weight:700; letter-spacing:.2px;}
   .ax-lockup-sub{font-size:12px; color:var(--ax-muted); letter-spacing:.16em; text-transform:uppercase;}
-  .ax-hero{max-width:30ch;}
+  .ax-hero{max-width:32ch;}
   .ax-eyebrow{display:inline-flex; align-items:center; gap:8px; font-size:12px; letter-spacing:.18em;
     text-transform:uppercase; color:var(--ax-accent-2); margin-bottom:18px;
     opacity:0; animation:ax-rise .7s .12s ease-out forwards;}
@@ -91,12 +74,11 @@
     box-shadow:0 0 0 0 rgba(16,185,129,.55); animation:ax-pulse 2s ease-out infinite;}
 
   /* ---------- Right form panel ---------- */
-  .ax-panel{position:relative; z-index:1; display:flex; flex-direction:column;
+  .ax-panel{position:relative; z-index:2; display:flex; flex-direction:column;
     align-items:center; justify-content:center; padding:clamp(24px,4vw,48px); gap:18px;}
   .ax-card{position:relative; width:min(420px,100%); border-radius:var(--ax-radius);
-    overflow:hidden; box-shadow:0 30px 70px -30px rgba(0,0,0,.7);
+    overflow:hidden; box-shadow:0 30px 70px -30px rgba(0,0,0,.75);
     opacity:0; animation:ax-rise .7s .18s ease-out forwards;}
-  /* spinning light travelling along the border (no @property needed) */
   .ax-card::before{content:""; position:absolute; inset:-75%; z-index:0;
     background:conic-gradient(from 0deg,
       rgba(255,255,255,.03) 0deg, rgba(255,255,255,.03) 250deg,
@@ -104,8 +86,8 @@
     animation:ax-spin 5s linear infinite;}
   .ax-card-inner{position:relative; z-index:1; margin:1.5px; border-radius:calc(var(--ax-radius) - 2px);
     padding:clamp(26px,3vw,36px);
-    background:linear-gradient(180deg, rgba(20,32,52,.95), rgba(12,20,36,.98));
-    box-shadow:inset 0 1px 0 rgba(255,255,255,.06); backdrop-filter:blur(14px);}
+    background:linear-gradient(180deg, rgba(18,28,46,.92), rgba(10,16,30,.96));
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.06); backdrop-filter:blur(16px);}
 
   .ax-head{display:flex; align-items:center; gap:12px; margin-bottom:22px;}
   .ax-head .ax-mark{width:38px; height:38px; font-size:18px; border-radius:11px;}
@@ -168,7 +150,6 @@
   .ax-status-item svg{width:15px; height:15px; color:var(--ax-accent-2);}
   .ax-foot{font-size:12px; color:var(--ax-faint); text-align:center; opacity:0; animation:ax-rise .6s .66s ease-out forwards;}
 
-  /* message stack (login errors) */
   .adminx-login .message-stack{display:flex; flex-direction:column; gap:8px; margin-bottom:18px;}
   .adminx-login .message{padding:11px 14px; border-radius:11px; font-size:13px; line-height:1.4;
     border:1px solid rgba(240,97,109,.35); background:rgba(240,97,109,.1); color:#ffd9dd;}
@@ -182,17 +163,14 @@
   @keyframes ax-float{0%,100%{transform:translateY(0);} 50%{transform:translateY(-5px);}}
   @keyframes ax-shimmer{0%{transform:translateX(-130%);} 55%,100%{transform:translateX(130%);}}
   @keyframes ax-pulse{0%{box-shadow:0 0 0 0 rgba(16,185,129,.5);} 70%{box-shadow:0 0 0 8px rgba(16,185,129,0);} 100%{box-shadow:0 0 0 0 rgba(16,185,129,0);}}
-  @keyframes ax-drift1{0%,100%{transform:translate(0,0) scale(1);} 50%{transform:translate(10%,8%) scale(1.16);}}
-  @keyframes ax-drift2{0%,100%{transform:translate(0,0) scale(1);} 50%{transform:translate(-9%,-6%) scale(1.12);}}
 
-  /* ---------- Responsive ---------- */
   @media (max-width:900px){
     .adminx-login{grid-template-columns:1fr;}
     .ax-visual{display:none;}
     .ax-panel{padding:clamp(20px,6vw,40px);}
   }
 
-  /* ---------- Reduced motion (respect OS setting) ---------- */
+  /* Respect OS "reduce motion": the JS also renders a single static frame instead of looping. */
   @media (prefers-reduced-motion:reduce){
     .adminx-login,.adminx-login *,.adminx-login *::before,.adminx-login *::after{
       animation:none !important; transition:none !important;}
@@ -202,39 +180,33 @@
 </head>
 <body data-theme="dark">
   <div class="adminx-login">
+    <div class="ax-dots" id="axDots" aria-hidden="true"></div>
+    <div class="ax-vignette" aria-hidden="true"></div>
 
-    <!-- LEFT · brand / visual -->
+    <!-- LEFT · brand -->
     <aside class="ax-visual">
-      <div class="ax-aurora" aria-hidden="true">
-        <span class="ax-blob b1"></span><span class="ax-blob b2"></span><span class="ax-blob b3"></span>
+      <div class="ax-lockup">
+        <div class="ax-mark">A</div>
+        <div>
+          <div class="ax-lockup-name">Aqua AI</div>
+          <div class="ax-lockup-sub">Control Room</div>
+        </div>
       </div>
-      <div class="ax-grid" aria-hidden="true"></div>
-      <div class="ax-visual-veil" aria-hidden="true"></div>
 
-      <div class="ax-visual-content">
-        <div class="ax-lockup">
-          <div class="ax-mark">A</div>
-          <div>
-            <div class="ax-lockup-name">Aqua AI</div>
-            <div class="ax-lockup-sub">Control Room</div>
-          </div>
-        </div>
-
-        <div class="ax-hero">
-          <span class="ax-eyebrow">Secure control plane</span>
-          <h2 class="ax-tagline">Operational command for the <em>Aqua&nbsp;AI</em> platform.</h2>
-          <ul class="ax-trust">
-            <li class="ax-chip"><span class="ax-pip" aria-hidden="true"></span> Global core online</li>
-            <li class="ax-chip">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
-              Encrypted protocol
-            </li>
-            <li class="ax-chip">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 11-6.2-8.6"/><path d="M22 4l-10 10-3-3"/></svg>
-              Activity audited
-            </li>
-          </ul>
-        </div>
+      <div class="ax-hero">
+        <span class="ax-eyebrow">Secure control plane</span>
+        <h2 class="ax-tagline">Operational command for the <em>Aqua&nbsp;AI</em> platform.</h2>
+        <ul class="ax-trust">
+          <li class="ax-chip"><span class="ax-pip" aria-hidden="true"></span> Global core online</li>
+          <li class="ax-chip">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+            Encrypted protocol
+          </li>
+          <li class="ax-chip">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 11-6.2-8.6"/><path d="M22 4l-10 10-3-3"/></svg>
+            Activity audited
+          </li>
+        </ul>
       </div>
     </aside>
 
@@ -297,6 +269,7 @@
   </div>
 
   <script>
+  /* Password show/hide + submit feedback */
   (function () {
     var btn = document.getElementById("togglePw");
     var pw = document.getElementById("id_password");
@@ -315,6 +288,87 @@
       form.addEventListener("submit", function () {
         if (form.checkValidity()) submit.classList.add("is-loading");
       });
+    }
+  })();
+
+  /* ----------------------------------------------------------------
+     Dotted Surface — 21st.dev (efferd) ported to vanilla Three.js.
+     Loads three from CDN at runtime; if it fails, the CSS gradient
+     background remains, so the page never looks broken.
+     ---------------------------------------------------------------- */
+  (function () {
+    var host = document.getElementById("axDots");
+    if (!host) return;
+    var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    import("https://unpkg.com/three@0.160.0/build/three.module.js")
+      .then(function (THREE) { initDots(THREE); })
+      .catch(function () { /* offline / blocked / no-WebGL → keep CSS background */ });
+
+    function initDots(THREE) {
+      var SEPARATION = 150, AMOUNTX = 40, AMOUNTY = 60;
+
+      var scene = new THREE.Scene();
+      var camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 10000);
+      camera.position.set(0, 355, 1220);
+
+      var renderer;
+      try {
+        renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+      } catch (e) { return; }
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setClearColor(0x000000, 0);
+      host.appendChild(renderer.domElement);
+
+      var positions = [], colors = [];
+      for (var ix = 0; ix < AMOUNTX; ix++) {
+        for (var iy = 0; iy < AMOUNTY; iy++) {
+          positions.push(ix * SEPARATION - (AMOUNTX * SEPARATION) / 2, 0,
+                         iy * SEPARATION - (AMOUNTY * SEPARATION) / 2);
+          colors.push(0.42, 0.82, 0.74); // soft secure-teal dots (vertexColors are 0..1)
+        }
+      }
+      var geometry = new THREE.BufferGeometry();
+      geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+      geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+      var material = new THREE.PointsMaterial({
+        size: 8, vertexColors: true, transparent: true, opacity: 0.62, sizeAttenuation: true,
+      });
+      var points = new THREE.Points(geometry, material);
+      scene.add(points);
+
+      var posAttr = geometry.attributes.position;
+      var arr = posAttr.array;
+      var count = 0, rafId = 0, running = false;
+
+      function renderFrame() {
+        var i = 0;
+        for (var ix = 0; ix < AMOUNTX; ix++) {
+          for (var iy = 0; iy < AMOUNTY; iy++) {
+            arr[i * 3 + 1] = Math.sin((ix + count) * 0.3) * 50 + Math.sin((iy + count) * 0.5) * 50;
+            i++;
+          }
+        }
+        posAttr.needsUpdate = true;
+        renderer.render(scene, camera);
+        count += 0.1;
+      }
+      function loop() { if (!running) return; rafId = requestAnimationFrame(loop); renderFrame(); }
+
+      function onResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      }
+      window.addEventListener("resize", onResize);
+      document.addEventListener("visibilitychange", function () {
+        if (document.hidden) { running = false; cancelAnimationFrame(rafId); }
+        else if (!reduce) { running = true; loop(); }
+      });
+
+      if (reduce) { renderFrame(); }       // single static frame, no loop
+      else { running = true; loop(); }
     }
   })();
   </script>
