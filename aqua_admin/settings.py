@@ -14,15 +14,20 @@ load_dotenv(BASE_DIR / ".env")
 from . import secrets_loader  # noqa: E402
 secrets_loader.load()
 
-SECRET_KEY = os.getenv("SECRET_KEY", "dev-insecure-change-me")
+# No insecure default — a control plane must not boot with a known key (AD-6).
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY must be set (no insecure default). Set it as a host config var.")
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 
-# ALLOWED_HOSTS: accept anything if '*' or empty, otherwise split on comma
-_hosts = os.getenv("ALLOWED_HOSTS", "*")
-if _hosts.strip() == "*" or not _hosts.strip():
-    ALLOWED_HOSTS = ["*"]
-else:
+# ALLOWED_HOSTS: fail closed — require an explicit allowlist in production (AD-6).
+_hosts = os.getenv("ALLOWED_HOSTS", "").strip()
+if _hosts:
     ALLOWED_HOSTS = [h.strip() for h in _hosts.split(",") if h.strip()]
+elif DEBUG:
+    ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
+else:
+    raise RuntimeError("ALLOWED_HOSTS must be set in production (set it as a host config var).")
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -116,8 +121,14 @@ LOGOUT_REDIRECT_URL = "/admin-portal/login/"
 
 SESSION_COOKIE_AGE = 60 * 60 * 8
 SESSION_COOKIE_HTTPONLY = True
-SESSION_COOKIE_SECURE = not DEBUG
-CSRF_COOKIE_SECURE = not DEBUG
+# Secure cookies + transport hardening — not tied to DEBUG (AD-6).
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
+if not DEBUG:
+    SECURE_SSL_REDIRECT = True
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
 CSRF_TRUSTED_ORIGINS = [
     f"https://{h}" for h in ALLOWED_HOSTS if h != "*"
 ]
@@ -142,6 +153,14 @@ LEGACY_ADMIN_INTERNAL_PATH = os.getenv("LEGACY_ADMIN_INTERNAL_PATH", "/django-in
 # sign in to their real account. The admin portal detects the resulting login
 # by reading the shared django_session table — no platform code change needed.
 PLATFORM_LOGIN_URL = os.getenv("PLATFORM_LOGIN_URL", "https://aquaai.uk/login")
+
+# AD-2: the platform (aquaai.uk Django) signs its session blobs with its own
+# SECRET_KEY. Set this to that SAME value so the admin portal can VERIFY a
+# session's signature before trusting it for DSAR identity confirmation (a
+# tampered/forged session row is then rejected). Provision it as the admin-service
+# secret `PLATFORM_SECRET_KEY` (NOT the admin's own SECRET_KEY) in the central
+# secrets manager. If unset, identity falls back to an unverified decode (legacy).
+PLATFORM_SECRET_KEY = os.getenv("PLATFORM_SECRET_KEY", "")
 
 # In-process automation: refresh the mailbox and process DSARs on a timer inside
 # the web app, so it works on any host (Heroku, VPS, Docker, Render) with no

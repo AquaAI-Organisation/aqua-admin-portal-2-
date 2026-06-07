@@ -246,7 +246,7 @@ def prepare_dsar_request(dsar_request: DSARRequest, actor=None) -> DSARRequest:
         dsar_request,
         "export_prepared",
         actor=actor,
-        details={"deliverables": [str(json_path), str(html_path)]},
+        details={"deliverables": [str(json_path), str(pdf_path)]},
     )
     return dsar_request
 

@@ -23,5 +23,6 @@ def branding(request):
         "OPEN_ISSUE_COUNT": open_issue_count,
         "OPEN_DSAR_COUNT": open_dsar_count,
         "LEGACY_ADMIN_REDIRECT_URL": getattr(settings, "LEGACY_ADMIN_REDIRECT_URL", ""),
-        "LEGACY_ADMIN_INTERNAL_PATH": getattr(settings, "LEGACY_ADMIN_INTERNAL_PATH", ""),
+        # AD-3: do NOT expose LEGACY_ADMIN_INTERNAL_PATH to templates (it was rendered
+        # into served HTML, defeating the obscurity). Not used by any template.
     }

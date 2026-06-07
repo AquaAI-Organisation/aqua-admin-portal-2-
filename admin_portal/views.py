@@ -265,7 +265,7 @@ def feature_d_dashboard(request):
     return render(request, "admin_portal/feature_d_dashboard.html", context)
 
 
-@admin_required
+@operational_admin_required
 def feature_d_verification_action(request, verification_id, decision):
     if request.method != "POST":
         return redirect("admin_portal:feature_d_dashboard")
@@ -291,7 +291,7 @@ def feature_d_verification_action(request, verification_id, decision):
     return redirect("admin_portal:feature_d_dashboard")
 
 
-@admin_required
+@operational_admin_required
 def feature_d_dispute_action(request, dispute_id):
     if request.method != "POST":
         return redirect("admin_portal:feature_d_dashboard")
@@ -315,7 +315,7 @@ def feature_d_dispute_action(request, dispute_id):
     return redirect("admin_portal:feature_d_dashboard")
 
 
-@admin_required
+@operational_admin_required
 def feature_d_delivery_toggle(request, seller_id):
     if request.method != "POST":
         return redirect("admin_portal:feature_d_dashboard")
@@ -1220,7 +1220,7 @@ def dsar_request_list(request):
     )
 
 
-@operational_admin_required
+@super_admin_required
 def dsar_request_detail(request, request_id):
     dsar_request = get_object_or_404(
         DSARRequest.objects.select_related("inquiry", "dpo_actor"),
@@ -1310,7 +1310,7 @@ def dsar_extend(request, request_id):
     return redirect("admin_portal:dsar_request_detail", request_id=dsar_request.id)
 
 
-@operational_admin_required
+@super_admin_required
 def dsar_deliverable_download(request, deliverable_id):
     deliverable = get_object_or_404(DSARDeliverable, pk=deliverable_id)
     path = Path(deliverable.storage_ref)
