@@ -1,15 +1,13 @@
-{% load static %}
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sign In | {{ APP_NAME }}</title>
+  <title>Sign In | Aqua AI</title>
   <meta name="robots" content="noindex,nofollow">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="{% static 'admin_portal/styles.css' %}">
   <style>
   /* ============================================================
      Aqua AI · Control Room sign-in (21st.dev-inspired split layout)
@@ -196,9 +194,6 @@
 
     <!-- LEFT · brand / visual -->
     <aside class="ax-visual">
-      <video class="ax-visual-video" autoplay muted loop playsinline aria-hidden="true">
-        <source src="{% url 'admin_portal:background_video' %}" type="video/mp4">
-      </video>
       <div class="ax-aurora" aria-hidden="true">
         <span class="ax-blob b1"></span><span class="ax-blob b2"></span><span class="ax-blob b3"></span>
       </div>
@@ -209,7 +204,7 @@
         <div class="ax-lockup">
           <div class="ax-mark">A</div>
           <div>
-            <div class="ax-lockup-name">{{ APP_NAME }}</div>
+            <div class="ax-lockup-name">Aqua AI</div>
             <div class="ax-lockup-sub">Control Room</div>
           </div>
         </div>
@@ -239,7 +234,7 @@
           <div class="ax-head">
             <div class="ax-mark">A</div>
             <div>
-              <div class="ax-head-name">{{ APP_NAME }}</div>
+              <div class="ax-head-name">Aqua AI</div>
               <div class="ax-head-sub">Admin access</div>
             </div>
           </div>
@@ -247,17 +242,8 @@
           <h1 class="ax-title">Sign in to the Control Room</h1>
           <p class="ax-subtitle">Authorized administrators only. Use your work account.</p>
 
-          {% if messages %}
-          <div class="message-stack" role="alert" aria-live="polite">
-            {% for message in messages %}
-            <div class="message {{ message.tags }}">{{ message }}</div>
-            {% endfor %}
-          </div>
-          {% endif %}
-
           <form method="post" class="ax-form" novalidate>
-            {% csrf_token %}
-            <div class="ax-field f1">
+                        <div class="ax-field f1">
               <label class="ax-label" for="id_username">Work email</label>
               <div class="ax-inputwrap">
                 <svg class="ax-lead" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
