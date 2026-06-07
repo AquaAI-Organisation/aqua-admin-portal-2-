@@ -15,50 +15,59 @@
      Palette: Vault dark blue (#1E3A5F) + Secure green (#059669).
      ============================================================ */
   .adminx-login{
-    --ax-bg:#0b1220; --ax-bg-2:#0f172a; --ax-surface:#0e1a2e;
-    --ax-primary:#1e3a5f; --ax-accent:#059669; --ax-accent-2:#10b981;
+    --ax-bg:#0b1220; --ax-primary:#1e3a5f; --ax-accent:#059669; --ax-accent-2:#10b981;
     --ax-fg:#f1f6fb; --ax-muted:#9fb2c8; --ax-faint:#64758c;
     --ax-border:rgba(255,255,255,.09); --ax-border-2:rgba(255,255,255,.16);
-    --ax-danger:#f0616d; --ax-radius:20px;
+    --ax-radius:20px;
     position:fixed; inset:0; z-index:0;
     display:grid; grid-template-columns:1.05fr .95fr;
     font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
-    background:
-      radial-gradient(1200px 600px at -10% -10%, rgba(30,58,95,.55), transparent 60%),
-      radial-gradient(900px 600px at 110% 120%, rgba(5,150,105,.18), transparent 55%),
-      var(--ax-bg);
     color:var(--ax-fg); overflow:hidden;
+    background:
+      radial-gradient(1100px 700px at 8% -10%, rgba(30,58,95,.65), transparent 60%),
+      radial-gradient(1000px 700px at 112% 118%, rgba(5,150,105,.30), transparent 55%),
+      radial-gradient(800px 500px at 60% 50%, rgba(14,165,160,.10), transparent 60%),
+      var(--ax-bg);
+    background-size:200% 200%;
+    animation:ax-bg-pan 16s ease-in-out infinite alternate;   /* always-moving mesh */
   }
   .adminx-login *{box-sizing:border-box;}
 
   /* ---------- Left brand / visual panel ---------- */
   .ax-visual{position:relative; overflow:hidden; isolation:isolate;}
   .ax-visual-video{position:absolute; inset:0; width:100%; height:100%;
-    object-fit:cover; opacity:.42; filter:saturate(1.1) contrast(1.02);}
-  .ax-visual-veil{position:absolute; inset:0; z-index:1;
-    background:
-      linear-gradient(180deg, rgba(11,18,32,.35), rgba(11,18,32,.82) 70%, rgba(11,18,32,.95)),
-      linear-gradient(110deg, rgba(30,58,95,.55), transparent 55%);}
-  /* drifting aurora blobs */
-  .ax-aurora{position:absolute; inset:-20% -10%; z-index:0; filter:blur(60px);}
-  .ax-blob{position:absolute; width:46%; aspect-ratio:1; border-radius:50%; opacity:.55;}
-  .ax-blob.b1{left:-6%; top:8%;  background:radial-gradient(circle,#1e3a5f,transparent 70%); animation:ax-drift1 18s ease-in-out infinite;}
-  .ax-blob.b2{right:-4%; top:30%; background:radial-gradient(circle,#059669,transparent 70%); opacity:.4; animation:ax-drift2 22s ease-in-out infinite;}
-  .ax-blob.b3{left:20%; bottom:-10%; background:radial-gradient(circle,#0ea5a0,transparent 70%); opacity:.3; animation:ax-drift1 26s ease-in-out infinite reverse;}
-  .ax-grid{position:absolute; inset:0; z-index:1; opacity:.5;
-    background-image:linear-gradient(rgba(255,255,255,.04) 1px,transparent 1px),
-                     linear-gradient(90deg,rgba(255,255,255,.04) 1px,transparent 1px);
+    object-fit:cover; opacity:.40; filter:saturate(1.1) contrast(1.02); z-index:0;}
+  /* rotating aurora glow — clearly moving */
+  .ax-visual::after{content:""; position:absolute; inset:-40%; z-index:1; pointer-events:none;
+    background:conic-gradient(from 0deg,
+      transparent 0deg, rgba(14,165,160,.55) 60deg, transparent 130deg,
+      rgba(30,58,95,.7) 210deg, transparent 300deg, rgba(16,185,129,.4) 340deg, transparent 360deg);
+    filter:blur(48px); animation:ax-spin 26s linear infinite;}
+  .ax-aurora{position:absolute; inset:-20% -10%; z-index:1; filter:blur(54px); pointer-events:none;}
+  .ax-blob{position:absolute; width:46%; aspect-ratio:1; border-radius:50%;}
+  .ax-blob.b1{left:-6%; top:6%;  background:radial-gradient(circle,#2a5588,transparent 70%); opacity:.7; animation:ax-drift1 11s ease-in-out infinite;}
+  .ax-blob.b2{right:-6%; top:28%; background:radial-gradient(circle,#089b6b,transparent 70%); opacity:.55; animation:ax-drift2 14s ease-in-out infinite;}
+  .ax-blob.b3{left:24%; bottom:-12%; background:radial-gradient(circle,#0ea5a0,transparent 70%); opacity:.45; animation:ax-drift1 17s ease-in-out infinite reverse;}
+  .ax-grid{position:absolute; inset:0; z-index:2; opacity:.45; pointer-events:none;
+    background-image:linear-gradient(rgba(255,255,255,.05) 1px,transparent 1px),
+                     linear-gradient(90deg,rgba(255,255,255,.05) 1px,transparent 1px);
     background-size:46px 46px;
     -webkit-mask-image:radial-gradient(120% 80% at 30% 20%, #000 30%, transparent 75%);
             mask-image:radial-gradient(120% 80% at 30% 20%, #000 30%, transparent 75%);}
-  .ax-visual-content{position:relative; z-index:2; height:100%;
+  /* lighter veil so the motion shows through */
+  .ax-visual-veil{position:absolute; inset:0; z-index:3; pointer-events:none;
+    background:
+      linear-gradient(180deg, rgba(11,18,32,.12), rgba(11,18,32,.5) 75%, rgba(11,18,32,.8)),
+      linear-gradient(110deg, rgba(30,58,95,.32), transparent 55%);}
+  .ax-visual-content{position:relative; z-index:4; height:100%;
     display:flex; flex-direction:column; justify-content:space-between;
     padding:clamp(28px,4vw,56px);}
   .ax-lockup{display:flex; align-items:center; gap:12px; opacity:0; animation:ax-rise .7s .05s ease-out forwards;}
   .ax-mark{width:42px; height:42px; border-radius:12px; display:grid; place-items:center;
-    font-weight:800; font-size:20px; color:#fff;
+    font-weight:800; font-size:20px; color:#fff; flex:none;
     background:linear-gradient(135deg,#1e3a5f,#0ea5a0);
-    box-shadow:0 8px 24px rgba(8,30,55,.55), inset 0 0 0 1px rgba(255,255,255,.14);}
+    box-shadow:0 8px 24px rgba(8,30,55,.55), inset 0 0 0 1px rgba(255,255,255,.14);
+    animation:ax-float 5s ease-in-out infinite;}
   .ax-lockup-name{font-weight:700; letter-spacing:.2px;}
   .ax-lockup-sub{font-size:12px; color:var(--ax-muted); letter-spacing:.16em; text-transform:uppercase;}
   .ax-hero{max-width:30ch;}
@@ -68,33 +77,35 @@
   .ax-eyebrow::before{content:""; width:18px; height:1px; background:var(--ax-accent-2);}
   .ax-tagline{font-size:clamp(28px,3vw,44px); line-height:1.06; font-weight:700; letter-spacing:-.02em; margin:0;
     opacity:0; animation:ax-rise .8s .18s ease-out forwards;}
-  .ax-tagline em{font-style:normal; background:linear-gradient(120deg,#37d39b,#0ea5a0); -webkit-background-clip:text; background-clip:text; color:transparent;}
+  .ax-tagline em{font-style:normal;
+    background:linear-gradient(120deg,#37d39b,#0ea5a0,#5eead4,#0ea5a0); background-size:300% 100%;
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    animation:ax-text-pan 6s ease-in-out infinite;}
   .ax-trust{list-style:none; margin:26px 0 0; padding:0; display:flex; flex-wrap:wrap; gap:10px;
     opacity:0; animation:ax-rise .8s .26s ease-out forwards;}
   .ax-chip{display:inline-flex; align-items:center; gap:8px; font-size:12.5px; color:var(--ax-muted);
-    padding:8px 12px; border:1px solid var(--ax-border); border-radius:999px; background:rgba(255,255,255,.03);
+    padding:8px 12px; border:1px solid var(--ax-border); border-radius:999px; background:rgba(255,255,255,.04);
     backdrop-filter:blur(6px);}
   .ax-chip svg{width:14px; height:14px; color:var(--ax-accent-2);}
-  .ax-pip{width:8px; height:8px; border-radius:50%; background:var(--ax-accent-2);
-    box-shadow:0 0 0 0 rgba(16,185,129,.55); animation:ax-pulse 2.4s ease-out infinite;}
+  .ax-pip{width:8px; height:8px; border-radius:50%; background:var(--ax-accent-2); flex:none;
+    box-shadow:0 0 0 0 rgba(16,185,129,.55); animation:ax-pulse 2s ease-out infinite;}
 
   /* ---------- Right form panel ---------- */
-  .ax-panel{position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center;
-    padding:clamp(24px,4vw,48px); gap:18px;}
+  .ax-panel{position:relative; z-index:1; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; padding:clamp(24px,4vw,48px); gap:18px;}
   .ax-card{position:relative; width:min(420px,100%); border-radius:var(--ax-radius);
+    overflow:hidden; box-shadow:0 30px 70px -30px rgba(0,0,0,.7);
     opacity:0; animation:ax-rise .7s .18s ease-out forwards;}
-  /* animated gradient border */
-  .ax-card::before{content:""; position:absolute; inset:0; border-radius:inherit; padding:1px;
-    background:conic-gradient(from var(--ax-angle,0deg), rgba(255,255,255,.05), rgba(14,165,160,.55), rgba(30,58,95,.2), rgba(255,255,255,.05));
-    -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-            mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-    -webkit-mask-composite:xor; mask-composite:exclude;
-    animation:ax-border-spin 8s linear infinite;}
-  .ax-card-inner{position:relative; border-radius:inherit; padding:clamp(26px,3vw,36px);
-    background:linear-gradient(180deg, rgba(20,32,52,.92), rgba(12,20,36,.96));
-    border:1px solid var(--ax-border);
-    box-shadow:0 30px 70px -30px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.05);
-    backdrop-filter:blur(14px);}
+  /* spinning light travelling along the border (no @property needed) */
+  .ax-card::before{content:""; position:absolute; inset:-75%; z-index:0;
+    background:conic-gradient(from 0deg,
+      rgba(255,255,255,.03) 0deg, rgba(255,255,255,.03) 250deg,
+      #10b981 300deg, #5eead4 320deg, #10b981 340deg, rgba(255,255,255,.03) 360deg);
+    animation:ax-spin 5s linear infinite;}
+  .ax-card-inner{position:relative; z-index:1; margin:1.5px; border-radius:calc(var(--ax-radius) - 2px);
+    padding:clamp(26px,3vw,36px);
+    background:linear-gradient(180deg, rgba(20,32,52,.95), rgba(12,20,36,.98));
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.06); backdrop-filter:blur(14px);}
 
   .ax-head{display:flex; align-items:center; gap:12px; margin-bottom:22px;}
   .ax-head .ax-mark{width:38px; height:38px; font-size:18px; border-radius:11px;}
@@ -135,8 +146,8 @@
     box-shadow:0 12px 26px -10px rgba(5,150,105,.6), inset 0 1px 0 rgba(255,255,255,.22);
     transition:transform .15s ease, box-shadow .25s ease, filter .2s ease;}
   .ax-submit::after{content:""; position:absolute; inset:0; transform:translateX(-130%);
-    background:linear-gradient(100deg,transparent 20%,rgba(255,255,255,.35),transparent 80%);
-    animation:ax-shimmer 3.4s ease-in-out 1.2s infinite;}
+    background:linear-gradient(100deg,transparent 20%,rgba(255,255,255,.4),transparent 80%);
+    animation:ax-shimmer 2.6s ease-in-out .6s infinite;}
   .ax-submit:hover{transform:translateY(-1px); filter:brightness(1.05);}
   .ax-submit:active{transform:translateY(0) scale(.99);}
   .ax-submit svg{width:18px; height:18px; transition:transform .2s ease;}
@@ -164,14 +175,15 @@
   .adminx-login .message.success{border-color:rgba(16,185,129,.4); background:rgba(16,185,129,.12); color:#c8f6e4;}
 
   /* ---------- Motion keyframes ---------- */
-  @property --ax-angle{syntax:'<angle>'; inherits:false; initial-value:0deg;}
   @keyframes ax-rise{from{opacity:0; transform:translateY(14px);} to{opacity:1; transform:translateY(0);}}
   @keyframes ax-spin{to{transform:rotate(360deg);}}
-  @keyframes ax-border-spin{to{--ax-angle:360deg;}}
+  @keyframes ax-bg-pan{from{background-position:0% 50%;} to{background-position:100% 50%;}}
+  @keyframes ax-text-pan{0%,100%{background-position:0% 50%;} 50%{background-position:100% 50%;}}
+  @keyframes ax-float{0%,100%{transform:translateY(0);} 50%{transform:translateY(-5px);}}
   @keyframes ax-shimmer{0%{transform:translateX(-130%);} 55%,100%{transform:translateX(130%);}}
-  @keyframes ax-pulse{0%{box-shadow:0 0 0 0 rgba(16,185,129,.5);} 70%{box-shadow:0 0 0 7px rgba(16,185,129,0);} 100%{box-shadow:0 0 0 0 rgba(16,185,129,0);}}
-  @keyframes ax-drift1{0%,100%{transform:translate(0,0) scale(1);} 50%{transform:translate(8%,6%) scale(1.12);}}
-  @keyframes ax-drift2{0%,100%{transform:translate(0,0) scale(1);} 50%{transform:translate(-7%,-5%) scale(1.08);}}
+  @keyframes ax-pulse{0%{box-shadow:0 0 0 0 rgba(16,185,129,.5);} 70%{box-shadow:0 0 0 8px rgba(16,185,129,0);} 100%{box-shadow:0 0 0 0 rgba(16,185,129,0);}}
+  @keyframes ax-drift1{0%,100%{transform:translate(0,0) scale(1);} 50%{transform:translate(10%,8%) scale(1.16);}}
+  @keyframes ax-drift2{0%,100%{transform:translate(0,0) scale(1);} 50%{transform:translate(-9%,-6%) scale(1.12);}}
 
   /* ---------- Responsive ---------- */
   @media (max-width:900px){
@@ -180,12 +192,11 @@
     .ax-panel{padding:clamp(20px,6vw,40px);}
   }
 
-  /* ---------- Reduced motion ---------- */
+  /* ---------- Reduced motion (respect OS setting) ---------- */
   @media (prefers-reduced-motion:reduce){
-    .adminx-login *,.adminx-login *::before,.adminx-login *::after{
+    .adminx-login,.adminx-login *,.adminx-login *::before,.adminx-login *::after{
       animation:none !important; transition:none !important;}
     .ax-card,.ax-field,.ax-actions,.ax-lockup,.ax-eyebrow,.ax-tagline,.ax-trust,.ax-divider,.ax-status,.ax-foot{opacity:1 !important; transform:none !important;}
-    .ax-visual-video{display:none;}
   }
   </style>
 </head>
@@ -287,7 +298,6 @@
 
   <script>
   (function () {
-    // Password show / hide
     var btn = document.getElementById("togglePw");
     var pw = document.getElementById("id_password");
     if (btn && pw) {
@@ -299,7 +309,6 @@
         btn.setAttribute("aria-label", show ? "Hide password" : "Show password");
       });
     }
-    // Submit loading state (perceived feedback). Lets the form submit normally.
     var form = document.querySelector(".ax-form");
     var submit = document.getElementById("axSubmit");
     if (form && submit) {
