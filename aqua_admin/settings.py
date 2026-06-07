@@ -154,6 +154,14 @@ LEGACY_ADMIN_INTERNAL_PATH = os.getenv("LEGACY_ADMIN_INTERNAL_PATH", "/django-in
 # by reading the shared django_session table — no platform code change needed.
 PLATFORM_LOGIN_URL = os.getenv("PLATFORM_LOGIN_URL", "https://aquaai.uk/login")
 
+# AD-2: the platform (aquaai.uk Django) signs its session blobs with its own
+# SECRET_KEY. Set this to that SAME value so the admin portal can VERIFY a
+# session's signature before trusting it for DSAR identity confirmation (a
+# tampered/forged session row is then rejected). Provision it as the admin-service
+# secret `PLATFORM_SECRET_KEY` (NOT the admin's own SECRET_KEY) in the central
+# secrets manager. If unset, identity falls back to an unverified decode (legacy).
+PLATFORM_SECRET_KEY = os.getenv("PLATFORM_SECRET_KEY", "")
+
 # In-process automation: refresh the mailbox and process DSARs on a timer inside
 # the web app, so it works on any host (Heroku, VPS, Docker, Render) with no
 # separate worker or cron. Safe across multiple web workers via a DB advisory

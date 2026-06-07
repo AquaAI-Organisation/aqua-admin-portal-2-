@@ -3,9 +3,13 @@
 DSAR identity verification relies on the requester logging in to their real
 account at aquaai.uk. Django creates a fresh session (with a new session key)
 on every successful login, storing the authenticated user id inside the signed
-session blob. We decode that blob (no secret required — we only read the user
-id, we do not need to verify the signature because the row lives in the trusted
-shared database) to tell whether a given user has a live session.
+session blob.
+
+AD-2: when ``PLATFORM_SECRET_KEY`` is configured we VERIFY each session blob's
+signature with the platform's signing key before trusting the user id, so a
+tampered or forged ``django_session`` row cannot be used to spoof a DSAR
+identity. If the key is not provisioned yet we fall back to an unverified decode
+(legacy behaviour) and log a warning.
 """
 from __future__ import annotations
 
@@ -15,11 +19,40 @@ import json
 import logging
 import zlib
 
+from django.conf import settings
+from django.contrib.sessions.serializers import JSONSerializer
+from django.core import signing
 from django.utils import timezone
 
 from ..models import PlatformSession
 
 logger = logging.getLogger(__name__)
+
+# Django signs db-backed session blobs with SECRET_KEY under this salt
+# (``"django.contrib.sessions." + SessionStore.__qualname__``).
+_SESSION_SALT = "django.contrib.sessions.SessionStore"
+
+
+def _platform_secret_key() -> str:
+    return (getattr(settings, "PLATFORM_SECRET_KEY", "") or "").strip()
+
+
+def _verified_session_user_id(session_data: str) -> str | None:
+    """Return ``_auth_user_id`` only if the blob's signature verifies against the
+    platform key. Returns None on a missing key or any signature/format failure."""
+    key = _platform_secret_key()
+    if not key or not session_data:
+        return None
+    try:
+        obj = signing.loads(
+            session_data, key=key, salt=_SESSION_SALT, serializer=JSONSerializer
+        )
+    except (signing.BadSignature, ValueError, TypeError):
+        return None
+    if not isinstance(obj, dict):
+        return None
+    uid = obj.get("_auth_user_id")
+    return str(uid) if uid is not None else None
 
 
 def _decode_session_user_id(session_data: str) -> str | None:
@@ -46,15 +79,30 @@ def _decode_session_user_id(session_data: str) -> str | None:
 
 
 def active_session_keys_for_user(user_id) -> set[str]:
-    """Session keys of the subject's currently-valid platform sessions."""
+    """Session keys of the subject's currently-valid platform sessions.
+
+    With ``PLATFORM_SECRET_KEY`` set, only sessions whose signature verifies are
+    counted (AD-2). Without it, falls back to the legacy unverified decode and
+    warns once."""
     if not user_id:
         return set()
     target = str(user_id)
     keys: set[str] = set()
     now = timezone.now()
+
+    if _platform_secret_key():
+        decode = _verified_session_user_id
+    else:
+        decode = _decode_session_user_id
+        logger.warning(
+            "PLATFORM_SECRET_KEY not set — DSAR identity uses an UNVERIFIED session "
+            "decode. Provision the admin-service secret 'PLATFORM_SECRET_KEY' "
+            "(= the platform's SECRET_KEY) to enforce signature verification (AD-2)."
+        )
+
     rows = PlatformSession.objects.filter(expire_date__gt=now).only("session_key", "session_data")
     for row in rows.iterator():
-        if _decode_session_user_id(row.session_data) == target:
+        if decode(row.session_data) == target:
             keys.add(row.session_key)
     return keys
 
