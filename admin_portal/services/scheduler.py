@@ -63,24 +63,42 @@ def _loop() -> None:
             _run_cycle_if_leader()
         except Exception:
             logger.exception("Inbox auto-refresh cycle failed")
+        finally:
+            # Don't hold an idle DB connection while the thread sleeps. Done here
+            # (after the lock is released), NOT inside the cycle — closing it mid-cycle
+            # invalidated the advisory-lock cursor ("cursor already closed").
+            try:
+                connection.close()
+            except Exception:
+                pass
         time.sleep(interval)
 
 
 def _run_cycle_if_leader() -> None:
     """Run one automation cycle, but only if we win the advisory lock."""
-    if connection.vendor == "postgresql":
-        with connection.cursor() as cur:
-            cur.execute("SELECT pg_try_advisory_lock(%s)", [_AUTOMATION_LOCK_ID])
-            got_lock = cur.fetchone()[0]
-            if not got_lock:
-                return  # another process is handling this cycle
-            try:
-                _do_cycle()
-            finally:
-                cur.execute("SELECT pg_advisory_unlock(%s)", [_AUTOMATION_LOCK_ID])
-    else:
+    if connection.vendor != "postgresql":
         # No advisory locks (e.g. sqlite in local dev) — single process assumed.
         _do_cycle()
+        return
+
+    got_lock = False
+    try:
+        with connection.cursor() as cur:
+            cur.execute("SELECT pg_try_advisory_lock(%s)", [_AUTOMATION_LOCK_ID])
+            got_lock = bool(cur.fetchone()[0])
+        if not got_lock:
+            return  # another process is handling this cycle
+        _do_cycle()
+    finally:
+        if got_lock:
+            # Release on a FRESH cursor (the session still holds the lock). If the
+            # connection was closed/reset during the cycle, the lock was already
+            # auto-released with that session, so a failure here is safe to ignore.
+            try:
+                with connection.cursor() as cur:
+                    cur.execute("SELECT pg_advisory_unlock(%s)", [_AUTOMATION_LOCK_ID])
+            except Exception:
+                pass
 
 
 def _do_cycle() -> None:
@@ -95,6 +113,3 @@ def _do_cycle() -> None:
         run_due_login_checks()
     except Exception as exc:
         logger.warning("Auto DSAR login check failed: %s", exc)
-    finally:
-        # Release any DB connection this thread opened so it isn't held idle.
-        connection.close()
