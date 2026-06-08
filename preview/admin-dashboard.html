@@ -3,161 +3,137 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Aqua AI — Dashboard (wired preview)</title>
+<title>Aqua AI — Admin Dashboard (black + dock preview)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
-/* Preview of the wired result: KEPT labeled teal sidebar + bento dashboard content. */
-:root{--sidebar-w:250px;--accent:#5ee8c5;--accent-2:#7dd4ff;--accent-3:#a8f0dd;--text:#e9f1f6;--muted:#92a4b4;--soft:#6c8090;--line:rgba(255,255,255,.06);--danger:#ff756b;--radius:12px;--radius-lg:14px;--radius-sm:9px;}
+/* Animated dock sidebar + BLACK background + bento content. */
+:root{--bg:#000; --tile:#141414; --tile-2:#0d0d0d; --fg:#eef4fb; --muted:#9fb2c8; --faint:#5f7188;
+  --line:rgba(255,255,255,.08); --line-2:rgba(255,255,255,.14);
+  --accent:#10b981; --accent-d:#059669; --red:#f0616d; --teal:#0ea5a0;}
 *{box-sizing:border-box;}
 html,body{margin:0;height:100%;}
-body{font-family:'Inter',system-ui,sans-serif;color:var(--text);
-  background:radial-gradient(1100px 700px at 0% -10%,rgba(30,58,95,.45),transparent 60%),radial-gradient(900px 700px at 110% 110%,rgba(5,150,105,.14),transparent 55%),#080d18;}
-.app-shell{display:grid;grid-template-columns:var(--sidebar-w) minmax(0,1fr);min-height:100vh;}
-/* sidebar (kept) */
-.sidebar{position:sticky;top:0;z-index:40;display:flex;flex-direction:column;gap:20px;height:100vh;padding:20px 16px 18px;background:linear-gradient(180deg,rgba(5,15,24,.99),rgba(4,12,20,.97));border-right:1px solid rgba(100,180,215,.08);overflow-y:auto;}
-.brand-block{display:flex;gap:12px;align-items:center;padding:12px 14px;border-radius:var(--radius-lg);background:linear-gradient(135deg,rgba(94,232,197,.11),rgba(125,212,255,.06)),rgba(255,255,255,.02);border:1px solid rgba(94,232,197,.12);text-decoration:none;color:inherit;}
-.brand-mark{flex:none;width:42px;height:42px;border-radius:13px;display:grid;place-items:center;font-weight:700;font-size:1.1rem;color:#03172a;background:linear-gradient(145deg,var(--accent-3),var(--accent) 46%,var(--accent-2));}
-.brand-title{font-size:.95rem;font-weight:700;line-height:1.2;}.brand-subtitle{color:var(--muted);font-size:.78rem;margin-top:2px;}
-.sidebar-nav{display:flex;flex-direction:column;gap:2px;flex:1;}
-.nav-group-title{margin:10px 10px 4px;color:var(--soft);font-size:.68rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;}
-.nav-link{position:relative;display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--radius);color:var(--muted);border:1px solid transparent;text-decoration:none;font-size:.88rem;font-weight:500;transition:.16s;}
-.nav-link::before{content:"";position:absolute;left:0;top:9px;bottom:9px;width:2.5px;border-radius:999px;background:linear-gradient(180deg,var(--accent),var(--accent-2));opacity:0;transform:scaleY(.4);transition:.2s;}
-.nav-link:hover{transform:translateX(2px);background:rgba(255,255,255,.04);border-color:rgba(120,190,220,.1);color:var(--text);}
-.nav-link.active{transform:translateX(2px);background:linear-gradient(135deg,rgba(94,232,197,.09),rgba(125,212,255,.04));border-color:rgba(94,232,197,.14);color:var(--text);}
-.nav-link:hover::before,.nav-link.active::before{opacity:1;transform:scaleY(1);}
-.nav-link.active .nav-icon{color:var(--accent);}
-.nav-icon{flex:none;width:18px;height:18px;display:flex;opacity:.7;}.nav-icon svg{width:18px;height:18px;}
-.nav-link.active .nav-icon,.nav-link:hover .nav-icon{opacity:1;}
-.nav-link>span:last-child{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.count-pill{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 6px;border-radius:999px;font-size:.7rem;font-weight:600;background:rgba(255,117,107,.18);color:var(--danger);border:1px solid rgba(255,117,107,.22);}
-.sidebar-footer{margin-top:auto;padding-top:14px;border-top:1px solid var(--line);}
-.user-card{display:flex;gap:10px;align-items:center;padding:10px 12px;border-radius:var(--radius);background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05);}
-.user-avatar{flex:none;width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-weight:700;font-size:.88rem;color:#03172a;background:linear-gradient(145deg,var(--accent-3),var(--accent) 46%,var(--accent-2));}
-.user-name{font-weight:600;font-size:.85rem;}.user-role{color:var(--muted);font-size:.76rem;margin-top:1px;}
-.sidebar-actions{display:flex;gap:6px;margin-top:10px;}
-.sidebar-actions a{flex:1;text-align:center;font-size:.78rem;color:var(--muted);padding:7px 8px;border-radius:var(--radius-sm);border:1px solid transparent;text-decoration:none;transition:.16s;}
-.sidebar-actions a:hover{color:var(--text);background:rgba(255,255,255,.05);border-color:var(--line);}
-/* main + topbar */
-.main{position:relative;padding:24px clamp(18px,3vw,40px) 48px;}
-.topbar{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:22px;}
-.topbar h1{margin:0;font-size:22px;font-weight:700;letter-spacing:-.02em;}
+body{font-family:'Inter',system-ui,sans-serif;color:var(--fg);background:#000;}
+.app{display:grid;grid-template-columns:84px 1fr;min-height:100vh;}
+/* dock */
+.dock{position:sticky;top:0;height:100vh;display:flex;flex-direction:column;align-items:center;gap:10px;padding:16px 0;background:linear-gradient(180deg,#0c0c0c,#000);border-right:1px solid rgba(255,255,255,.07);z-index:5;}
+.dock-brand{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;font-weight:800;font-size:20px;color:#fff;background:linear-gradient(135deg,#2a2a2a,#0ea5a0);box-shadow:0 8px 22px rgba(0,0,0,.7),inset 0 0 0 1px rgba(255,255,255,.12);margin-bottom:4px;}
+.dock-items{display:flex;flex-direction:column;align-items:center;gap:11px;flex:1;min-height:0;overflow-y:auto;padding:4px 0;scrollbar-width:none;}
+.dock-items::-webkit-scrollbar{display:none;}
+.dock-foot{display:flex;flex-direction:column;align-items:center;gap:11px;padding-top:10px;border-top:1px solid rgba(255,255,255,.07);width:100%;}
+.dock-item{position:relative;width:46px;height:46px;flex:none;display:grid;place-items:center;border-radius:50%;color:#9aa3ad;cursor:pointer;text-decoration:none;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);transition:transform .12s ease-out,background .2s,color .2s,border-color .2s;transform-origin:left center;will-change:transform;}
+.dock-item svg{width:20px;height:20px;}
+.dock-item:hover{color:#fff;background:rgba(16,185,129,.14);border-color:rgba(16,185,129,.4);}
+.dock-item.active{color:#fff;border-color:transparent;background:linear-gradient(135deg,#059669,#0ea5a0);box-shadow:0 8px 20px -6px rgba(5,150,105,.6);}
+.dock-item .badge{position:absolute;top:-2px;right:-2px;min-width:16px;height:16px;padding:0 4px;border-radius:9px;background:var(--red);color:#fff;font-size:10px;font-weight:700;display:grid;place-items:center;border:2px solid #000;}
+.dock-item .tip{position:absolute;left:56px;top:50%;transform:translateY(-50%) translateX(-6px);white-space:nowrap;background:#161616;color:#eef2f6;font-size:12.5px;font-weight:500;padding:6px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.12);box-shadow:0 8px 20px rgba(0,0,0,.6);opacity:0;pointer-events:none;transition:opacity .15s,transform .15s;z-index:60;}
+.dock-item .tip::before{content:"";position:absolute;left:-5px;top:50%;transform:translateY(-50%) rotate(45deg);width:9px;height:9px;background:#161616;border-left:1px solid rgba(255,255,255,.12);border-bottom:1px solid rgba(255,255,255,.12);}
+.dock-item:hover .tip{opacity:1;transform:translateY(-50%) translateX(0);}
+.dock-user{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;font-weight:700;color:#03140f;background:linear-gradient(145deg,#a8f0dd,#5ee8c5 46%,#7dd4ff);border:1px solid rgba(255,255,255,.14);}
+/* main */
+.main{position:relative;padding:26px clamp(18px,3vw,40px) 48px;}
+.topbar{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:24px;opacity:0;animation:rise .6s ease-out forwards;}
+.topbar h1{margin:0;font-size:24px;font-weight:700;letter-spacing:-.02em;}
+.topbar .sub{margin-top:4px;color:var(--muted);font-size:13.5px;}
 .topbar .chip{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);padding:8px 12px;border:1px solid var(--line);border-radius:999px;background:rgba(255,255,255,.03);}
-.pip{width:8px;height:8px;border-radius:50%;background:#10b981;box-shadow:0 0 0 0 rgba(16,185,129,.5);animation:pulse 2s ease-out infinite;}
+.pip{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 0 rgba(16,185,129,.5);animation:pulse 2s ease-out infinite;}
+.bento{display:grid;grid-template-columns:repeat(4,1fr);grid-auto-rows:96px;gap:16px;}
+.tile{position:relative;overflow:hidden;border-radius:18px;padding:18px;background:linear-gradient(180deg,var(--tile),var(--tile-2));border:1px solid var(--line);box-shadow:0 20px 40px -28px rgba(0,0,0,.8);opacity:0;animation:rise .55s ease-out forwards;transition:transform .18s ease,border-color .2s,box-shadow .25s;text-decoration:none;color:var(--fg);}
+.tile:hover{transform:translateY(-3px) scale(1.012);border-color:var(--line-2);}
+a.tile:hover{border-color:rgba(16,185,129,.4);}
+.tile::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;background:radial-gradient(120% 120% at 100% 0%,rgba(255,255,255,.05),transparent 45%);}
+.c2{grid-column:span 2;}.r2{grid-row:span 2;}.r3{grid-row:span 3;}
+.kpi-label{font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:8px;}
+.kpi-ico{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;flex:none;}.kpi-ico svg{width:16px;height:16px;}
+.kpi-val{font-size:34px;font-weight:800;letter-spacing:-.02em;margin-top:10px;line-height:1;}
+.kpi-sub{font-size:12px;color:var(--faint);margin-top:8px;}.kpi-up{color:var(--accent);}.kpi-down{color:var(--red);}
+.tone-green .kpi-ico{background:rgba(16,185,129,.16);color:#34d399;}.tone-blue .kpi-ico{background:rgba(96,165,250,.16);color:#60a5fa;}
+.tone-amber .kpi-ico{background:rgba(245,158,11,.16);color:#fbbf24;}.tone-red .kpi-ico{background:rgba(240,97,109,.16);color:#fb7185;}.tone-teal .kpi-ico{background:rgba(14,165,160,.16);color:#2dd4bf;}
+.tile h3{margin:0 0 14px;font-size:14px;font-weight:600;}.tile h3 .muted{color:var(--faint);font-weight:400;font-size:12px;}
+.chart{display:flex;align-items:flex-end;gap:10px;height:calc(100% - 36px);padding-top:6px;}
+.chart .day{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%;}
+.chart .bars{flex:1;width:100%;display:flex;align-items:flex-end;justify-content:center;gap:3px;}
+.chart .bar{width:7px;border-radius:4px 4px 0 0;transform-origin:bottom;animation:grow .7s ease-out backwards;}
+.chart .bar.a{background:linear-gradient(180deg,#34d399,#059669);}.chart .bar.r{background:linear-gradient(180deg,#fb7185,#e11d48);}.chart .bar.f{background:linear-gradient(180deg,#fbbf24,#d97706);}
+.chart .lbl{font-size:11px;color:var(--faint);}
+.legend{display:flex;gap:14px;margin-top:6px;font-size:11.5px;color:var(--muted);}.legend span{display:inline-flex;align-items:center;gap:6px;}.dot{width:8px;height:8px;border-radius:3px;}
+.row{display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);text-decoration:none;color:inherit;}.row:last-child{border-bottom:0;}
+.av{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;font-size:12px;font-weight:700;color:#03140f;flex:none;background:linear-gradient(145deg,#a8f0dd,#5ee8c5 46%,#7dd4ff);}
+.row .nm{font-size:13px;font-weight:500;}.row .mt{font-size:11.5px;color:var(--faint);}
+.tag{margin-left:auto;font-size:11px;font-weight:600;padding:4px 9px;border-radius:999px;}
+.tag.ok{background:rgba(16,185,129,.16);color:#34d399;}.tag.no{background:rgba(240,97,109,.16);color:#fb7185;}.tag.fl{background:rgba(245,158,11,.16);color:#fbbf24;}.tag.pd{background:rgba(148,163,184,.16);color:#cbd5e1;}
+.health{display:flex;flex-direction:column;gap:10px;}.hrow{display:flex;align-items:center;gap:10px;font-size:13px;}.hrow .nm{color:var(--muted);}.hrow .st{margin-left:auto;font-weight:600;}
+.hbar{height:6px;border-radius:4px;background:rgba(255,255,255,.06);overflow:hidden;flex:1;max-width:120px;}.hbar i{display:block;height:100%;border-radius:4px;background:linear-gradient(90deg,#059669,#0ea5a0);}
+@keyframes rise{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
+@keyframes grow{from{transform:scaleY(0);}to{transform:scaleY(1);}}
 @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(16,185,129,.5);}70%{box-shadow:0 0 0 7px rgba(16,185,129,0);}100%{box-shadow:0 0 0 0 rgba(16,185,129,0);}}
-/* bento (db-) */
-.db-wrap{--db-fg:#eef4fb;--db-muted:#9fb2c8;--db-faint:#5f7188;--db-line:rgba(255,255,255,.08);--db-line2:rgba(255,255,255,.14);}
-.db-actions{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px;}
-.db-btn{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;cursor:pointer;padding:10px 16px;border-radius:11px;text-decoration:none;color:var(--db-fg);border:1px solid var(--db-line2);background:rgba(255,255,255,.04);transition:.18s;}
-.db-btn:hover{background:rgba(255,255,255,.08);}
-.db-btn svg{width:14px;height:14px;}
-.db-btn-primary{color:#04231a;border-color:transparent;background:linear-gradient(120deg,#10b981,#0ea5a0);box-shadow:0 10px 22px -10px rgba(5,150,105,.6);}
-.db-bento{display:grid;grid-template-columns:repeat(4,1fr);grid-auto-rows:104px;gap:16px;grid-auto-flow:row dense;}
-.db-tile{position:relative;overflow:hidden;border-radius:18px;padding:18px;text-decoration:none;color:var(--db-fg);background:linear-gradient(180deg,#111c30,#0e1828);border:1px solid var(--db-line);box-shadow:0 20px 40px -28px rgba(0,0,0,.8);transition:.2s;}
-.db-tile:hover{transform:translateY(-3px);border-color:var(--db-line2);}
-a.db-tile:hover{border-color:rgba(16,185,129,.4);}
-.db-c2{grid-column:span 2;}.db-r2{grid-row:span 2;}.db-r3{grid-row:span 3;}
-.db-kpi-label{font-size:12.5px;color:var(--db-muted);display:flex;align-items:center;gap:8px;}
-.db-kpi-ico{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;flex:none;}.db-kpi-ico svg{width:16px;height:16px;}
-.db-kpi-val{font-size:34px;font-weight:800;letter-spacing:-.02em;margin-top:12px;line-height:1;}
-.db-kpi-sub{font-size:11.5px;color:var(--db-faint);margin-top:8px;}
-.tone-green .db-kpi-ico{background:rgba(16,185,129,.16);color:#34d399;}.tone-blue .db-kpi-ico{background:rgba(96,165,250,.16);color:#60a5fa;}
-.tone-amber .db-kpi-ico{background:rgba(251,191,36,.16);color:#fbbf24;}.tone-red .db-kpi-ico{background:rgba(240,97,109,.16);color:#fb7185;}.tone-teal .db-kpi-ico{background:rgba(45,212,191,.16);color:#2dd4bf;}
-.db-tile h3{margin:0 0 14px;font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px;}
-.db-tile h3 .db-mut{color:var(--db-faint);font-weight:400;font-size:12px;}
-.db-tile h3 .db-link{margin-left:auto;font-size:11.5px;font-weight:600;color:#34d399;text-decoration:none;}
-.db-tile.db-chart{display:flex;flex-direction:column;}.db-chart-host{position:relative;flex:1;min-height:200px;}
-.db-row{display:flex;align-items:center;gap:11px;padding:9px 0;border-bottom:1px solid var(--db-line);text-decoration:none;color:inherit;}
-.db-row:last-child{border-bottom:0;}.db-row:hover .db-nm{color:#fff;}
-.db-av{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;font-size:12px;font-weight:700;color:#03172a;flex:none;background:linear-gradient(145deg,#a8f0dd,#5ee8c5 46%,#7dd4ff);}
-.db-nm{font-size:13px;font-weight:500;}.db-mt{font-size:11.5px;color:var(--db-faint);}
-.db-tag{margin-left:auto;flex:none;font-size:10.5px;font-weight:700;padding:4px 9px;border-radius:999px;text-transform:capitalize;}
-.db-tag.ok{background:rgba(16,185,129,.16);color:#34d399;}.db-tag.no,.db-tag.danger{background:rgba(240,97,109,.16);color:#fb7185;}
-.db-tag.fl,.db-tag.warn{background:rgba(251,191,36,.16);color:#fbbf24;}.db-tag.pd,.db-tag.info{background:rgba(148,163,184,.16);color:#cbd5e1;}
-.db-health{display:flex;flex-direction:column;gap:11px;}.db-hrow{display:flex;align-items:center;gap:10px;font-size:13px;}
-.db-hn{color:var(--db-muted);}.db-dot{width:9px;height:9px;border-radius:50%;flex:none;background:#34d399;}.db-dot.warn{background:#fbbf24;}.db-dot.bad{background:#fb7185;}
-.db-hs{margin-left:auto;font-weight:600;font-size:12px;}
-@media (max-width:1100px){.db-bento{grid-template-columns:repeat(2,1fr);}}
+@media (max-width:1100px){.bento{grid-template-columns:repeat(2,1fr);}}
+@media (max-width:680px){.app{grid-template-columns:72px 1fr;}.bento{grid-template-columns:1fr;}.c2{grid-column:span 1;}}
 </style>
 </head>
 <body>
-<div class="app-shell">
-  <aside class="sidebar">
-    <a href="#" class="brand-block"><div class="brand-mark">A</div><div><div class="brand-title">Aqua AI</div><div class="brand-subtitle">Control Plane</div></div></a>
-    <nav class="sidebar-nav">
-      <div class="nav-group-title">Operations</div>
-      <a class="nav-link active"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span><span>Dashboard</span></a>
-      <a class="nav-link"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg></span><span>Pending Intake</span></a>
-      <a class="nav-link"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></span><span>Account Directory</span></a>
-      <a class="nav-link"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></span><span>Pending Reviews</span></a>
-      <a class="nav-link"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span><span>Flagged Issues</span><span class="count-pill">5</span></a>
-      <a class="nav-link"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19h16"/><path d="M6 16V8"/><path d="M12 16V5"/><path d="M18 16v-3"/></svg></span><span>Feature D Ops</span></a>
-      <a class="nav-link"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span><span>Daily Reports</span></a>
-      <a class="nav-link"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg></span><span>Data Requests</span><span class="count-pill">2</span></a>
-      <a class="nav-link"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></span><span>Settings</span></a>
-    </nav>
-    <div class="sidebar-footer">
-      <div class="user-card"><div class="user-avatar">B</div><div><div class="user-name">ben@humara.io</div><div class="user-role">Super Admin</div></div></div>
-      <div class="sidebar-actions"><a href="#">Change password</a><a href="#">Sign out</a></div>
+<div class="app">
+  <aside class="dock" id="dock">
+    <a href="#" class="dock-brand">A</a>
+    <div class="dock-items">
+      <a class="dock-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span class="tip">Dashboard</span></a>
+      <a class="dock-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg><span class="tip">Pending Intake</span></a>
+      <a class="dock-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg><span class="tip">Account Directory</span></a>
+      <a class="dock-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg><span class="tip">Pending Reviews</span></a>
+      <a class="dock-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/></svg><span class="badge">5</span><span class="tip">Flagged Issues</span></a>
+      <a class="dock-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19h16"/><path d="M6 16V8"/><path d="M12 16V5"/><path d="M18 16v-3"/></svg><span class="tip">Feature D Ops</span></a>
+      <a class="dock-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg><span class="tip">Inbox</span></a>
+      <a class="dock-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span class="tip">Daily Reports</span></a>
+      <a class="dock-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg><span class="badge">2</span><span class="tip">Data Requests</span></a>
+      <a class="dock-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span class="tip">Team Access</span></a>
+      <a class="dock-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg><span class="tip">Audit Log</span></a>
+      <a class="dock-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg><span class="tip">Settings</span></a>
+    </div>
+    <div class="dock-foot">
+      <a class="dock-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg><span class="tip">Change password</span></a>
+      <a class="dock-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg><span class="tip">Sign out</span></a>
+      <span class="dock-user" title="ben@humara.io">B</span>
     </div>
   </aside>
 
   <main class="main">
-    <div class="topbar"><h1>Operations Dashboard</h1><div class="chip"><span class="pip"></span> All systems online</div></div>
-    <div class="db-wrap">
-      <div class="db-actions">
-        <button class="db-btn db-btn-primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> Run full AI scan</button>
-        <a class="db-btn" href="#">View pending accounts</a><a class="db-btn" href="#">Open flagged issues</a><a class="db-btn" href="#">Pending reviews</a>
-      </div>
-      <div class="db-bento">
-        <section class="db-tile db-chart db-c2 db-r3"><h3>Review activity <span class="db-mut">— last 7 days</span><a class="db-link" href="#">Reports →</a></h3><div class="db-chart-host"><canvas id="weekChart"></canvas></div></section>
-        <a class="db-tile tone-amber" href="#"><div class="db-kpi-label"><span class="db-kpi-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg></span> Pending intake</div><div class="db-kpi-val">9</div><div class="db-kpi-sub">Breeders 6 · Consultants 3</div></a>
-        <a class="db-tile tone-red" href="#"><div class="db-kpi-label"><span class="db-kpi-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/></svg></span> Open issues</div><div class="db-kpi-val">5</div><div class="db-kpi-sub">Critical 2 · 42 resolved</div></a>
-        <a class="db-tile tone-green" href="#"><div class="db-kpi-label"><span class="db-kpi-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span> Reviewed today</div><div class="db-kpi-val">23</div><div class="db-kpi-sub">Approved 18 · Flagged 2</div></a>
-        <a class="db-tile tone-blue" href="#"><div class="db-kpi-label"><span class="db-kpi-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></span> Total reviews</div><div class="db-kpi-val">1,284</div><div class="db-kpi-sub">Approved 980 · 31 overrides</div></a>
-        <a class="db-tile tone-teal" href="#"><div class="db-kpi-label"><span class="db-kpi-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></svg></span> Breeders awaiting verify</div><div class="db-kpi-val">6</div><div class="db-kpi-sub">418 reviewed all-time</div></a>
-        <a class="db-tile tone-teal" href="#"><div class="db-kpi-label"><span class="db-kpi-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0z"/><path d="M12 14c-5 0-8 2.5-8 6h16c0-3.5-3-6-8-6z"/></svg></span> Consultants pending</div><div class="db-kpi-val">3</div><div class="db-kpi-sub">212 reviewed all-time</div></a>
-        <section class="db-tile db-c2 db-r2"><h3>Recent reviews <a class="db-link" href="#">Open all →</a></h3>
-          <a class="db-row" href="#"><span class="db-av">K</span><span><span class="db-nm">Koi Gardens Ltd</span><span class="db-mt" style="display:block">breeder · 08 Jun 21:40</span></span><span class="db-tag ok">approved</span></a>
-          <a class="db-row" href="#"><span class="db-av">A</span><span><span class="db-nm">AquaVet Clinic</span><span class="db-mt" style="display:block">consultant · 08 Jun 21:12</span></span><span class="db-tag fl">flagged</span></a>
-          <a class="db-row" href="#"><span class="db-av">R</span><span><span class="db-nm">Reef Supply Co</span><span class="db-mt" style="display:block">breeder · 07 Jun 18:30</span></span><span class="db-tag no">rejected</span></a>
-          <a class="db-row" href="#"><span class="db-av">M</span><span><span class="db-nm">Marine Habitat</span><span class="db-mt" style="display:block">breeder · 07 Jun 14:02</span></span><span class="db-tag pd">pending</span></a>
-        </section>
-        <section class="db-tile db-c2 db-r2"><h3>Runtime health</h3><div class="db-health">
-          <div class="db-hrow"><span class="db-dot"></span><span class="db-hn">Database</span><span class="db-hs">Connected</span></div>
-          <div class="db-hrow"><span class="db-dot"></span><span class="db-hn">Mailbox (Gmail)</span><span class="db-hs">OK</span></div>
-          <div class="db-hrow"><span class="db-dot warn"></span><span class="db-hn">OpenAI key</span><span class="db-hs">Unverified</span></div>
-          <div class="db-hrow"><span class="db-dot"></span><span class="db-hn">Supabase</span><span class="db-hs">Healthy</span></div>
-        </div></section>
-        <section class="db-tile db-c2 db-r2"><h3>Flagged issues <a class="db-link" href="#">Open all →</a></h3>
-          <a class="db-row" href="#"><span><span class="db-nm">Payment failure spike</span><span class="db-mt" style="display:block">user@example.com</span></span><span class="db-tag no">critical</span></a>
-          <a class="db-row" href="#"><span><span class="db-nm">Consultant warning</span><span class="db-mt" style="display:block">vet@clinic.io</span></span><span class="db-tag fl">high</span></a>
-          <a class="db-row" href="#"><span><span class="db-nm">Trust score drop</span><span class="db-mt" style="display:block">koi@gardens.uk</span></span><span class="db-tag pd">medium</span></a>
-        </section>
-        <section class="db-tile db-c2 db-r2"><h3>Recent reports <a class="db-link" href="#">Open all →</a></h3>
-          <a class="db-row" href="#"><span class="db-nm" style="font-family:monospace">2026-06-08</span><span class="db-mt">A 23 · R 4 · F 2</span><span class="db-tag info">3 issues</span></a>
-          <a class="db-row" href="#"><span class="db-nm" style="font-family:monospace">2026-06-07</span><span class="db-mt">A 16 · R 1 · F 3</span><span class="db-tag info">1 issue</span></a>
-          <a class="db-row" href="#"><span class="db-nm" style="font-family:monospace">2026-06-06</span><span class="db-mt">A 9 · R 2 · F 4</span><span class="db-tag info">0 issues</span></a>
-        </section>
-      </div>
+    <div class="topbar"><div><h1>Control Room</h1><div class="sub">Operational overview · today</div></div><div class="chip"><span class="pip"></span> All systems online</div></div>
+    <div class="bento">
+      <section class="tile c2 r3" style="animation-delay:.04s"><h3>Review activity <span class="muted">— last 7 days</span></h3><div class="chart" id="chart"></div><div class="legend"><span><i class="dot" style="background:#059669"></i>Approved</span><span><i class="dot" style="background:#e11d48"></i>Rejected</span><span><i class="dot" style="background:#d97706"></i>Flagged</span></div></section>
+      <a class="tile tone-amber" href="#" style="animation-delay:.08s"><div class="kpi-label"><span class="kpi-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg></span> Pending intake</div><div class="kpi-val">9</div><div class="kpi-sub">Breeders 6 · Consultants 3</div></a>
+      <a class="tile tone-red" href="#" style="animation-delay:.12s"><div class="kpi-label"><span class="kpi-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/></svg></span> Open issues</div><div class="kpi-val">5 <span style="font-size:14px" class="kpi-down">· 2 critical</span></div><div class="kpi-sub">42 resolved all-time</div></a>
+      <a class="tile tone-green" href="#" style="animation-delay:.16s"><div class="kpi-label"><span class="kpi-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span> Reviewed today</div><div class="kpi-val">23</div><div class="kpi-sub kpi-up">▲ 18% vs yesterday</div></a>
+      <a class="tile tone-blue" href="#" style="animation-delay:.2s"><div class="kpi-label"><span class="kpi-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></span> Total reviews</div><div class="kpi-val">1,284</div><div class="kpi-sub">31 manual overrides</div></a>
+      <a class="tile tone-teal" href="#" style="animation-delay:.24s"><div class="kpi-label"><span class="kpi-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></svg></span> Breeders awaiting verify</div><div class="kpi-val">6</div></a>
+      <a class="tile tone-teal" href="#" style="animation-delay:.28s"><div class="kpi-label"><span class="kpi-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0z"/><path d="M12 14c-5 0-8 2.5-8 6h16c0-3.5-3-6-8-6z"/></svg></span> Consultants pending</div><div class="kpi-val">3</div></a>
+      <section class="tile c2 r2" style="animation-delay:.32s"><h3>Recent reviews</h3>
+        <a class="row" href="#"><div class="av">K</div><div><div class="nm">Koi Gardens Ltd</div><div class="mt">Breeder · 2m ago</div></div><span class="tag ok">Approved</span></a>
+        <a class="row" href="#"><div class="av">A</div><div><div class="nm">AquaVet Clinic</div><div class="mt">Consultant · 14m ago</div></div><span class="tag fl">Flagged</span></a>
+        <a class="row" href="#"><div class="av">R</div><div><div class="nm">Reef Supply Co</div><div class="mt">Breeder · 38m ago</div></div><span class="tag no">Rejected</span></a>
+        <a class="row" href="#"><div class="av">M</div><div><div class="nm">Marine Habitat</div><div class="mt">Breeder · 1h ago</div></div><span class="tag pd">Pending</span></a>
+      </section>
+      <section class="tile c2 r2" style="animation-delay:.36s"><h3>Platform health</h3><div class="health">
+        <div class="hrow"><span class="nm">API uptime</span><div class="hbar"><i style="width:99%"></i></div><span class="st" style="color:#34d399">99.9%</span></div>
+        <div class="hrow"><span class="nm">Webhook backlog</span><div class="hbar"><i style="width:8%"></i></div><span class="st" style="color:#34d399">clear</span></div>
+        <div class="hrow"><span class="nm">DSAR queue</span><div class="hbar"><i style="width:20%"></i></div><span class="st" style="color:#fbbf24">2 open</span></div>
+        <div class="hrow"><span class="nm">Inference (TLS)</span><div class="hbar"><i style="width:100%"></i></div><span class="st" style="color:#34d399">secure</span></div>
+      </div></section>
     </div>
   </main>
 </div>
 <script>
-(function(){
-  var wd=[{date:'Mon',approved:12,rejected:3,flagged:2,issues:1},{date:'Tue',approved:18,rejected:4,flagged:1,issues:2},{date:'Wed',approved:9,rejected:2,flagged:4,issues:0},{date:'Thu',approved:22,rejected:5,flagged:2,issues:3},{date:'Fri',approved:16,rejected:1,flagged:3,issues:1},{date:'Sat',approved:7,rejected:2,flagged:1,issues:0},{date:'Sun',approved:23,rejected:4,flagged:2,issues:2}];
-  var ctx=document.getElementById('weekChart'); if(!ctx||typeof Chart==='undefined')return;
-  var tick="#5c7d92",text="#c8e8f8",grid="rgba(120,190,222,0.07)";
-  new Chart(ctx,{type:'bar',data:{labels:wd.map(d=>d.date),datasets:[
-    {label:'Approved',data:wd.map(d=>d.approved),backgroundColor:'rgba(52,211,153,0.78)',borderRadius:5,borderSkipped:false},
-    {label:'Rejected',data:wd.map(d=>d.rejected),backgroundColor:'rgba(251,113,133,0.72)',borderRadius:5,borderSkipped:false},
-    {label:'Flags',data:wd.map(d=>d.flagged),backgroundColor:'rgba(251,191,36,0.72)',borderRadius:5,borderSkipped:false},
-    {label:'Issues',data:wd.map(d=>d.issues),backgroundColor:'rgba(125,212,255,0.72)',borderRadius:5,borderSkipped:false}]},
-    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
-      scales:{x:{ticks:{color:tick,font:{size:11}},grid:{color:grid}},y:{ticks:{color:tick,font:{size:11},stepSize:1},grid:{color:grid}}},
-      plugins:{legend:{labels:{color:text,boxWidth:12,boxHeight:12,padding:14,useBorderRadius:true,borderRadius:3}}}}});
+(function(){var dock=document.getElementById('dock');var items=[].slice.call(dock.querySelectorAll('.dock-item'));
+  if(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  var MAX=130,BOOST=.5;
+  dock.addEventListener('mousemove',function(e){items.forEach(function(it){var r=it.getBoundingClientRect();var f=Math.max(0,1-Math.abs(e.clientY-(r.top+r.height/2))/MAX);it.style.transform='translateX('+(f*7).toFixed(2)+'px) scale('+(1+BOOST*f).toFixed(3)+')';});});
+  dock.addEventListener('mouseleave',function(){items.forEach(function(it){it.style.transform='';});});
+})();
+(function(){var data=[{d:'Mon',a:12,r:3,f:2},{d:'Tue',a:18,r:4,f:1},{d:'Wed',a:9,r:2,f:4},{d:'Thu',a:22,r:5,f:2},{d:'Fri',a:16,r:1,f:3},{d:'Sat',a:7,r:2,f:1},{d:'Sun',a:23,r:4,f:2}];
+  var max=0;data.forEach(function(x){max=Math.max(max,x.a,x.r,x.f);});var host=document.getElementById('chart');if(!host)return;
+  data.forEach(function(x,i){var day=document.createElement('div');day.className='day';var bars=document.createElement('div');bars.className='bars';
+    [['a',x.a],['r',x.r],['f',x.f]].forEach(function(p,j){var b=document.createElement('div');b.className='bar '+p[0];b.style.height=Math.max(6,(p[1]/max)*100)+'%';b.style.animationDelay=(0.3+i*0.05+j*0.03)+'s';bars.appendChild(b);});
+    var lbl=document.createElement('div');lbl.className='lbl';lbl.textContent=x.d;day.appendChild(bars);day.appendChild(lbl);host.appendChild(day);});
 })();
 </script>
 </body>

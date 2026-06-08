@@ -8,186 +8,141 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="{% static 'admin_portal/styles.css' %}">
+  <style>
+  /* ============================================================
+     Black theme + Animated Dock sidebar (overrides styles.css).
+     ============================================================ */
+  body[data-theme="dark"]{ background:#000 !important; }
+  body[data-theme="dark"] .main-panel{ background:#000 !important; }
+  body[data-theme="dark"] .reef-scene,
+  body[data-theme="dark"] .shell-ambient{ display:none !important; }
+  .app-shell{ grid-template-columns:84px minmax(0,1fr) !important; }
+  body[data-theme="dark"] .main-panel-inner{ background:transparent !important; }
+
+  /* ---- Animated Dock ---- */
+  .dock{position:sticky; top:0; height:100vh; z-index:40;
+    display:flex; flex-direction:column; align-items:center; gap:10px; padding:16px 0;
+    background:linear-gradient(180deg,#0c0c0c,#000); border-right:1px solid rgba(255,255,255,.07);
+    backdrop-filter:blur(8px); width:100%;}
+  .dock-brand{width:46px; height:46px; border-radius:14px; display:grid; place-items:center; flex:none;
+    font-weight:800; font-size:20px; color:#fff; text-decoration:none; margin-bottom:4px;
+    background:linear-gradient(135deg,#2a2a2a,#0ea5a0); box-shadow:0 8px 22px rgba(0,0,0,.7), inset 0 0 0 1px rgba(255,255,255,.12);}
+  .dock-items{display:flex; flex-direction:column; align-items:center; gap:11px; flex:1; min-height:0;
+    overflow-y:auto; overflow-x:visible; padding:4px 0; width:100%; scrollbar-width:none;}
+  .dock-items::-webkit-scrollbar{display:none;}
+  .dock-foot{display:flex; flex-direction:column; align-items:center; gap:11px; flex:none; padding-top:10px;
+    border-top:1px solid rgba(255,255,255,.07); width:100%;}
+  .dock-item{position:relative; width:46px; height:46px; flex:none; display:grid; place-items:center;
+    border-radius:50%; color:#9aa3ad; cursor:pointer; text-decoration:none;
+    background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.07);
+    transition:transform .12s ease-out, background .2s, color .2s, border-color .2s;
+    transform-origin:left center; will-change:transform;}
+  .dock-item svg{width:20px; height:20px;}
+  .dock-item:hover{color:#fff; background:rgba(16,185,129,.14); border-color:rgba(16,185,129,.4);}
+  .dock-item.active{color:#fff; border-color:transparent;
+    background:linear-gradient(135deg,#059669,#0ea5a0); box-shadow:0 8px 20px -6px rgba(5,150,105,.6);}
+  .dock-item .badge{position:absolute; top:-2px; right:-2px; min-width:16px; height:16px; padding:0 4px;
+    border-radius:9px; background:#f0616d; color:#fff; font-size:10px; font-weight:700;
+    display:grid; place-items:center; border:2px solid #000;}
+  .dock-item .tip{position:absolute; left:56px; top:50%; transform:translateY(-50%) translateX(-6px);
+    white-space:nowrap; background:#161616; color:#eef2f6; font-size:12.5px; font-weight:500;
+    padding:6px 10px; border-radius:8px; border:1px solid rgba(255,255,255,.12);
+    box-shadow:0 8px 20px rgba(0,0,0,.6); opacity:0; pointer-events:none;
+    transition:opacity .15s, transform .15s; z-index:60;}
+  .dock-item .tip::before{content:""; position:absolute; left:-5px; top:50%; transform:translateY(-50%) rotate(45deg);
+    width:9px; height:9px; background:#161616; border-left:1px solid rgba(255,255,255,.12); border-bottom:1px solid rgba(255,255,255,.12);}
+  .dock-item:hover .tip{opacity:1; transform:translateY(-50%) translateX(0);}
+  .dock-user{width:42px; height:42px; border-radius:50%; display:grid; place-items:center; font-weight:700;
+    color:#03140f; flex:none; text-decoration:none;
+    background:linear-gradient(145deg,#a8f0dd,#5ee8c5 46%,#7dd4ff); border:1px solid rgba(255,255,255,.14);}
+  </style>
   {% block extra_head %}{% endblock %}
 </head>
 <body class="{% block body_class %}app-body{% endblock %}" data-theme="dark">
   <div class="app-shell">
 
-    {# ── Sidebar ── #}
-    <aside class="sidebar">
-      <a href="{% url 'admin_portal:dashboard' %}" class="brand-block">
-        <div class="brand-mark">A</div>
-        <div>
-          <div class="brand-title">{{ APP_NAME }}</div>
-          <div class="brand-subtitle">{{ APP_TAGLINE }}</div>
-        </div>
-      </a>
+    {# ── Animated Dock sidebar ── #}
+    <aside class="dock" id="dock">
+      <a href="{% url 'admin_portal:dashboard' %}" class="dock-brand" title="{{ APP_NAME }}">A</a>
 
-      <nav class="sidebar-nav">
-        <div class="nav-group-title">Operations</div>
-
-        <a href="{% url 'admin_portal:dashboard' %}" class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
-          <span class="nav-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/>
-              <rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>
-            </svg>
-          </span>
-          <span>Dashboard</span>
+      <div class="dock-items">
+        <a href="{% url 'admin_portal:dashboard' %}" class="dock-item {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+          <span class="tip">Dashboard</span>
         </a>
-
-        <a href="{% url 'admin_portal:intake_list' %}" class="nav-link {% if 'intake' in request.resolver_match.url_name %}active{% endif %}">
-          <span class="nav-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/>
-              <path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/>
-            </svg>
-          </span>
-          <span>Pending Intake</span>
+        <a href="{% url 'admin_portal:intake_list' %}" class="dock-item {% if 'intake' in request.resolver_match.url_name %}active{% endif %}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg>
+          <span class="tip">Pending Intake</span>
         </a>
-
-        <a href="{% url 'admin_portal:entity_directory' %}" class="nav-link {% if 'entity_' in request.resolver_match.url_name %}active{% endif %}">
-          <span class="nav-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/>
-              <path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>
-            </svg>
-          </span>
-          <span>Account Directory</span>
+        <a href="{% url 'admin_portal:entity_directory' %}" class="dock-item {% if 'entity_' in request.resolver_match.url_name %}active{% endif %}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+          <span class="tip">Account Directory</span>
         </a>
-
-        <a href="{% url 'admin_portal:review_list' %}" class="nav-link {% if 'review' in request.resolver_match.url_name %}active{% endif %}">
-          <span class="nav-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
-            </svg>
-          </span>
-          <span>Pending Reviews</span>
+        <a href="{% url 'admin_portal:review_list' %}" class="dock-item {% if 'review' in request.resolver_match.url_name %}active{% endif %}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+          <span class="tip">Pending Reviews</span>
         </a>
-
-        <a href="{% url 'admin_portal:issue_list' %}" class="nav-link {% if 'issue' in request.resolver_match.url_name %}active{% endif %}">
-          <span class="nav-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
-              <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-            </svg>
-          </span>
-          <span>Flagged Issues</span>
-          {% if OPEN_ISSUE_COUNT %}<span class="count-pill">{{ OPEN_ISSUE_COUNT }}</span>{% endif %}
+        <a href="{% url 'admin_portal:issue_list' %}" class="dock-item {% if 'issue' in request.resolver_match.url_name %}active{% endif %}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          {% if OPEN_ISSUE_COUNT %}<span class="badge">{{ OPEN_ISSUE_COUNT }}</span>{% endif %}
+          <span class="tip">Flagged Issues</span>
         </a>
-
-        <a href="{% url 'admin_portal:feature_d_dashboard' %}" class="nav-link {% if 'feature_d' in request.resolver_match.url_name %}active{% endif %}">
-          <span class="nav-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M4 19h16"/><path d="M6 16V8"/><path d="M12 16V5"/><path d="M18 16v-3"/><path d="M8 8h8"/><path d="M12 5l3 3"/><path d="M12 5L9 8"/>
-            </svg>
-          </span>
-          <span>Feature D Ops</span>
+        <a href="{% url 'admin_portal:feature_d_dashboard' %}" class="dock-item {% if 'feature_d' in request.resolver_match.url_name %}active{% endif %}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19h16"/><path d="M6 16V8"/><path d="M12 16V5"/><path d="M18 16v-3"/><path d="M8 8h8"/><path d="M12 5l3 3"/><path d="M12 5L9 8"/></svg>
+          <span class="tip">Feature D Ops</span>
         </a>
-
         {% if IS_SUPER_ADMIN or IS_ADMIN %}
-        <a href="{% url 'admin_portal:support_inbox_list' %}" class="nav-link {% if 'support_inbox' in request.resolver_match.url_name %}active{% endif %}">
-          <span class="nav-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
-              <polyline points="22,6 12,13 2,6"/>
-            </svg>
-          </span>
-          <span>Inbox</span>
+        <a href="{% url 'admin_portal:support_inbox_list' %}" class="dock-item {% if 'support_inbox' in request.resolver_match.url_name %}active{% endif %}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          <span class="tip">Inbox</span>
         </a>
         {% endif %}
-
-        <a href="{% url 'admin_portal:daily_report_list' %}" class="nav-link {% if 'report' in request.resolver_match.url_name %}active{% endif %}">
-          <span class="nav-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
-            </svg>
-          </span>
-          <span>Daily Reports</span>
+        <a href="{% url 'admin_portal:daily_report_list' %}" class="dock-item {% if 'report' in request.resolver_match.url_name %}active{% endif %}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          <span class="tip">Daily Reports</span>
         </a>
-
         {% if IS_SUPER_ADMIN or IS_ADMIN %}
-        <a href="{% url 'admin_portal:dsar_request_list' %}" class="nav-link {% if 'dsar_' in request.resolver_match.url_name %}active{% endif %}">
-          <span class="nav-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-              <path d="M14 2v6h6"/><path d="M9 13h6"/><path d="M9 17h6"/><path d="M9 9h1"/>
-            </svg>
-          </span>
-          <span>Data Requests</span>
-          {% if OPEN_DSAR_COUNT %}<span class="count-pill">{{ OPEN_DSAR_COUNT }}</span>{% endif %}
+        <a href="{% url 'admin_portal:dsar_request_list' %}" class="dock-item {% if 'dsar_' in request.resolver_match.url_name %}active{% endif %}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6"/><path d="M9 17h6"/><path d="M9 9h1"/></svg>
+          {% if OPEN_DSAR_COUNT %}<span class="badge">{{ OPEN_DSAR_COUNT }}</span>{% endif %}
+          <span class="tip">Data Requests</span>
         </a>
         {% endif %}
-
         {% if IS_SUPER_ADMIN %}
-        <a href="{% url 'admin_portal:admin_user_list' %}" class="nav-link {% if 'admin_user' in request.resolver_match.url_name or 'change_user_role' in request.resolver_match.url_name %}active{% endif %}">
-          <span class="nav-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-            </svg>
-          </span>
-          <span>Team Access</span>
+        <a href="{% url 'admin_portal:admin_user_list' %}" class="dock-item {% if 'admin_user' in request.resolver_match.url_name or 'change_user_role' in request.resolver_match.url_name %}active{% endif %}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <span class="tip">Team Access</span>
         </a>
-
-        <a href="{% url 'admin_portal:audit_log' %}" class="nav-link {% if 'audit' in request.resolver_match.url_name %}active{% endif %}">
-          <span class="nav-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
-              <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
-            </svg>
-          </span>
-          <span>Audit Log</span>
+        <a href="{% url 'admin_portal:audit_log' %}" class="dock-item {% if 'audit' in request.resolver_match.url_name %}active{% endif %}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+          <span class="tip">Audit Log</span>
         </a>
-
-        <a href="{% url 'admin_portal:feature_d_audit' %}" class="nav-link {% if request.resolver_match.url_name == 'feature_d_audit' %}active{% endif %}">
-          <span class="nav-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M9 12l2 2 4-4"/><path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z"/>
-            </svg>
-          </span>
-          <span>Feature D Audit</span>
+        <a href="{% url 'admin_portal:feature_d_audit' %}" class="dock-item {% if request.resolver_match.url_name == 'feature_d_audit' %}active{% endif %}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z"/></svg>
+          <span class="tip">Feature D Audit</span>
         </a>
-
-        <a href="{% url 'admin_portal:operational_settings' %}" class="nav-link {% if 'operational_settings' in request.resolver_match.url_name %}active{% endif %}">
-          <span class="nav-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
-            </svg>
-          </span>
-          <span>Settings</span>
+        <a href="{% url 'admin_portal:operational_settings' %}" class="dock-item {% if 'operational_settings' in request.resolver_match.url_name %}active{% endif %}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+          <span class="tip">Settings</span>
         </a>
         {% endif %}
-      </nav>
+      </div>
 
-      <div class="sidebar-footer">
-        <div class="user-card">
-          <div class="user-avatar">{{ request.user.email.0|upper }}</div>
-          <div>
-            <div class="user-name">{{ request.user.full_name|default:request.user.email }}</div>
-            <div class="user-role">{{ request.user.role_display }}</div>
-          </div>
-        </div>
-        <div class="sidebar-actions">
-          <a href="{% url 'admin_portal:change_password' %}">Change password</a>
-          <a href="{% url 'admin_portal:logout' %}">Sign out</a>
-        </div>
+      <div class="dock-foot">
+        <a href="{% url 'admin_portal:change_password' %}" class="dock-item {% if 'change_password' in request.resolver_match.url_name %}active{% endif %}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+          <span class="tip">Change password</span>
+        </a>
+        <a href="{% url 'admin_portal:logout' %}" class="dock-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          <span class="tip">Sign out</span>
+        </a>
+        <span class="dock-user" title="{{ request.user.full_name|default:request.user.email }} · {{ request.user.role_display }}">{{ request.user.email.0|upper }}</span>
       </div>
     </aside>
 
     {# ── Main Panel ── #}
     <main class="main-panel">
-      <div class="reef-scene" aria-hidden="true">
-        <video class="reef-video" autoplay muted loop playsinline>
-          <source src="{% url 'admin_portal:background_video' %}" type="video/mp4">
-        </video>
-        <div class="reef-overlay reef-overlay-base"></div>
-        <div class="reef-overlay reef-overlay-focus"></div>
-      </div>
-      <div class="shell-ambient shell-ambient-a"></div>
-      <div class="shell-ambient shell-ambient-b"></div>
-      <div class="shell-ambient shell-ambient-c"></div>
-
       <div class="main-panel-inner">
         <header class="topbar">
           <div>
@@ -221,17 +176,12 @@
     const body = document.body;
     const toggle = document.getElementById("themeToggle");
     const label = toggle ? toggle.querySelector(".theme-toggle-label") : null;
-
     const applyTheme = (theme) => {
       body.dataset.theme = theme;
-      if (label) {
-        label.textContent = theme === "light" ? "Dark mode" : "Light mode";
-      }
+      if (label) label.textContent = theme === "light" ? "Dark mode" : "Light mode";
     };
-
     const saved = localStorage.getItem(storageKey);
     applyTheme(saved === "light" || saved === "dark" ? saved : "dark");
-
     if (toggle) {
       toggle.addEventListener("click", () => {
         const next = body.dataset.theme === "light" ? "dark" : "light";
@@ -239,6 +189,24 @@
         localStorage.setItem(storageKey, next);
       });
     }
+  })();
+
+  /* Animated Dock — proximity magnify (framer-motion port). Links navigate normally. */
+  (() => {
+    const dock = document.getElementById("dock");
+    if (!dock) return;
+    const items = Array.prototype.slice.call(dock.querySelectorAll(".dock-item"));
+    if (!items.length) return;
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const MAX = 130, BOOST = 0.5;
+    dock.addEventListener("mousemove", (e) => {
+      items.forEach((it) => {
+        const r = it.getBoundingClientRect();
+        const f = Math.max(0, 1 - Math.abs(e.clientY - (r.top + r.height / 2)) / MAX);
+        it.style.transform = "translateX(" + (f * 7).toFixed(2) + "px) scale(" + (1 + BOOST * f).toFixed(3) + ")";
+      });
+    });
+    dock.addEventListener("mouseleave", () => items.forEach((it) => { it.style.transform = ""; }));
   })();
   </script>
   {% block extra_js %}{% endblock %}
