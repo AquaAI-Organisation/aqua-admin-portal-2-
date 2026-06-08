@@ -1,274 +1,218 @@
 {% extends "admin_portal/base.html" %}
 {% block title %}Dashboard | {{ APP_NAME }}{% endblock %}
 {% block topbar_title %}Operations Dashboard{% endblock %}
+
+{% block extra_head %}
+<style>
+/* ============================================================
+   Dashboard content — "bento" tiles. Scoped under .db-wrap and
+   db-prefixed so it never touches the shared sidebar or other pages.
+   Palette matches the sidebar (vault blue + teal/green).
+   ============================================================ */
+.db-wrap{--db-fg:#eef4fb; --db-muted:#9fb2c8; --db-faint:#5f7188;
+  --db-line:rgba(255,255,255,.08); --db-line2:rgba(255,255,255,.14);
+  --db-accent:#10b981; --db-red:#f0616d; --db-amber:#fbbf24; --db-blue:#60a5fa; --db-teal:#2dd4bf;}
+.db-wrap *{box-sizing:border-box;}
+
+.db-actions{display:flex; flex-wrap:wrap; gap:10px; margin-bottom:20px;
+  opacity:0; animation:db-rise .5s ease-out forwards;}
+.db-actions form{margin:0;}
+.db-btn{display:inline-flex; align-items:center; gap:8px; font-size:13px; font-weight:600; cursor:pointer;
+  padding:10px 16px; border-radius:11px; text-decoration:none; color:var(--db-fg);
+  border:1px solid var(--db-line2); background:rgba(255,255,255,.04); transition:.18s;}
+.db-btn:hover{background:rgba(255,255,255,.08); border-color:rgba(255,255,255,.24);}
+.db-btn svg{width:14px; height:14px;}
+.db-btn-primary{color:#04231a; border-color:transparent;
+  background:linear-gradient(120deg,#10b981,#0ea5a0); box-shadow:0 10px 22px -10px rgba(5,150,105,.6);}
+.db-btn-primary:hover{filter:brightness(1.06); background:linear-gradient(120deg,#10b981,#0ea5a0);}
+
+.db-bento{display:grid; grid-template-columns:repeat(4,1fr); grid-auto-rows:104px; gap:16px; grid-auto-flow:row dense;}
+.db-tile{position:relative; overflow:hidden; border-radius:18px; padding:18px; text-decoration:none; color:var(--db-fg);
+  background:linear-gradient(180deg,#111c30,#0e1828); border:1px solid var(--db-line);
+  box-shadow:0 20px 40px -28px rgba(0,0,0,.8);
+  opacity:0; animation:db-rise .55s ease-out forwards; transition:transform .18s ease, border-color .2s, box-shadow .25s;}
+.db-tile:hover{transform:translateY(-3px); border-color:var(--db-line2); box-shadow:0 28px 54px -26px rgba(0,0,0,.85);}
+a.db-tile:hover{border-color:rgba(16,185,129,.4);}
+.db-c2{grid-column:span 2;} .db-r2{grid-row:span 2;} .db-r3{grid-row:span 3;}
+.db-tile::after{content:""; position:absolute; inset:0; pointer-events:none;
+  background:radial-gradient(120% 120% at 100% 0%, rgba(255,255,255,.05), transparent 45%);}
+
+/* KPI */
+.db-kpi-label{font-size:12.5px; color:var(--db-muted); display:flex; align-items:center; gap:8px;}
+.db-kpi-ico{width:30px; height:30px; border-radius:9px; display:grid; place-items:center; flex:none;}
+.db-kpi-ico svg{width:16px; height:16px;}
+.db-kpi-val{font-size:34px; font-weight:800; letter-spacing:-.02em; margin-top:12px; line-height:1;}
+.db-kpi-sub{font-size:11.5px; color:var(--db-faint); margin-top:8px;}
+.tone-green .db-kpi-ico{background:rgba(16,185,129,.16); color:#34d399;}
+.tone-blue  .db-kpi-ico{background:rgba(96,165,250,.16); color:#60a5fa;}
+.tone-amber .db-kpi-ico{background:rgba(251,191,36,.16); color:#fbbf24;}
+.tone-red   .db-kpi-ico{background:rgba(240,97,109,.16); color:#fb7185;}
+.tone-teal  .db-kpi-ico{background:rgba(45,212,191,.16); color:#2dd4bf;}
+
+/* section tiles */
+.db-tile h3{margin:0 0 14px; font-size:14px; font-weight:600; display:flex; align-items:center; gap:8px;}
+.db-tile h3 .db-mut{color:var(--db-faint); font-weight:400; font-size:12px;}
+.db-tile h3 .db-link{margin-left:auto; font-size:11.5px; font-weight:600; color:#34d399; text-decoration:none;}
+.db-tile h3 .db-link:hover{text-decoration:underline;}
+.db-chart-host{position:relative; flex:1; min-height:200px;}
+.db-tile.db-chart{display:flex; flex-direction:column;}
+
+/* rows */
+.db-row{display:flex; align-items:center; gap:11px; padding:9px 0; border-bottom:1px solid var(--db-line); text-decoration:none; color:inherit;}
+.db-row:last-child{border-bottom:0;}
+.db-row:hover .db-nm{color:#fff;}
+.db-av{width:30px; height:30px; border-radius:9px; display:grid; place-items:center; font-size:12px; font-weight:700; color:#03172a; flex:none;
+  background:linear-gradient(145deg,#a8f0dd,#5ee8c5 46%,#7dd4ff);}
+.db-nm{font-size:13px; font-weight:500; transition:color .15s; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:170px;}
+.db-mt{font-size:11.5px; color:var(--db-faint);}
+.db-tag{margin-left:auto; flex:none; font-size:10.5px; font-weight:700; padding:4px 9px; border-radius:999px; text-transform:capitalize;}
+.db-tag.ok{background:rgba(16,185,129,.16); color:#34d399;}
+.db-tag.danger,.db-tag.no{background:rgba(240,97,109,.16); color:#fb7185;}
+.db-tag.warn,.db-tag.fl{background:rgba(251,191,36,.16); color:#fbbf24;}
+.db-tag.pending,.db-tag.pd,.db-tag.info{background:rgba(148,163,184,.16); color:#cbd5e1;}
+.db-empty{color:var(--db-faint); font-size:13px; padding:16px 0;}
+
+/* health */
+.db-health{display:flex; flex-direction:column; gap:11px;}
+.db-hrow{display:flex; align-items:center; gap:10px; font-size:13px;}
+.db-hrow .db-hn{color:var(--db-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.db-hrow .db-hd{color:var(--db-faint); font-size:11.5px;}
+.db-dot{width:9px; height:9px; border-radius:50%; flex:none; background:#34d399;}
+.db-dot.bad{background:#fb7185;} .db-dot.warn{background:#fbbf24;}
+.db-hrow .db-hs{margin-left:auto; font-weight:600; font-size:12px;}
+
+@keyframes db-rise{from{opacity:0; transform:translateY(16px);} to{opacity:1; transform:translateY(0);}}
+@media (max-width:1100px){.db-bento{grid-template-columns:repeat(2,1fr);} .db-c2{grid-column:span 2;}}
+@media (max-width:640px){.db-bento{grid-template-columns:1fr;} .db-c2{grid-column:span 1;}}
+@media (prefers-reduced-motion:reduce){.db-wrap *{animation:none!important; opacity:1!important; transform:none!important;}}
+</style>
+{% endblock %}
+
 {% block content %}
+<div class="db-wrap">
 
-{# ── Cinematic hero (Stitch control-room) ── #}
-<section class="hero-cinematic">
-  <div class="hero-cine-kicker">
-    <span class="hero-cine-line" aria-hidden="true"></span>
-    <span class="hero-cine-pip" aria-hidden="true"></span>
-    Live governance active
-  </div>
-  <h1 class="hero-cine-title">AI Governance<br>Control Room</h1>
-  <p class="hero-cine-lede">Automated onboarding, issue triage, health diagnostics, and super&#8209;admin oversight for the shared Aqua AI backend.</p>
-
-  <div class="hero-cine-actions">
+  <div class="db-actions">
     {% if IS_SUPER_ADMIN %}
     <form method="post" action="{% url 'admin_portal:process_now' %}">
       {% csrf_token %}
-      <button class="btn-primary" type="submit">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      <button class="db-btn db-btn-primary" type="submit">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
         Run full AI scan
       </button>
     </form>
     {% endif %}
-    <a class="btn" href="{% url 'admin_portal:intake_list' %}">View pending accounts</a>
-    <a class="btn" href="{% url 'admin_portal:issue_list' %}">Open flagged issues</a>
+    <a class="db-btn" href="{% url 'admin_portal:intake_list' %}">View pending accounts</a>
+    <a class="db-btn" href="{% url 'admin_portal:issue_list' %}">Open flagged issues</a>
+    <a class="db-btn" href="{% url 'admin_portal:review_list' %}">Pending reviews</a>
   </div>
 
-  <div class="hero-cine-stats">
-    <div class="cine-stat accent-green">
-      <div class="cine-stat-label">Pending intake</div>
-      <div class="cine-stat-value">{{ pending_breeder_count|add:pending_consultant_count }}</div>
-      <div class="cine-stat-note">Breeders {{ pending_breeder_count }} &middot; Consultants {{ pending_consultant_count }}</div>
-    </div>
-    <div class="cine-stat accent-blue">
-      <div class="cine-stat-label">Open issues</div>
-      <div class="cine-stat-value">{{ issue_counts.open }}</div>
-      <div class="cine-stat-note">Critical {{ issue_counts.critical }}</div>
-    </div>
-    <div class="cine-stat accent-lime">
-      <div class="cine-stat-label">Reviewed today</div>
-      <div class="cine-stat-value">{{ today_counts.total }}</div>
-      <div class="cine-stat-note">Approved {{ today_counts.approved }} &middot; Flagged {{ today_counts.flagged }}</div>
-    </div>
-  </div>
-</section>
+  <div class="db-bento">
 
+    {# ── Weekly chart (big) ── #}
+    <section class="db-tile db-chart db-c2 db-r3" style="animation-delay:.04s">
+      <h3>Review activity <span class="db-mut">— last 7 days</span>
+        <a class="db-link" href="{% url 'admin_portal:daily_report_list' %}">Reports →</a></h3>
+      <div class="db-chart-host"><canvas id="weekChart"></canvas></div>
+    </section>
 
-{# ── Metric cards ── #}
-<div class="metrics-grid">
-  <div class="metric-card">
-    <div class="metric-label">Total Reviews</div>
-    <div class="metric-value">{{ counts.total }}</div>
-    <div class="metric-hint">Today: {{ today_counts.total }}</div>
-  </div>
-  <div class="metric-card">
-    <div class="metric-label">Approved</div>
-    <div class="metric-value">{{ counts.approved }}</div>
-    <div class="metric-hint">Today: {{ today_counts.approved }}</div>
-  </div>
-  <div class="metric-card">
-    <div class="metric-label">Rejected</div>
-    <div class="metric-value">{{ counts.rejected }}</div>
-    <div class="metric-hint">Today: {{ today_counts.rejected }}</div>
-  </div>
-  <div class="metric-card">
-    <div class="metric-label">Pending</div>
-    <div class="metric-value">{{ counts.pending }}</div>
-    <div class="metric-hint">Awaiting analysis or manual follow-up</div>
-  </div>
-  <div class="metric-card">
-    <div class="metric-label">Pending Intake</div>
-    <div class="metric-value">{{ pending_breeder_count|add:pending_consultant_count }}</div>
-    <div class="metric-hint">Breeders: {{ pending_breeder_count }} &middot; Consultants: {{ pending_consultant_count }}</div>
-  </div>
-  <div class="metric-card">
-    <div class="metric-label">Open Issues</div>
-    <div class="metric-value">{{ issue_counts.open }}</div>
-    <div class="metric-hint">Critical: {{ issue_counts.critical }}</div>
+    {# ── KPIs (each a working link) ── #}
+    <a class="db-tile tone-amber" href="{% url 'admin_portal:intake_list' %}" style="animation-delay:.08s">
+      <div class="db-kpi-label"><span class="db-kpi-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg></span> Pending intake</div>
+      <div class="db-kpi-val">{{ pending_breeder_count|add:pending_consultant_count }}</div>
+      <div class="db-kpi-sub">Breeders {{ pending_breeder_count }} · Consultants {{ pending_consultant_count }}</div>
+    </a>
+
+    <a class="db-tile tone-red" href="{% url 'admin_portal:issue_list' %}" style="animation-delay:.12s">
+      <div class="db-kpi-label"><span class="db-kpi-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span> Open issues</div>
+      <div class="db-kpi-val">{{ issue_counts.open }}</div>
+      <div class="db-kpi-sub">Critical {{ issue_counts.critical }} · {{ issue_counts.resolved }} resolved</div>
+    </a>
+
+    <a class="db-tile tone-green" href="{% url 'admin_portal:review_list' %}" style="animation-delay:.16s">
+      <div class="db-kpi-label"><span class="db-kpi-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span> Reviewed today</div>
+      <div class="db-kpi-val">{{ today_counts.total }}</div>
+      <div class="db-kpi-sub">Approved {{ today_counts.approved }} · Flagged {{ today_counts.flagged }}</div>
+    </a>
+
+    <a class="db-tile tone-blue" href="{% url 'admin_portal:review_list' %}" style="animation-delay:.2s">
+      <div class="db-kpi-label"><span class="db-kpi-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></span> Total reviews</div>
+      <div class="db-kpi-val">{{ counts.total }}</div>
+      <div class="db-kpi-sub">Approved {{ counts.approved }} · {{ counts.overrides }} overrides</div>
+    </a>
+
+    <a class="db-tile tone-teal" href="{% url 'admin_portal:intake_list' %}" style="animation-delay:.24s">
+      <div class="db-kpi-label"><span class="db-kpi-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></svg></span> Breeders awaiting verify</div>
+      <div class="db-kpi-val">{{ pending_breeder_count }}</div>
+      <div class="db-kpi-sub">{{ breeder_count }} reviewed all-time</div>
+    </a>
+
+    <a class="db-tile tone-teal" href="{% url 'admin_portal:intake_list' %}" style="animation-delay:.28s">
+      <div class="db-kpi-label"><span class="db-kpi-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0z"/><path d="M12 14c-5 0-8 2.5-8 6h16c0-3.5-3-6-8-6z"/></svg></span> Consultants pending</div>
+      <div class="db-kpi-val">{{ pending_consultant_count }}</div>
+      <div class="db-kpi-sub">{{ consultant_count }} reviewed all-time</div>
+    </a>
+
+    {# ── Recent reviews ── #}
+    <section class="db-tile db-c2 db-r2" style="animation-delay:.32s">
+      <h3>Recent reviews <a class="db-link" href="{% url 'admin_portal:review_list' %}">Open all →</a></h3>
+      {% for review in recent_reviews|slice:":5" %}
+      <a class="db-row" href="{% url 'admin_portal:review_detail' review.id %}">
+        <span class="db-av">{{ review.subject_display_name|default:review.subject_user_email|default:"?"|first|upper }}</span>
+        <span><span class="db-nm">{{ review.subject_display_name|default:review.subject_user_email }}</span>
+          <span class="db-mt" style="display:block;">{{ review.subject_type }} · {{ review.created_at|date:"d M H:i" }}</span></span>
+        <span class="db-tag {{ review.badge_class }}">{{ review.decision }}</span>
+      </a>
+      {% empty %}
+      <div class="db-empty">No reviews yet.</div>
+      {% endfor %}
+    </section>
+
+    {# ── Platform health ── #}
+    <section class="db-tile db-c2 db-r2" style="animation-delay:.36s">
+      <h3>Runtime health</h3>
+      <div class="db-health">
+        {% for key, item in health_snapshot.items %}
+        <div class="db-hrow">
+          <span class="db-dot {% if item.state != 'good' %}{{ item.state|default:'bad' }}{% endif %}"></span>
+          <span class="db-hn">{{ item.label }}</span>
+          <span class="db-hs">{{ item.detail|truncatechars:22 }}</span>
+        </div>
+        {% empty %}
+        <div class="db-empty">No health data.</div>
+        {% endfor %}
+      </div>
+    </section>
+
+    {# ── Recent flagged issues ── #}
+    <section class="db-tile db-c2 db-r2" style="animation-delay:.4s">
+      <h3>Flagged issues <a class="db-link" href="{% url 'admin_portal:issue_list' %}">Open all →</a></h3>
+      {% for issue in recent_issues|slice:":5" %}
+      <a class="db-row" href="{% url 'admin_portal:issue_detail' issue.id %}">
+        <span><span class="db-nm">{{ issue.source_label }}</span>
+          <span class="db-mt" style="display:block;">{{ issue.subject_display_name|default:issue.subject_user_email|truncatechars:30 }}</span></span>
+        <span class="db-tag {{ issue.badge_class }}">{{ issue.severity }}</span>
+      </a>
+      {% empty %}
+      <div class="db-empty">No issues triaged yet.</div>
+      {% endfor %}
+    </section>
+
+    {# ── Recent reports ── #}
+    <section class="db-tile db-c2 db-r2" style="animation-delay:.44s">
+      <h3>Recent reports <a class="db-link" href="{% url 'admin_portal:daily_report_list' %}">Open all →</a></h3>
+      {% for report in last_reports|slice:":5" %}
+      <a class="db-row" href="{% url 'admin_portal:daily_report_detail' report.id %}">
+        <span class="db-nm" style="font-family:monospace;">{{ report.report_date }}</span>
+        <span class="db-mt">A {{ report.approved_count }} · R {{ report.rejected_count }} · F {{ report.flagged_count }}</span>
+        <span class="db-tag info" style="margin-left:auto;">{{ report.issue_count }} issues</span>
+      </a>
+      {% empty %}
+      <div class="db-empty">No reports generated yet.</div>
+      {% endfor %}
+    </section>
+
   </div>
 </div>
-
-{# ── Health ── #}
-<div class="card">
-  <div class="card-header">
-    <div>
-      <div class="card-title">Runtime health</div>
-      <div class="card-subtitle">Deployment and integration readiness at a glance</div>
-    </div>
-  </div>
-  <div class="health-grid">
-    {% for key, item in health_snapshot.items %}
-    <div class="health-card {{ item.state|default:'bad' }}">
-      <div class="health-label">{{ item.label }}</div>
-      <div class="helper-text">{{ item.detail }}</div>
-    </div>
-    {% endfor %}
-  </div>
-</div>
-
-{# ── Chart + Coverage ── #}
-<div class="grid-2">
-  <div class="card">
-    <div class="card-header">
-      <div>
-        <div class="card-title">7‑day activity</div>
-        <div class="card-subtitle">Approvals, rejections, signup flags, and issue triage volume</div>
-      </div>
-    </div>
-    <div class="chart-shell">
-      <canvas id="weekChart"></canvas>
-    </div>
-  </div>
-
-  <div class="stack">
-    <div class="card">
-      <div class="card-header">
-        <div>
-          <div class="card-title">Coverage snapshot</div>
-          <div class="card-subtitle">Reviewed account mix across the monitored roles</div>
-        </div>
-      </div>
-      <div class="detail-list">
-        <div class="detail-item split">
-          <strong>Breeders reviewed</strong>
-          <span class="stat-chip">{{ breeder_count }}</span>
-        </div>
-        <div class="detail-item split">
-          <strong>Consultants reviewed</strong>
-          <span class="stat-chip">{{ consultant_count }}</span>
-        </div>
-        <div class="detail-item split">
-          <strong>Issues triaged</strong>
-          <span class="stat-chip">{{ issue_counts.total }}</span>
-        </div>
-        <div class="detail-item split">
-          <strong>Critical issues open</strong>
-          <span class="stat-chip">{{ issue_counts.critical }}</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-header">
-        <div>
-          <div class="card-title">Recent reports</div>
-          <div class="card-subtitle">Daily summaries with drill‑down into review and issue decisions</div>
-        </div>
-        <a class="btn btn-sm" href="{% url 'admin_portal:daily_report_list' %}">Open all</a>
-      </div>
-      <div class="table-wrap">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Approvals / Rej / Flags</th>
-              <th>Issues</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for report in last_reports %}
-            <tr>
-              <td class="mono">{{ report.report_date }}</td>
-              <td>
-                <span class="badge ok">{{ report.approved_count }}</span>&nbsp;
-                <span class="badge danger">{{ report.rejected_count }}</span>&nbsp;
-                <span class="badge warn">{{ report.flagged_count }}</span>
-              </td>
-              <td>{{ report.issue_count }}</td>
-              <td><a class="btn btn-sm" href="{% url 'admin_portal:daily_report_detail' report.id %}">Open</a></td>
-            </tr>
-            {% empty %}
-            <tr><td colspan="4" class="empty-state">No reports generated yet.</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-</div>
-
-{# ── Recent Reviews + Issues ── #}
-<div class="grid-2-equal">
-  <div class="card">
-    <div class="card-header">
-      <div>
-        <div class="card-title">Recent account reviews</div>
-        <div class="card-subtitle">New breeder and consultant decisions</div>
-      </div>
-      <a class="btn btn-sm" href="{% url 'admin_portal:review_list' %}">Open reviews</a>
-    </div>
-    <div class="table-wrap">
-      <table class="table">
-        <thead>
-          <tr>
-            <th>Account</th>
-            <th>Decision</th>
-            <th>Confidence</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for review in recent_reviews %}
-          <tr>
-            <td>
-              <div class="cell-name">{{ review.subject_display_name|default:review.subject_user_email }}</div>
-              <div class="cell-sub">{{ review.subject_type }} &middot; {{ review.created_at|date:"d M H:i" }}</div>
-            </td>
-            <td>
-              <span class="badge {{ review.badge_class }}">{{ review.decision }}</span>
-              {% if review.manually_overridden %}<br><span class="badge override" style="margin-top:4px;">override</span>{% endif %}
-            </td>
-            <td>
-              <div class="confidence-bar">
-                <div class="confidence-fill {{ review.confidence_level }}" style="width:{{ review.confidence_percent }}%;"></div>
-              </div>
-              <div class="cell-sub mono">{{ review.confidence|floatformat:2 }}</div>
-            </td>
-            <td><a class="btn btn-sm" href="{% url 'admin_portal:review_detail' review.id %}">Open</a></td>
-          </tr>
-          {% empty %}
-          <tr><td colspan="4" class="empty-state">No reviews yet.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-header">
-      <div>
-        <div class="card-title">Recent flagged issues</div>
-        <div class="card-subtitle">Incidents and consultant warnings needing oversight</div>
-      </div>
-      <a class="btn btn-sm" href="{% url 'admin_portal:issue_list' %}">Open issues</a>
-    </div>
-    <div class="table-wrap">
-      <table class="table">
-        <thead>
-          <tr>
-            <th>Source</th>
-            <th>Severity</th>
-            <th>Summary</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for issue in recent_issues %}
-          <tr>
-            <td>
-              <div class="cell-name">{{ issue.source_label }}</div>
-              <div class="cell-sub">{{ issue.subject_display_name|default:issue.subject_user_email }}</div>
-            </td>
-            <td>
-              <span class="badge {{ issue.badge_class }}">{{ issue.severity }}</span>
-              {% if issue.resolved %}<br><span class="badge ok" style="margin-top:4px;">resolved</span>{% endif %}
-            </td>
-            <td class="cell-sub">{{ issue.summary|default:issue.title|truncatechars:90 }}</td>
-            <td><a class="btn btn-sm" href="{% url 'admin_portal:issue_detail' issue.id %}">Open</a></td>
-          </tr>
-          {% empty %}
-          <tr><td colspan="4" class="empty-state">No issues triaged yet.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-</div>
-
 {% endblock %}
 
 {% block extra_js %}
@@ -277,105 +221,30 @@
 (function () {
   const weekData = {{ week_data|safe }};
   const ctx = document.getElementById("weekChart");
-  if (!ctx) return;
-
-  /* Resolve CSS variables from the document root */
-  const cs = getComputedStyle(document.documentElement);
-  const isDark = document.body.dataset.theme !== "light";
-
-  const gridColor  = isDark ? "rgba(120,190,222,0.07)" : "rgba(30,80,110,0.08)";
-  const tickColor  = isDark ? "#5c7d92" : "#6a8898";
-  const textColor  = isDark ? "#c8e8f8" : "#1a3848";
-  const tooltipBg  = isDark ? "rgba(8,22,34,0.96)" : "rgba(255,255,255,0.96)";
-  const tooltipBdr = isDark ? "rgba(125,212,255,0.22)" : "rgba(30,95,130,0.18)";
-
+  if (!ctx || typeof Chart === "undefined") return;
+  const tick = "#5c7d92", text = "#c8e8f8", grid = "rgba(120,190,222,0.07)";
   new Chart(ctx, {
     type: "bar",
     data: {
       labels: weekData.map((d) => d.date),
       datasets: [
-        {
-          label: "Approved",
-          data: weekData.map((d) => d.approved),
-          backgroundColor: "rgba(109,232,159,0.72)",
-          hoverBackgroundColor: "rgba(109,232,159,0.90)",
-          borderRadius: 6,
-          borderSkipped: false,
-        },
-        {
-          label: "Rejected",
-          data: weekData.map((d) => d.rejected),
-          backgroundColor: "rgba(255,117,107,0.72)",
-          hoverBackgroundColor: "rgba(255,117,107,0.90)",
-          borderRadius: 6,
-          borderSkipped: false,
-        },
-        {
-          label: "Signup Flags",
-          data: weekData.map((d) => d.flagged),
-          backgroundColor: "rgba(245,201,110,0.72)",
-          hoverBackgroundColor: "rgba(245,201,110,0.90)",
-          borderRadius: 6,
-          borderSkipped: false,
-        },
-        {
-          label: "Issues",
-          data: weekData.map((d) => d.issues),
-          backgroundColor: "rgba(125,212,255,0.72)",
-          hoverBackgroundColor: "rgba(125,212,255,0.90)",
-          borderRadius: 6,
-          borderSkipped: false,
-        },
+        { label: "Approved", data: weekData.map((d) => d.approved), backgroundColor: "rgba(52,211,153,0.78)", borderRadius: 5, borderSkipped: false },
+        { label: "Rejected", data: weekData.map((d) => d.rejected), backgroundColor: "rgba(251,113,133,0.72)", borderRadius: 5, borderSkipped: false },
+        { label: "Flags", data: weekData.map((d) => d.flagged), backgroundColor: "rgba(251,191,36,0.72)", borderRadius: 5, borderSkipped: false },
+        { label: "Issues", data: weekData.map((d) => d.issues), backgroundColor: "rgba(125,212,255,0.72)", borderRadius: 5, borderSkipped: false },
       ],
     },
     options: {
-      responsive: true,
-      maintainAspectRatio: false,
+      responsive: true, maintainAspectRatio: false,
       interaction: { mode: "index", intersect: false },
       animation: { duration: 600, easing: "easeOutQuart" },
       scales: {
-        x: {
-          ticks: { color: tickColor, font: { family: "'Inter', sans-serif", size: 11 } },
-          grid: { color: gridColor, drawBorder: false },
-          border: { display: false },
-        },
-        y: {
-          ticks: {
-            color: tickColor,
-            font: { family: "'Inter', sans-serif", size: 11 },
-            stepSize: 1,
-            precision: 0,
-          },
-          grid: { color: gridColor, drawBorder: false },
-          border: { display: false },
-        },
+        x: { ticks: { color: tick, font: { family: "'Inter',sans-serif", size: 11 } }, grid: { color: grid, drawBorder: false }, border: { display: false } },
+        y: { ticks: { color: tick, font: { family: "'Inter',sans-serif", size: 11 }, stepSize: 1, precision: 0 }, grid: { color: grid, drawBorder: false }, border: { display: false } },
       },
       plugins: {
-        legend: {
-          labels: {
-            color: textColor,
-            font: { family: "'Inter', sans-serif", size: 12 },
-            boxWidth: 12,
-            boxHeight: 12,
-            borderRadius: 3,
-            useBorderRadius: true,
-            padding: 16,
-          },
-        },
-        tooltip: {
-          backgroundColor: tooltipBg,
-          borderColor: tooltipBdr,
-          borderWidth: 1,
-          titleColor: textColor,
-          bodyColor: tickColor,
-          padding: 12,
-          cornerRadius: 10,
-          titleFont: { family: "'Inter', sans-serif", size: 12, weight: "600" },
-          bodyFont: { family: "'Inter', sans-serif", size: 12 },
-          callbacks: {
-            label: (ctx) => ` ${ctx.dataset.label}: ${ctx.parsed.y}`,
-          },
-        },
+        legend: { labels: { color: text, font: { family: "'Inter',sans-serif", size: 12 }, boxWidth: 12, boxHeight: 12, borderRadius: 3, useBorderRadius: true, padding: 14 } },
+        tooltip: { backgroundColor: "rgba(8,22,34,0.96)", borderColor: "rgba(125,212,255,0.22)", borderWidth: 1, titleColor: text, bodyColor: tick, padding: 12, cornerRadius: 10 },
       },
     },
   });
