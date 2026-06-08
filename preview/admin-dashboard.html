@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aqua AI — Admin Dashboard (preview)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap">
+<style>
+/* ============================================================
+   Aqua AI Admin — dark shell
+   · Left nav = "Animated Dock" (proximity magnify) ported from
+     framer-motion to vanilla JS.
+   · Content = "Interactive Bento Gallery" style: animated bento
+     tiles (staggered entrance, hover lift, gradient overlays).
+   Palette: vault blue #1E3A5F + secure green #059669.
+   ============================================================ */
+:root{
+  --bg:#080d18; --panel:#0d1626; --tile:#111c30; --tile-2:#0e1828;
+  --fg:#eef4fb; --muted:#9fb2c8; --faint:#5f7188;
+  --line:rgba(255,255,255,.08); --line-2:rgba(255,255,255,.14);
+  --accent:#10b981; --accent-d:#059669; --blue:#3b82f6; --amber:#f59e0b; --red:#f0616d; --teal:#0ea5a0;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;height:100%;}
+body{
+  font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  color:var(--fg); background:
+    radial-gradient(1100px 700px at 0% -10%, rgba(30,58,95,.5), transparent 60%),
+    radial-gradient(900px 700px at 110% 110%, rgba(5,150,105,.16), transparent 55%),
+    var(--bg);
+}
+.app{display:grid; grid-template-columns:96px 1fr; min-height:100vh;}
+
+/* ---------------- Animated Dock (left nav) ---------------- */
+.dock{
+  position:sticky; top:0; height:100vh; display:flex; flex-direction:column; align-items:center;
+  gap:10px; padding:18px 0; background:linear-gradient(180deg, rgba(13,22,38,.92), rgba(8,13,24,.92));
+  border-right:1px solid var(--line); backdrop-filter:blur(8px); z-index:5;
+}
+.dock-brand{width:46px; height:46px; border-radius:14px; display:grid; place-items:center;
+  font-weight:800; font-size:20px; color:#fff; margin-bottom:6px;
+  background:linear-gradient(135deg,#1e3a5f,#0ea5a0); box-shadow:0 8px 22px rgba(8,30,55,.6), inset 0 0 0 1px rgba(255,255,255,.14);}
+.dock-items{display:flex; flex-direction:column; align-items:center; gap:12px; flex:1; padding-top:6px;}
+.dock-item{position:relative; width:46px; height:46px; flex:none;
+  display:grid; place-items:center; border-radius:50%; color:var(--muted); cursor:pointer;
+  background:rgba(255,255,255,.04); border:1px solid var(--line);
+  transition:transform .12s ease-out, background .2s, color .2s, border-color .2s;
+  transform-origin:left center; will-change:transform;}
+.dock-item svg{width:20px; height:20px;}
+.dock-item:hover{color:var(--fg); background:rgba(16,185,129,.12); border-color:rgba(16,185,129,.4);}
+.dock-item.active{color:#fff; background:linear-gradient(135deg,var(--accent-d),var(--teal));
+  border-color:transparent; box-shadow:0 8px 20px -6px rgba(5,150,105,.6);}
+.dock-item .badge{position:absolute; top:-2px; right:-2px; min-width:16px; height:16px; padding:0 4px;
+  border-radius:9px; background:var(--red); color:#fff; font-size:10px; font-weight:700;
+  display:grid; place-items:center; border:2px solid var(--bg);}
+/* tooltip (label on hover — keeps discoverability the dock would otherwise lose) */
+.dock-item .tip{position:absolute; left:58px; top:50%; transform:translateY(-50%) translateX(-6px);
+  white-space:nowrap; background:#1b2942; color:var(--fg); font-size:12.5px; font-weight:500;
+  padding:6px 10px; border-radius:8px; border:1px solid var(--line-2); box-shadow:0 8px 20px rgba(0,0,0,.5);
+  opacity:0; pointer-events:none; transition:opacity .15s, transform .15s; z-index:10;}
+.dock-item .tip::before{content:""; position:absolute; left:-5px; top:50%; transform:translateY(-50%) rotate(45deg);
+  width:9px; height:9px; background:#1b2942; border-left:1px solid var(--line-2); border-bottom:1px solid var(--line-2);}
+.dock-item:hover .tip{opacity:1; transform:translateY(-50%) translateX(0);}
+.dock-user{width:42px; height:42px; border-radius:50%; display:grid; place-items:center; font-weight:700;
+  color:#fff; background:linear-gradient(135deg,#334155,#1e3a5f); border:1px solid var(--line-2); margin-top:6px;}
+
+/* ---------------- Main panel ---------------- */
+.main{position:relative; padding:26px clamp(18px,3vw,40px) 48px;}
+.topbar{display:flex; align-items:flex-end; justify-content:space-between; gap:16px; margin-bottom:24px;
+  opacity:0; animation:rise .6s ease-out forwards;}
+.topbar h1{margin:0; font-size:24px; font-weight:700; letter-spacing:-.02em;}
+.topbar .sub{margin-top:4px; color:var(--muted); font-size:13.5px;}
+.topbar .chip{display:inline-flex; align-items:center; gap:8px; font-size:12.5px; color:var(--muted);
+  padding:8px 12px; border:1px solid var(--line); border-radius:999px; background:rgba(255,255,255,.03);}
+.pip{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 0 rgba(16,185,129,.5);animation:pulse 2s ease-out infinite;}
+
+/* ---------------- Bento grid ---------------- */
+.bento{display:grid; grid-template-columns:repeat(4,1fr); grid-auto-rows:96px; gap:16px;}
+.tile{position:relative; overflow:hidden; border-radius:18px; padding:18px;
+  background:linear-gradient(180deg,var(--tile),var(--tile-2)); border:1px solid var(--line);
+  box-shadow:0 20px 40px -28px rgba(0,0,0,.8);
+  opacity:0; animation:rise .55s ease-out forwards; transition:transform .18s ease, border-color .2s, box-shadow .25s;}
+.tile:hover{transform:translateY(-3px) scale(1.012); border-color:var(--line-2);
+  box-shadow:0 28px 54px -26px rgba(0,0,0,.85);}
+.tile::after{content:""; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
+  background:radial-gradient(120% 120% at 100% 0%, rgba(255,255,255,.06), transparent 45%);}
+.tile .glow{position:absolute; inset:-1px; border-radius:inherit; pointer-events:none; opacity:.0; transition:opacity .25s;}
+.tile:hover .glow{opacity:1;}
+/* spans */
+.c2{grid-column:span 2;} .c4{grid-column:span 4;}
+.r2{grid-row:span 2;} .r3{grid-row:span 3;}
+
+.kpi-label{font-size:12.5px; color:var(--muted); display:flex; align-items:center; gap:8px;}
+.kpi-ico{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;flex:none;}
+.kpi-ico svg{width:16px;height:16px;}
+.kpi-val{font-size:34px; font-weight:800; letter-spacing:-.02em; margin-top:10px; line-height:1;}
+.kpi-sub{font-size:12px; color:var(--faint); margin-top:8px;}
+.kpi-up{color:var(--accent);} .kpi-down{color:var(--red);}
+.tone-green .kpi-ico{background:rgba(16,185,129,.16); color:#34d399;}
+.tone-blue  .kpi-ico{background:rgba(59,130,246,.16); color:#60a5fa;}
+.tone-amber .kpi-ico{background:rgba(245,158,11,.16); color:#fbbf24;}
+.tone-red   .kpi-ico{background:rgba(240,97,109,.16); color:#fb7185;}
+.tone-teal  .kpi-ico{background:rgba(14,165,160,.16); color:#2dd4bf;}
+
+.tile h3{margin:0 0 14px; font-size:14px; font-weight:600;}
+.tile h3 .muted{color:var(--faint); font-weight:400; font-size:12px;}
+
+/* weekly chart */
+.chart{display:flex; align-items:flex-end; gap:10px; height:calc(100% - 36px); padding-top:6px;}
+.chart .day{flex:1; display:flex; flex-direction:column; align-items:center; gap:6px; height:100%;}
+.chart .bars{flex:1; width:100%; display:flex; align-items:flex-end; justify-content:center; gap:3px;}
+.chart .bar{width:7px; border-radius:4px 4px 0 0; transform-origin:bottom; animation:grow .7s ease-out backwards;}
+.chart .bar.a{background:linear-gradient(180deg,#34d399,#059669);}
+.chart .bar.r{background:linear-gradient(180deg,#fb7185,#e11d48);}
+.chart .bar.f{background:linear-gradient(180deg,#fbbf24,#d97706);}
+.chart .lbl{font-size:11px; color:var(--faint);}
+.legend{display:flex; gap:14px; margin-top:6px; font-size:11.5px; color:var(--muted);}
+.legend span{display:inline-flex; align-items:center; gap:6px;}
+.dot{width:8px;height:8px;border-radius:3px;}
+
+/* lists */
+.row{display:flex; align-items:center; gap:12px; padding:9px 0; border-bottom:1px solid var(--line);}
+.row:last-child{border-bottom:0;}
+.av{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;font-size:12px;font-weight:700;color:#fff;flex:none;
+  background:linear-gradient(135deg,#334155,#1e3a5f);}
+.row .nm{font-size:13px; font-weight:500;}
+.row .mt{font-size:11.5px; color:var(--faint);}
+.tag{margin-left:auto; font-size:11px; font-weight:600; padding:4px 9px; border-radius:999px;}
+.tag.ok{background:rgba(16,185,129,.16); color:#34d399;}
+.tag.no{background:rgba(240,97,109,.16); color:#fb7185;}
+.tag.fl{background:rgba(245,158,11,.16); color:#fbbf24;}
+.tag.pd{background:rgba(148,163,184,.16); color:#cbd5e1;}
+
+/* health pills */
+.health{display:flex; flex-direction:column; gap:10px;}
+.hrow{display:flex; align-items:center; gap:10px; font-size:13px;}
+.hrow .nm{color:var(--muted);} .hrow .st{margin-left:auto; font-weight:600;}
+.hbar{height:6px; border-radius:4px; background:rgba(255,255,255,.06); overflow:hidden; flex:1; max-width:120px;}
+.hbar i{display:block; height:100%; border-radius:4px; background:linear-gradient(90deg,#059669,#0ea5a0);}
+
+@keyframes rise{from{opacity:0; transform:translateY(16px);} to{opacity:1; transform:translateY(0);}}
+@keyframes grow{from{transform:scaleY(0);} to{transform:scaleY(1);}}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(16,185,129,.5);}70%{box-shadow:0 0 0 7px rgba(16,185,129,0);}100%{box-shadow:0 0 0 0 rgba(16,185,129,0);}}
+
+@media (max-width:1100px){.bento{grid-template-columns:repeat(2,1fr);} .c4{grid-column:span 2;}}
+@media (max-width:680px){.app{grid-template-columns:72px 1fr;} .bento{grid-template-columns:1fr;} .c2,.c4{grid-column:span 1;}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;} .tile,.topbar{opacity:1!important; transform:none!important;}}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ============ Animated Dock nav ============ -->
+  <aside class="dock" id="dock">
+    <div class="dock-brand">A</div>
+    <div class="dock-items" id="dockItems">
+      <a class="dock-item active" data-tip="Dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span class="tip">Dashboard</span></a>
+      <a class="dock-item" data-tip="Pending Intake"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg><span class="tip">Pending Intake</span></a>
+      <a class="dock-item" data-tip="Account Directory"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg><span class="tip">Account Directory</span></a>
+      <a class="dock-item" data-tip="Pending Reviews"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg><span class="tip">Pending Reviews</span></a>
+      <a class="dock-item" data-tip="Flagged Issues"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span class="badge">5</span><span class="tip">Flagged Issues</span></a>
+      <a class="dock-item" data-tip="Feature D Ops"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19h16"/><path d="M6 16V8"/><path d="M12 16V5"/><path d="M18 16v-3"/><path d="M8 8h8"/></svg><span class="tip">Feature D Ops</span></a>
+      <a class="dock-item" data-tip="Inbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg><span class="tip">Inbox</span></a>
+      <a class="dock-item" data-tip="Daily Reports"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span class="tip">Daily Reports</span></a>
+      <a class="dock-item" data-tip="Data Requests"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6"/><path d="M9 17h6"/></svg><span class="badge">2</span><span class="tip">Data Requests</span></a>
+      <a class="dock-item" data-tip="Team Access"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span class="tip">Team Access</span></a>
+      <a class="dock-item" data-tip="Audit Log"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg><span class="tip">Audit Log</span></a>
+      <a class="dock-item" data-tip="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg><span class="tip">Settings</span></a>
+    </div>
+    <div class="dock-user" title="ben@humara.io">B</div>
+  </aside>
+
+  <!-- ============ Main ============ -->
+  <main class="main">
+    <div class="topbar">
+      <div>
+        <h1>Control Room</h1>
+        <div class="sub">Operational overview · today</div>
+      </div>
+      <div class="chip"><span class="pip"></span> All systems online</div>
+    </div>
+
+    <div class="bento">
+      <!-- weekly activity (big) -->
+      <section class="tile c2 r3" style="animation-delay:.04s">
+        <h3>Review activity <span class="muted">— last 7 days</span></h3>
+        <div class="chart" id="chart"></div>
+        <div class="legend"><span><i class="dot" style="background:#059669"></i>Approved</span><span><i class="dot" style="background:#e11d48"></i>Rejected</span><span><i class="dot" style="background:#d97706"></i>Flagged</span></div>
+      </section>
+
+      <!-- KPIs -->
+      <section class="tile tone-amber" style="animation-delay:.08s">
+        <div class="kpi-label"><span class="kpi-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span> Pending reviews</div>
+        <div class="kpi-val">18</div>
+        <div class="kpi-sub">7 added today</div>
+      </section>
+      <section class="tile tone-red" style="animation-delay:.12s">
+        <div class="kpi-label"><span class="kpi-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span> Open issues</div>
+        <div class="kpi-val">5 <span style="font-size:14px" class="kpi-down">· 2 critical</span></div>
+        <div class="kpi-sub">42 resolved all-time</div>
+      </section>
+      <section class="tile tone-green" style="animation-delay:.16s">
+        <div class="kpi-label"><span class="kpi-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span> Approved today</div>
+        <div class="kpi-val">23</div>
+        <div class="kpi-sub kpi-up">▲ 18% vs yesterday</div>
+      </section>
+      <section class="tile tone-blue" style="animation-delay:.2s">
+        <div class="kpi-label"><span class="kpi-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></span> Total reviews</div>
+        <div class="kpi-val">1,284</div>
+        <div class="kpi-sub">31 manual overrides</div>
+      </section>
+
+      <!-- pending verification (2-up) -->
+      <section class="tile tone-teal" style="animation-delay:.24s">
+        <div class="kpi-label"><span class="kpi-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></svg></span> Breeders awaiting verify</div>
+        <div class="kpi-val">6</div>
+      </section>
+      <section class="tile tone-teal" style="animation-delay:.28s">
+        <div class="kpi-label"><span class="kpi-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0z"/><path d="M12 14c-5 0-8 2.5-8 6h16c0-3.5-3-6-8-6z"/></svg></span> Consultants pending</div>
+        <div class="kpi-val">3</div>
+      </section>
+
+      <!-- recent reviews (wide list) -->
+      <section class="tile c2 r2" style="animation-delay:.32s">
+        <h3>Recent reviews</h3>
+        <div class="row"><div class="av">K</div><div><div class="nm">Koi Gardens Ltd</div><div class="mt">Breeder · 2m ago</div></div><span class="tag ok">Approved</span></div>
+        <div class="row"><div class="av">A</div><div><div class="nm">AquaVet Clinic</div><div class="mt">Consultant · 14m ago</div></div><span class="tag fl">Flagged</span></div>
+        <div class="row"><div class="av">R</div><div><div class="nm">Reef Supply Co</div><div class="mt">Breeder · 38m ago</div></div><span class="tag no">Rejected</span></div>
+        <div class="row"><div class="av">M</div><div><div class="nm">Marine Habitat</div><div class="mt">Breeder · 1h ago</div></div><span class="tag pd">Pending</span></div>
+      </section>
+
+      <!-- health -->
+      <section class="tile c2 r2" style="animation-delay:.36s">
+        <h3>Platform health</h3>
+        <div class="health">
+          <div class="hrow"><span class="nm">API uptime</span><div class="hbar"><i style="width:99%"></i></div><span class="st" style="color:#34d399">99.9%</span></div>
+          <div class="hrow"><span class="nm">Webhook backlog</span><div class="hbar"><i style="width:8%"></i></div><span class="st" style="color:#34d399">clear</span></div>
+          <div class="hrow"><span class="nm">DSAR queue</span><div class="hbar"><i style="width:20%"></i></div><span class="st" style="color:#fbbf24">2 open</span></div>
+          <div class="hrow"><span class="nm">Inference (TLS)</span><div class="hbar"><i style="width:100%"></i></div><span class="st" style="color:#34d399">secure</span></div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<script>
+/* ---- Animated Dock: proximity magnify (framer-motion port) ---- */
+(function(){
+  var dock = document.getElementById('dock');
+  var items = Array.prototype.slice.call(document.querySelectorAll('.dock-item'));
+  if (!dock || !items.length) return;
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce) return;
+
+  var MAX = 140;     // px of influence (the [-150,0,150] range in the original)
+  var BOOST = 0.55;  // nearest icon scales to ~1.55 (original 40->80 width ≈ 1.5x)
+
+  function update(cursorY){
+    items.forEach(function(it){
+      var r = it.getBoundingClientRect();
+      var center = r.top + r.height/2;
+      var d = Math.abs(cursorY - center);
+      var f = Math.max(0, 1 - d / MAX);          // 1 at cursor, 0 far away
+      var scale = 1 + BOOST * f;
+      it.style.transform = 'translateX(' + (f*8).toFixed(2) + 'px) scale(' + scale.toFixed(3) + ')';
+    });
+  }
+  dock.addEventListener('mousemove', function(e){ update(e.clientY); });
+  dock.addEventListener('mouseleave', function(){
+    items.forEach(function(it){ it.style.transform = ''; });
+  });
+
+  /* demo: clicking sets active */
+  items.forEach(function(it){
+    it.addEventListener('click', function(){
+      items.forEach(function(x){ x.classList.remove('active'); });
+      it.classList.add('active');
+    });
+  });
+})();
+
+/* ---- Build the weekly bar chart from sample data ---- */
+(function(){
+  var data = [
+    {d:'Mon', a:12, r:3, f:2}, {d:'Tue', a:18, r:4, f:1}, {d:'Wed', a:9, r:2, f:4},
+    {d:'Thu', a:22, r:5, f:2}, {d:'Fri', a:16, r:1, f:3}, {d:'Sat', a:7, r:2, f:1}, {d:'Sun', a:23, r:4, f:2}
+  ];
+  var max = 0; data.forEach(function(x){ max = Math.max(max, x.a, x.r, x.f); });
+  var host = document.getElementById('chart'); if(!host) return;
+  data.forEach(function(x, i){
+    var day = document.createElement('div'); day.className='day';
+    var bars = document.createElement('div'); bars.className='bars';
+    [['a',x.a],['r',x.r],['f',x.f]].forEach(function(p, j){
+      var b = document.createElement('div'); b.className='bar '+p[0];
+      b.style.height = Math.max(6, (p[1]/max)*100) + '%';
+      b.style.animationDelay = (0.3 + i*0.05 + j*0.03) + 's';
+      bars.appendChild(b);
+    });
+    var lbl = document.createElement('div'); lbl.className='lbl'; lbl.textContent = x.d;
+    day.appendChild(bars); day.appendChild(lbl); host.appendChild(day);
+  });
+})();
+</script>
+</body>
+</html>
