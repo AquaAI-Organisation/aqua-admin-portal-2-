@@ -1,8 +1,9 @@
-"""Resolve OpenAI runtime configuration from Supabase edge functions first.
+"""Resolve the OpenAI runtime key from the central secrets manager first.
 
-Falls back to Django settings/env when the edge function is not configured or
-temporarily unavailable. This keeps the admin portal aligned with the wider
-AquaAI architecture where secrets may be brokered via Supabase.
+The OpenAI key is provisioned in the secrets manager and injected into the
+process environment at startup (aqua_admin/secrets_loader.py), so we read it
+straight from Django settings / env. The Supabase edge function is kept only as
+a legacy fallback for hosts that haven't switched the secrets manager on yet.
 """
 from __future__ import annotations
 
@@ -34,6 +35,12 @@ class OpenAIRuntimeConfig:
 
 def _strip(value) -> str:
     return str(value or "").strip()
+
+
+def _is_placeholder_key(key: str) -> bool:
+    """True for empty/placeholder keys (e.g. the 'sk-REPLACE-…' settings default)."""
+    k = _strip(key)
+    return (not k) or ("REPLACE" in k.upper()) or k.lower() in {"changeme", "your-key", "none"}
 
 
 def _edge_url() -> str:
@@ -138,16 +145,29 @@ def get_openai_runtime_config(*, force_refresh: bool = False) -> OpenAIRuntimeCo
     ):
         return cached
 
+    model = _strip(getattr(settings, "OPENAI_MODEL", "gpt-4o"))
+
+    # PRIMARY: the key from the central secrets manager (injected into the env at
+    # startup) / Django settings. No network call to an edge function.
+    env_key = _strip(getattr(settings, "OPENAI_API_KEY", ""))
+    if not _is_placeholder_key(env_key):
+        config = OpenAIRuntimeConfig(key=env_key, model=model, source="secrets_manager_env")
+        _CACHE.update({"checked_at": now, "config": config})
+        return config
+
+    # FALLBACK (legacy): only if no real env key is present, try the edge function
+    # — for hosts not yet wired to the secrets manager.
     edge_config = _fetch_from_edge()
     if edge_config and edge_config.configured:
         _CACHE.update({"checked_at": now, "config": edge_config})
         return edge_config
 
-    fallback = OpenAIRuntimeConfig(
-        key=_strip(getattr(settings, "OPENAI_API_KEY", "")),
-        model=_strip(getattr(settings, "OPENAI_MODEL", "gpt-4o")),
+    config = OpenAIRuntimeConfig(
+        key="",
+        model=model,
         source="django_settings_env",
-        error=edge_config.error if edge_config else "",
+        error=(edge_config.error if edge_config else "")
+        or "OPENAI_API_KEY is not set (provision it in the secrets manager under the 'admin' service).",
     )
-    _CACHE.update({"checked_at": now, "config": fallback})
-    return fallback
+    _CACHE.update({"checked_at": now, "config": config})
+    return config
