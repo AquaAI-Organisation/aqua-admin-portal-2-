@@ -8,7 +8,7 @@ from django.conf import settings
 from django.core.mail import EmailMessage, get_connection
 from django.utils import timezone
 
-from .google_oauth import gmail_configured, send_gmail_message
+from .google_oauth import gmail_configured, pick_alias_for_mailbox, send_gmail_message
 from .runtime_config import (
     get_email_runtime_config,
     get_gmail_runtime_config,
@@ -148,7 +148,15 @@ def notify_invite(invite, accept_url: str) -> dict:
         f"Accept the invite (expires {invite.expires_at:%Y-%m-%d %H:%M UTC}):\n  {accept_url}\n\n"
         f"If you were not expecting this, ignore this email.\n"
     )
-    email_result = _send_email_result(subject, body, [invite.email])
+    # Send from the integrated support mailbox so the invitee receives the link
+    # from a recognisable, monitored address (e.g. support@aquaai.uk) rather than
+    # the generic default sender.
+    email_result = _send_email_result(
+        subject,
+        body,
+        [invite.email],
+        from_email=pick_alias_for_mailbox("support"),
+    )
     delivery_status = "email_sent" if email_result["ok"] else "link_available"
     if email_result["error"]:
         delivery_status = "email_failed"

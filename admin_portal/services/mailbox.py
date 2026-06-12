@@ -26,6 +26,34 @@ def fetch_support_inbox(limit: int = 25) -> dict[str, int]:
     return _fetch_imap_inbox(limit=limit)
 
 
+def _run_privacy_automation(inquiry: SupportInquiry, created: bool) -> bool:
+    """Hands-off triage + DSAR intake for a privacy-lane message.
+
+    Shared by both the Gmail and IMAP ingestion paths so an inbound privacy
+    request is analysed and turned into a DSAR the moment it lands — no operator
+    "refresh"/"analyse" clicks required. Returns True if a new DSAR was created.
+    Scoped to the privacy lane to control OpenAI token spend; other lanes are
+    still analysed on demand. Falls back to heuristics if OpenAI is unavailable.
+    """
+    if inquiry.mailbox_kind != "privacy":
+        return False
+    if created:
+        try:
+            from .inquiry_intelligence import persist_inquiry_analysis
+
+            persist_inquiry_analysis(inquiry)
+        except Exception:
+            logger.exception("Auto analysis failed for inquiry %s", inquiry.pk)
+    try:
+        from .dsar import ensure_dsar_request_from_inquiry
+
+        dsar_request, created_request = ensure_dsar_request_from_inquiry(inquiry)
+        return bool(dsar_request and created_request)
+    except Exception:
+        logger.exception("Auto DSAR intake failed for inquiry %s", inquiry.pk)
+        return False
+
+
 def send_support_reply(inquiry: SupportInquiry, body: str) -> dict[str, str | bool]:
     result = send_custom_email(
         subject=f"Re: {inquiry.subject or 'Aqua AI support enquiry'}",
@@ -81,25 +109,10 @@ def _fetch_gmail_inbox(limit: int = 25) -> dict[str, int]:
                 continue
             if created:
                 added += 1
-                # Auto-run AI triage on new privacy-lane messages so DSAR intake
-                # is hands-off. Scoped to privacy to control OpenAI token spend;
-                # other lanes can still be analysed on demand. Falls back to
-                # heuristics if OpenAI is unavailable.
-                if inquiry.mailbox_kind == "privacy":
-                    try:
-                        from .inquiry_intelligence import persist_inquiry_analysis
-
-                        persist_inquiry_analysis(inquiry)
-                    except Exception:
-                        logger.exception("Auto analysis failed for inquiry %s", inquiry.pk)
             else:
                 updated += 1
-            if inquiry.mailbox_kind == "privacy":
-                from .dsar import ensure_dsar_request_from_inquiry
-
-                dsar_request, created_request = ensure_dsar_request_from_inquiry(inquiry)
-                if dsar_request and created_request:
-                    dsar_created += 1
+            if _run_privacy_automation(inquiry, created):
+                dsar_created += 1
         except Exception:
             # A single malformed or ambiguous message must not abort the sync;
             # log and move on so the rest of the inbox still ingests.
@@ -116,6 +129,7 @@ def _fetch_imap_inbox(limit: int = 25) -> dict[str, int]:
     client_cls = imaplib.IMAP4_SSL if mailbox.use_ssl else imaplib.IMAP4
     added = 0
     updated = 0
+    dsar_created = 0
     with client_cls(mailbox.host, mailbox.port) as client:
         try:
             client.login(mailbox.username, mailbox.password)
@@ -137,7 +151,7 @@ def _fetch_imap_inbox(limit: int = 25) -> dict[str, int]:
                 continue
             defaults = _inquiry_defaults(parsed)
             try:
-                _, created = SupportInquiry.objects.update_or_create(
+                inquiry, created = SupportInquiry.objects.update_or_create(
                     message_id=parsed["message_id"],
                     defaults=defaults,
                 )
@@ -147,7 +161,12 @@ def _fetch_imap_inbox(limit: int = 25) -> dict[str, int]:
                 added += 1
             else:
                 updated += 1
-    return {"added": added, "updated": updated, "dsar_created": 0}
+            # Same hands-off triage + DSAR intake as the Gmail path, so privacy
+            # requests are analysed and turned into DSARs automatically whether
+            # the mailbox is connected via Gmail OAuth or IMAP (e.g. M365).
+            if _run_privacy_automation(inquiry, created):
+                dsar_created += 1
+    return {"added": added, "updated": updated, "dsar_created": dsar_created}
 
 
 def _parse_gmail_message(message: dict) -> dict:
