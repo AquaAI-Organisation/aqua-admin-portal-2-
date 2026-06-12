@@ -1,0 +1,24 @@
+# Docker Compose worker for the Aqua AI admin automation.
+#
+# If you deploy the admin portal as a Docker container, add this second service
+# alongside your existing `web` service. It reuses the SAME image and env as the
+# web app and just runs the always-on automation loop instead of gunicorn.
+#
+# When you run this worker, set INBOX_AUTOREFRESH=false on the `web` service so
+# the mailbox isn't polled by both. The Postgres advisory lock makes it safe to
+# run even if it briefly overlaps, but one poller is cleaner.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f deploy/automation-worker.compose.yml up -d
+#
+services:
+  automation:
+    # Reuse the image your web service builds/uses.
+    build: .
+    # Same env file the web container loads (DB, Supabase, Gmail/IMAP creds...).
+    env_file: .env
+    environment:
+      # This process IS the poller, so the web app should not also poll.
+      INBOX_AUTOREFRESH: "false"
+    command: python manage.py run_automation --interval 120
+    restart: unless-stopped

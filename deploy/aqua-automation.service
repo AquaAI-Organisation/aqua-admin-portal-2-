@@ -1,0 +1,41 @@
+[Unit]
+# Always-on Aqua AI admin automation: polls the support/privacy mailbox
+# (auto-analyses privacy mail, creates DSAR requests, sends verification links)
+# and confirms/delivers DSARs after the requester logs in at aquaai.uk.
+#
+# Use this on a normal (non-Heroku) Linux server when you'd rather run the
+# automation as its own supervised process instead of the in-process scheduler.
+# If you enable this service, set INBOX_AUTOREFRESH=false on the web app so the
+# mailbox isn't polled twice.
+#
+# Install:
+#   1. Edit the placeholders below (User, WorkingDirectory, venv path, EnvironmentFile).
+#   2. sudo cp deploy/aqua-automation.service /etc/systemd/system/
+#   3. sudo systemctl daemon-reload
+#   4. sudo systemctl enable --now aqua-automation
+#   5. journalctl -u aqua-automation -f   # watch it work
+Description=Aqua AI admin portal mailbox + DSAR automation
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# The OS user that owns the app checkout / virtualenv.
+User=aqua
+# Absolute path to the repository root (where manage.py lives).
+WorkingDirectory=/opt/aqua-admin-portal
+# Same environment the web app loads (DATABASE_URL, Supabase, Gmail/IMAP, etc.).
+EnvironmentFile=/opt/aqua-admin-portal/.env
+# Make sure the in-process scheduler doesn't also run in the web app.
+Environment=INBOX_AUTOREFRESH=false
+# Use the project's virtualenv python. --interval is in seconds.
+ExecStart=/opt/aqua-admin-portal/.venv/bin/python manage.py run_automation --interval 120
+Restart=always
+RestartSec=5
+# Hardening (optional but recommended).
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
