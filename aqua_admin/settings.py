@@ -12,7 +12,7 @@ load_dotenv(BASE_DIR / ".env")
 # secrets from Supabase and inject them BEFORE anything below reads the environment.
 # No-op (keeps existing env) until you set the token on the host.
 from . import secrets_loader  # noqa: E402
-secrets_loader.load()
+secrets_loader.load_aws_secrets()
 
 # No insecure default — a control plane must not boot with a known key (AD-6).
 SECRET_KEY = os.getenv("SECRET_KEY")
