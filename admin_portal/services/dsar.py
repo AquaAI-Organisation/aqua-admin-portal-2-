@@ -30,7 +30,11 @@ from ..models import (
     SupportInquiry,
 )
 from .google_oauth import pick_alias_for_mailbox
-from .platform_sessions import active_session_keys_for_user, has_new_login_since_baseline
+from .platform_sessions import (
+    active_session_keys_for_user,
+    has_jwt_login_since,
+    has_new_platform_login,
+)
 from .runtime_config import get_operational_settings
 from .json_utils import sanitize_json
 from .notifier import send_custom_email
@@ -156,8 +160,16 @@ def check_dsar_login(dsar_request: DSARRequest) -> bool:
     if dsar_request.verification_expires_at and dsar_request.verification_expires_at < timezone.now():
         return False
 
-    if not has_new_login_since_baseline(dsar_request.subject_user_id, dsar_request.login_baseline_keys):
+    # Identity is proven by a fresh login made AFTER we asked them to: either a
+    # new web session (django_session) or a new JWT issued after the verification
+    # email went out. The platform is JWT-based, so the JWT signal is the one that
+    # fires for mobile-app logins — a django_session row is never created for them.
+    since = dsar_request.verification_sent_at or dsar_request.received_at
+    if not has_new_platform_login(
+        dsar_request.subject_user_id, dsar_request.login_baseline_keys, since
+    ):
         return False
+    login_via = "aquaai_jwt" if has_jwt_login_since(dsar_request.subject_user_id, since) else "aquaai_session"
 
     now = timezone.now()
     subject_user = ExternalUser.objects.filter(id=dsar_request.subject_user_id).first()
@@ -174,7 +186,7 @@ def check_dsar_login(dsar_request: DSARRequest) -> bool:
     record_dsar_event(
         dsar_request,
         "login_confirmed",
-        details={"via": "aquaai_session", "subject_user_id": str(dsar_request.subject_user_id)},
+        details={"via": login_via, "subject_user_id": str(dsar_request.subject_user_id)},
     )
 
     # Full automation: once identity is confirmed, compile and email the data

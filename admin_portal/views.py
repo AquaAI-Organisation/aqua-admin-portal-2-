@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import json
+import logging
 import secrets
+import time
 from datetime import timedelta
 from pathlib import Path
 
@@ -10,6 +12,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
+from django.core.cache import cache
 from django.core.paginator import Paginator
 from django.db.models import Count, Q
 from django.http import FileResponse, Http404, JsonResponse
@@ -60,6 +63,7 @@ from .services.dsar import (
     extend_dsar_request,
     prepare_dsar_request,
     reject_dsar_request,
+    run_due_login_checks,
 )
 from .services.feature_d_backend import (
     FeatureDBackendError,
@@ -85,6 +89,8 @@ from .services.notifier import notify_invite, notify_password_change
 from .services.issue_runner import process_pending_issues
 from .services.reporting import build_report_for
 from .services.review_runner import manual_override, process_pending, run_review
+
+logger = logging.getLogger(__name__)
 
 
 def background_video(request):
@@ -1101,6 +1107,55 @@ def support_inbox_refresh(request):
     else:
         mailbox = (request.GET.get("mailbox") or "general").strip()
     return redirect(f"{reverse('admin_portal:support_inbox_list')}?mailbox={mailbox}")
+
+
+# Minimum gap between real server-side mailbox fetches triggered by the inbox
+# auto-refresh poll, so multiple open tabs / admins don't hammer Gmail.
+_INBOX_SYNC_THROTTLE_KEY = "inbox_autosync_last_run"
+_INBOX_SYNC_MIN_INTERVAL = 30  # seconds
+
+
+@admin_required
+def support_inbox_sync(request):
+    """JSON endpoint the inbox page polls so new mail and DSAR progress appear
+    automatically, with no manual "Refresh inbox" click.
+
+    Operational admins additionally trigger a throttled live mailbox fetch +
+    DSAR login check on each poll, so whenever an inbox tab is open the whole
+    pipeline (ingest → analyse → DSAR intake → identity confirmation → auto
+    send) keeps moving even if the background scheduler is not running. The
+    response reports per-lane counts so the client can refresh when something
+    new has landed."""
+    fetched: dict | None = None
+    can_operate = getattr(request.user, "is_admin", False) or getattr(request.user, "is_super_admin", False)
+    if can_operate:
+        last = cache.get(_INBOX_SYNC_THROTTLE_KEY)
+        now_ts = time.time()
+        if not last or (now_ts - last) >= _INBOX_SYNC_MIN_INTERVAL:
+            # Reserve the slot before the slow work so concurrent polls skip it.
+            cache.set(_INBOX_SYNC_THROTTLE_KEY, now_ts, _INBOX_SYNC_MIN_INTERVAL * 4)
+            try:
+                fetched = fetch_support_inbox(limit=25)
+            except Exception as exc:
+                logger.warning("Inbox auto-sync fetch failed: %s", exc)
+            try:
+                run_due_login_checks()
+            except Exception as exc:
+                logger.warning("Inbox auto-sync DSAR login check failed: %s", exc)
+    counts = {
+        "general": SupportInquiry.objects.filter(mailbox_kind="general").count(),
+        "privacy": SupportInquiry.objects.filter(mailbox_kind="privacy").count(),
+        "providers": SupportInquiry.objects.filter(mailbox_kind="providers").count(),
+    }
+    return JsonResponse(
+        {
+            "ok": True,
+            "counts": counts,
+            "total": sum(counts.values()),
+            "added": (fetched or {}).get("added", 0),
+            "dsar_created": (fetched or {}).get("dsar_created", 0),
+        }
+    )
 
 
 @operational_admin_required

@@ -451,6 +451,25 @@ class PlatformSession(models.Model):
         db_table = "django_session"
 
 
+class ExternalOutstandingToken(models.Model):
+    """Read-only mirror of the main platform's SimpleJWT outstanding-token table.
+
+    The mobile app / API authenticates with JWT, not Django session cookies, so a
+    user logging in does NOT create a ``django_session`` row — it issues a refresh
+    token, recorded here with the user id and issue time. A row created after a
+    DSAR request was raised is therefore proof the subject logged in to confirm
+    their identity."""
+    id = models.BigAutoField(primary_key=True)
+    user_id = models.UUIDField(null=True, blank=True)
+    jti = models.CharField(max_length=255)
+    created_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "token_blacklist_outstandingtoken"
+
+
 class ExternalUser(models.Model):
     id = models.UUIDField(primary_key=True)
     username = models.CharField(max_length=150)

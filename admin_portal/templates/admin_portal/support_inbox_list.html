@@ -7,7 +7,11 @@
     <h1>Inbox</h1>
     <p class="page-subtitle">General support, privacy requests, and provider-facing enquiries all route through the Aqua AI mailbox and are separated here by alias.</p>
   </div>
-  <div class="page-actions">
+  <div class="page-actions" style="align-items:center;gap:12px;">
+    <span id="inbox-autosync-status" class="helper-text" style="display:inline-flex;align-items:center;gap:6px;">
+      <span id="inbox-autosync-dot" style="width:8px;height:8px;border-radius:50%;background:#46c08d;display:inline-block;"></span>
+      <span id="inbox-autosync-label">Auto-refresh on</span>
+    </span>
     <form method="post" action="{% url 'admin_portal:support_inbox_refresh' %}">
       {% csrf_token %}
       <input type="hidden" name="mailbox" value="{{ mailbox }}">
@@ -124,4 +128,67 @@
     </table>
   </div>
 </div>
+
+{{ mailbox_counts|json_script:"inbox-counts-data" }}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+/* Inbox auto-refresh: poll the sync endpoint so new mail and DSAR progress
+   appear without a manual "Refresh inbox" click. Operational admins also drive
+   a throttled live mailbox fetch + DSAR login check server-side on each poll. */
+(() => {
+  const SYNC_URL = "{% url 'admin_portal:support_inbox_sync' %}";
+  const POLL_MS = 45000;
+  const dot = document.getElementById("inbox-autosync-dot");
+  const labelEl = document.getElementById("inbox-autosync-label");
+
+  let known;
+  try {
+    known = JSON.parse(document.getElementById("inbox-counts-data").textContent) || {};
+  } catch (_) { known = {}; }
+  let knownTotal = Object.values(known).reduce((a, b) => a + (b || 0), 0);
+
+  const setBadge = (counts) => {
+    [["general", ".lane-tab.general"], ["privacy", ".lane-tab.privacy"], ["providers", ".lane-tab.providers"]]
+      .forEach(([key, sel]) => {
+        const el = document.querySelector(sel + " .lane-tab-count");
+        if (el && typeof counts[key] === "number") el.textContent = counts[key];
+      });
+  };
+  const setStatus = (text, ok) => {
+    if (labelEl) labelEl.textContent = text;
+    if (dot) dot.style.background = ok ? "#46c08d" : "#d98b3a";
+  };
+
+  let timer = null;
+  const poll = async () => {
+    try {
+      const res = await fetch(SYNC_URL, { headers: { "X-Requested-With": "XMLHttpRequest" }, credentials: "same-origin" });
+      if (!res.ok) { setStatus("Auto-refresh paused", false); return; }
+      const data = await res.json();
+      setStatus("Auto-refresh on", true);
+      if (typeof data.total === "number" && data.total > knownTotal) {
+        // New mail arrived — reload, preserving the current lane/filters.
+        window.location.reload();
+        return;
+      }
+      if (data.counts) { setBadge(data.counts); known = data.counts; }
+    } catch (_) {
+      setStatus("Auto-refresh paused", false);
+    }
+  };
+
+  const start = () => { if (!timer) { timer = setInterval(poll, POLL_MS); } };
+  const stop = () => { if (timer) { clearInterval(timer); timer = null; } };
+
+  // Pause polling when the tab is hidden; resume (and sync immediately) on return.
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) { stop(); }
+    else { poll(); start(); }
+  });
+
+  start();
+})();
+</script>
 {% endblock %}

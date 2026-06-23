@@ -22,6 +22,7 @@ urlpatterns = [
     path("entities/<str:entity_type>/<str:entity_id>/status/", views.entity_status_update, name="entity_status_update"),
     path("inbox/", views.support_inbox_list, name="support_inbox_list"),
     path("inbox/refresh/", views.support_inbox_refresh, name="support_inbox_refresh"),
+    path("inbox/sync/", views.support_inbox_sync, name="support_inbox_sync"),
     path("inbox/<int:inquiry_id>/", views.support_inbox_detail, name="support_inbox_detail"),
     path("inbox/<int:inquiry_id>/analyse/", views.support_inbox_analyse, name="support_inbox_analyse"),
     path("inbox/<int:inquiry_id>/apply-action/", views.support_inbox_apply_action, name="support_inbox_apply_action"),
