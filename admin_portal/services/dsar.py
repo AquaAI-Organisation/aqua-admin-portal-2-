@@ -33,7 +33,7 @@ from .google_oauth import pick_alias_for_mailbox
 from .platform_sessions import (
     active_session_keys_for_user,
     has_jwt_login_since,
-    has_new_platform_login,
+    has_new_login_since_baseline,
 )
 from .runtime_config import get_operational_settings
 from .json_utils import sanitize_json
@@ -143,6 +143,26 @@ def issue_verification_token(dsar_request: DSARRequest) -> str:
     return raw_token
 
 
+def _candidate_user_ids_for_request(dsar_request: DSARRequest) -> list:
+    """Platform user ids whose login can confirm this request: the linked subject
+    plus every account that shares the requester's verified email. Handles the
+    common case of one person having duplicate accounts under a single email."""
+    ids: list = []
+    seen = set()
+    if dsar_request.subject_user_id and dsar_request.subject_user_id not in seen:
+        ids.append(dsar_request.subject_user_id)
+        seen.add(dsar_request.subject_user_id)
+    email = (dsar_request.verification_email or dsar_request.submitted_email or "").strip()
+    if email:
+        for user_id in (
+            ExternalUser.objects.filter(email__iexact=email).values_list("id", flat=True)
+        ):
+            if user_id not in seen:
+                ids.append(user_id)
+                seen.add(user_id)
+    return ids
+
+
 @transaction.atomic
 def check_dsar_login(dsar_request: DSARRequest) -> bool:
     """Confirm identity by detecting a fresh aquaai.uk login for the subject.
@@ -164,12 +184,27 @@ def check_dsar_login(dsar_request: DSARRequest) -> bool:
     # new web session (django_session) or a new JWT issued after the verification
     # email went out. The platform is JWT-based, so the JWT signal is the one that
     # fires for mobile-app logins — a django_session row is never created for them.
+    #
+    # A login on ANY account that shares the requester's verified email counts:
+    # the same person frequently has duplicate accounts under one email, and the
+    # DSAR is linked to only one of them. Requiring the login to land on that exact
+    # account would leave genuine confirmations stuck.
     since = dsar_request.verification_sent_at or dsar_request.received_at
-    if not has_new_platform_login(
-        dsar_request.subject_user_id, dsar_request.login_baseline_keys, since
+    candidate_user_ids = _candidate_user_ids_for_request(dsar_request)
+    login_via = ""
+    confirmed_user_id = None
+    for user_id in candidate_user_ids:
+        if has_jwt_login_since(user_id, since):
+            login_via = "aquaai_jwt"
+            confirmed_user_id = user_id
+            break
+    if not confirmed_user_id and has_new_login_since_baseline(
+        dsar_request.subject_user_id, dsar_request.login_baseline_keys
     ):
+        login_via = "aquaai_session"
+        confirmed_user_id = dsar_request.subject_user_id
+    if not confirmed_user_id:
         return False
-    login_via = "aquaai_jwt" if has_jwt_login_since(dsar_request.subject_user_id, since) else "aquaai_session"
 
     now = timezone.now()
     subject_user = ExternalUser.objects.filter(id=dsar_request.subject_user_id).first()
@@ -186,7 +221,11 @@ def check_dsar_login(dsar_request: DSARRequest) -> bool:
     record_dsar_event(
         dsar_request,
         "login_confirmed",
-        details={"via": login_via, "subject_user_id": str(dsar_request.subject_user_id)},
+        details={
+            "via": login_via,
+            "subject_user_id": str(dsar_request.subject_user_id),
+            "confirmed_via_user_id": str(confirmed_user_id),
+        },
     )
 
     # Full automation: once identity is confirmed, compile and email the data
