@@ -1,9 +1,10 @@
 """Platform-independent background scheduler.
 
-Runs the inbox/DSAR automation *inside the web process* on a timer, so the
-mailbox auto-refreshes and verification emails go out without any external
-worker, cron, or Heroku Scheduler. Works the same on Heroku, a VPS, Docker,
-Render, etc. — wherever the web app runs.
+Runs the core automation *inside the web process* on a timer, so the mailbox
+auto-refreshes, verification emails go out, and new breeder/consultant signups
+are reviewed (and auto-approved when the operational toggle is on) without any
+external worker, cron, or Heroku Scheduler. Works the same on Heroku, a VPS,
+Docker, Render, etc. — wherever the web app runs.
 
 Safe with multiple web workers/instances: each cycle grabs a PostgreSQL
 advisory lock so only one process does the work at a time (no duplicate sends).
@@ -103,7 +104,9 @@ def _run_cycle_if_leader() -> None:
 
 def _do_cycle() -> None:
     from .dsar import run_due_login_checks
+    from .issue_runner import process_pending_issues
     from .mailbox import fetch_support_inbox
+    from .review_runner import process_pending
 
     try:
         fetch_support_inbox(limit=25)
@@ -113,3 +116,15 @@ def _do_cycle() -> None:
         run_due_login_checks()
     except Exception as exc:
         logger.warning("Auto DSAR login check failed: %s", exc)
+    # Process new breeder/consultant signups so the "automatic account
+    # activation" toggle (and normal AI review) actually applies without an
+    # admin clicking "Process now" or an external cron. Time-bounded to keep
+    # the web process responsive; the next cycle picks up any remainder.
+    try:
+        process_pending(limit_per_type=10, max_runtime_seconds=20)
+    except Exception as exc:
+        logger.warning("Auto account-review pass failed: %s", exc)
+    try:
+        process_pending_issues(limit_per_type=5, max_runtime_seconds=15)
+    except Exception as exc:
+        logger.warning("Auto issue-triage pass failed: %s", exc)
