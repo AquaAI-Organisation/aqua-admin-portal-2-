@@ -112,3 +112,27 @@ def has_new_login_since_baseline(user_id, baseline_keys) -> bool:
     i.e. they logged in afresh after the DSAR request was raised."""
     current = active_session_keys_for_user(user_id)
     return bool(current - set(baseline_keys or []))
+
+
+def has_jwt_login_since(user_id, since) -> bool:
+    """True if the subject obtained a new JWT after ``since`` — i.e. they logged
+    in via the mobile app / API after the DSAR request was raised.
+
+    The platform uses SimpleJWT, which writes one OutstandingToken row per issued
+    refresh token (per login). Mobile/API logins never touch ``django_session``,
+    so this is the authoritative signal for confirming a DSAR requester's identity.
+    The row is created server-side by the platform on token issuance, so its
+    ``user_id`` column is trusted at the same level as the shared database."""
+    if not user_id or since is None:
+        return False
+    from ..models import ExternalOutstandingToken
+
+    return ExternalOutstandingToken.objects.filter(
+        user_id=user_id, created_at__gt=since
+    ).exists()
+
+
+def has_new_platform_login(user_id, baseline_keys, since) -> bool:
+    """Confirm a fresh aquaai.uk login by EITHER mechanism: a new web session
+    (``django_session``) or a new JWT issued after ``since`` (mobile app / API)."""
+    return has_new_login_since_baseline(user_id, baseline_keys) or has_jwt_login_since(user_id, since)
