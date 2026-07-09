@@ -849,6 +849,8 @@ def operational_settings_view(request):
         )
         messages.success(request, "Operational settings updated.")
         return redirect("admin_portal:operational_settings")
+    schedule = list(config.auto_activate_delay_schedule or [])
+    cursor = (config.auto_activate_stagger_cursor or 0)
     return render(
         request,
         "admin_portal/operational_settings.html",
@@ -859,6 +861,9 @@ def operational_settings_view(request):
             "gmail_redirect_uri": _google_redirect_uri(request),
             "gmail_client_ready": bool(config.gmail_client_id and config.gmail_client_secret),
             "slack_status": slack_service.slack_status(),
+            "stagger_count": len(schedule),
+            "stagger_preview": schedule[:8],
+            "stagger_next": schedule[cursor % len(schedule)] if schedule else 0,
         },
     )
 

@@ -6,9 +6,11 @@ from __future__ import annotations
 
 import logging
 import time
+from datetime import timedelta
 from typing import Iterable
 
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from ..models import (
     AIAccountReview, AIFlag, OperationalSettings,
@@ -32,30 +34,40 @@ def _global_auto_activate_enabled() -> bool:
         return False
 
 
-def _auto_activate_outcome(subject_type: str, profile, user) -> AIReviewOutcome:
+def _auto_activate_outcome(subject_type: str, profile, user, stagger: dict | None = None) -> AIReviewOutcome:
     display = (profile.company_name or user.name or f"{user.first_name} {user.last_name}").strip()
+    mode = "staggered_auto_activate" if stagger else "global_auto_activate"
     evidence = {
-        "operational_mode": "global_auto_activate",
+        "operational_mode": mode,
         "auto_activated_by_setting": True,
         "subject_type": subject_type,
         "subject_display_name": display[:255],
         "decision_basis": {
             "risk_bucket": "unreviewed",
             "hard_blocks": [],
-            "operational_policy": "global_auto_activate",
+            "operational_policy": mode,
         },
     }
+    if stagger:
+        evidence["staggered"] = stagger
+        delay = stagger.get("assigned_delay_minutes")
+        rationale = (
+            f"Automatically approved after a staggered {delay}-minute delay "
+            "(automatic activation is enabled, in staggered mode)."
+        )
+    else:
+        rationale = (
+            "Automatically approved because the global automatic account activation toggle "
+            "is enabled in operational settings."
+        )
     return AIReviewOutcome(
         decision="approved",
         confidence=1.0,
-        rationale=(
-            "Automatically approved because the global automatic account activation toggle "
-            "is enabled in operational settings."
-        ),
+        rationale=rationale,
         evidence=evidence,
-        recommended_actions=[{"action": "approve_account", "mode": "global_auto_activate"}],
+        recommended_actions=[{"action": "approve_account", "mode": mode}],
         flags=[],
-        raw={"source": "operational_settings", "mode": "global_auto_activate"},
+        raw={"source": "operational_settings", "mode": mode},
         model="operational:auto-activate",
         error="",
     )
@@ -179,7 +191,13 @@ def discover_pending_consultants(limit: int = 50):
 # ---------------------------------------------------------------------------
 
 def run_review(subject_type: str, profile, user) -> AIAccountReview:
-    if _global_auto_activate_enabled():
+    config = OperationalSettings.get_solo()
+    if config.auto_activate_new_accounts and config.auto_activate_stagger_enabled:
+        # Staggered mode fully owns the account's lifecycle: hold it pending until
+        # its assigned, human-looking delay elapses, then approve.
+        return _process_staggered_auto_activate(subject_type, profile, user, config)
+
+    if config.auto_activate_new_accounts:
         outcome = _auto_activate_outcome(subject_type, profile, user)
     else:
         if subject_type == "breeder":
@@ -189,6 +207,10 @@ def run_review(subject_type: str, profile, user) -> AIAccountReview:
         outcome = call_gpt4(dossier)
         outcome = _operationalise_outcome(outcome)
 
+    return _persist_review(subject_type, profile, user, outcome)
+
+
+def _persist_review(subject_type: str, profile, user, outcome: AIReviewOutcome) -> AIAccountReview:
     display = (profile.company_name or user.name or f"{user.first_name} {user.last_name}").strip()
     review, _ = AIAccountReview.objects.update_or_create(
         subject_type=subject_type,
@@ -231,6 +253,91 @@ def run_review(subject_type: str, profile, user) -> AIAccountReview:
         review.applied_actions = applied
         review.save(update_fields=["applied_actions"])
 
+    return review
+
+
+def _process_staggered_auto_activate(subject_type: str, profile, user, config) -> AIAccountReview:
+    """Hold a new account pending until its assigned staggered delay elapses, then
+    auto-approve it — so approvals look manual but are fully automatic.
+
+    Called once per processing cycle for each still-pending account:
+    - first sighting  -> assign the next delay from the schedule, store the due time,
+      and leave the account pending (nothing applied to the source tables yet);
+    - subsequent runs -> approve once now >= the due time, otherwise keep waiting.
+    """
+    now = timezone.now()
+    existing = (
+        AIAccountReview.objects
+        .filter(subject_type=subject_type, subject_id=profile.id)
+        .first()
+    )
+    # Already decided (e.g. approved, or a manual override) — leave it untouched.
+    if existing is not None and existing.decision not in ("pending", "error"):
+        return existing
+
+    scheduled_at = None
+    if existing is not None:
+        raw = (existing.evidence or {}).get("scheduled_approval_at")
+        scheduled_at = parse_datetime(raw) if raw else None
+        if scheduled_at is not None and timezone.is_naive(scheduled_at):
+            scheduled_at = timezone.make_aware(scheduled_at, timezone.get_current_timezone())
+
+    if scheduled_at is None:
+        # First time we see this account: assign the next staggered delay and hold.
+        idx, delay = config.take_next_stagger_delay()
+        scheduled_at = now + timedelta(minutes=delay)
+        return _persist_scheduled_pending(subject_type, profile, user, idx, delay, scheduled_at)
+
+    if now >= scheduled_at:
+        # The wait has elapsed — approve now, exactly as an admin action would.
+        stagger = {
+            "assigned_delay_minutes": (existing.evidence or {}).get("assigned_delay_minutes"),
+            "scheduled_approval_at": scheduled_at.isoformat(),
+            "stagger_index": (existing.evidence or {}).get("stagger_index"),
+        }
+        outcome = _auto_activate_outcome(subject_type, profile, user, stagger=stagger)
+        return _persist_review(subject_type, profile, user, outcome)
+
+    # Still within the delay window — keep the account pending.
+    return existing
+
+
+def _persist_scheduled_pending(subject_type: str, profile, user, idx: int, delay: int, scheduled_at) -> AIAccountReview:
+    display = (profile.company_name or user.name or f"{user.first_name} {user.last_name}").strip()
+    review, _ = AIAccountReview.objects.update_or_create(
+        subject_type=subject_type,
+        subject_id=profile.id,
+        defaults=dict(
+            subject_user_email=user.email,
+            subject_display_name=display[:255],
+            decision="pending",
+            confidence=1.0,
+            rationale=(
+                f"Queued for automatic approval after a staggered {delay}-minute delay "
+                f"(position {idx} in the approval schedule)."
+            ),
+            evidence={
+                "operational_mode": "staggered_auto_activate",
+                "scheduled_approval_at": scheduled_at.isoformat(),
+                "assigned_delay_minutes": delay,
+                "stagger_index": idx,
+                "decision_basis": {
+                    "risk_bucket": "unreviewed",
+                    "operational_policy": "staggered_auto_activate",
+                },
+            },
+            recommended_actions=[],
+            applied_actions=[],
+            openai_raw={"source": "operational_settings", "mode": "staggered_auto_activate"},
+            ai_model="operational:auto-activate-staggered",
+            error="",
+            decided_at=None,
+            manually_overridden=False,
+            overridden_by=None,
+            override_reason="",
+            original_decision="",
+        ),
+    )
     return review
 
 

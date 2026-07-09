@@ -9,6 +9,7 @@ Two kinds of tables live here:
    flag guarantees migrations here will never touch the main backend's schema.
 """
 from datetime import timedelta
+import random
 import uuid
 
 from django.conf import settings
@@ -219,6 +220,22 @@ class AdminInvite(models.Model):
         )
 
 
+def default_stagger_schedule():
+    """A long, varied, deterministic sequence of per-account approval delays (in
+    minutes) that new accounts cycle through when staggered auto-activation is on.
+
+    It starts with a hand-picked set of human-looking values and then fills out to
+    a long list of varied delays, so approvals do not fall on an obvious repeating
+    pattern before the sequence recycles. Deterministic (fixed seed) so the schedule
+    is stable across processes and restarts."""
+    seed_values = [35, 22, 17, 8, 10, 50, 45, 12, 28, 6, 41, 19, 33, 9, 25]
+    rng = random.Random(20260611)
+    values = list(seed_values)
+    while len(values) < 720:
+        values.append(rng.randint(5, 55))
+    return values
+
+
 class OperationalSettings(models.Model):
     auto_activate_new_accounts = models.BooleanField(
         default=False,
@@ -226,6 +243,27 @@ class OperationalSettings(models.Model):
             "When enabled, new breeder and consultant accounts are automatically approved "
             "without AI review as soon as the review processor picks them up."
         ),
+    )
+    auto_activate_stagger_enabled = models.BooleanField(
+        default=False,
+        help_text=(
+            "When enabled (with automatic activation on), each new account is still "
+            "auto-approved, but only after a different, human-looking delay taken from the "
+            "approval-delay schedule below. The account stays pending during the wait, so "
+            "approvals look manual while remaining fully automatic."
+        ),
+    )
+    auto_activate_delay_schedule = models.JSONField(
+        default=default_stagger_schedule,
+        blank=True,
+        help_text=(
+            "Repeating sequence of per-account approval delays in minutes. Each new account "
+            "takes the next value; the sequence recycles once exhausted."
+        ),
+    )
+    auto_activate_stagger_cursor = models.PositiveIntegerField(
+        default=0,
+        help_text="Internal pointer into the delay schedule for the next new account.",
     )
     dsar_auto_send = models.BooleanField(
         default=True,
@@ -276,6 +314,19 @@ class OperationalSettings(models.Model):
     def get_solo(cls):
         obj, _ = cls.objects.get_or_create(pk=1)
         return obj
+
+    def take_next_stagger_delay(self):
+        """Return ``(index, delay_minutes)`` for the next new account and advance
+        the cursor (persisted), recycling when the schedule is exhausted."""
+        schedule = [int(x) for x in (self.auto_activate_delay_schedule or []) if isinstance(x, (int, float))]
+        if not schedule:
+            schedule = default_stagger_schedule()
+            self.auto_activate_delay_schedule = schedule
+        idx = (self.auto_activate_stagger_cursor or 0) % len(schedule)
+        delay = max(0, int(schedule[idx]))
+        self.auto_activate_stagger_cursor = (idx + 1) % len(schedule)
+        self.save(update_fields=["auto_activate_delay_schedule", "auto_activate_stagger_cursor", "updated_at"])
+        return idx, delay
 
     @property
     def masked_smtp_username(self):
