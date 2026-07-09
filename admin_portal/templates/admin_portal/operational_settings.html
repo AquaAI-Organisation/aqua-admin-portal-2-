@@ -101,6 +101,31 @@
         On = approve all new accounts automatically. Off = AI-enabled approval.
       </div>
     </div>
+
+    <div class="form-row" style="align-items:center;margin-top:14px;">
+      <label class="switch">
+        {{ form.auto_activate_stagger_enabled }}
+        <span class="switch-track" aria-hidden="true"></span>
+        <span class="switch-text">Staggered (human-looking) approval times</span>
+      </label>
+      <div class="helper-text">
+        On = each new account is still approved automatically, but only after a different delay
+        (so it looks manual). Off = approve immediately. Requires automatic activation to be on.
+      </div>
+    </div>
+
+    <div class="form-group" style="margin-top:16px;">
+      <label for="id_auto_activate_delay_minutes_text">Approval delay schedule (minutes)</label>
+      <div class="helper-text" style="margin-bottom:8px;">
+        Currently <strong>{{ stagger_count }}</strong> delays in the cycle{% if stagger_preview %},
+        starting: <span class="mono">{{ stagger_preview|join:", " }}…</span>{% endif %}
+        Next account will wait <strong>{{ stagger_next }}</strong> min.
+      </div>
+      {{ form.auto_activate_delay_minutes_text }}
+      <div class="helper-text">{{ form.auto_activate_delay_minutes_text.help_text }}</div>
+      {% for err in form.auto_activate_delay_minutes_text.errors %}<div class="helper-text" style="color:#e0736b;">{{ err }}</div>{% endfor %}
+    </div>
+
     <div class="form-row" style="align-items:center;margin-top:14px;">
       <label class="switch">
         {{ form.dsar_auto_send }}
