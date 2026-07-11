@@ -1,0 +1,59 @@
+{% extends 'emails/base.html' %}
+
+{% block title %}Application Update - {{ app_name }}{% endblock %}
+
+{% block extra_styles %}
+<style>
+    .content-box {
+        background: #FFFFFF;
+        border-radius: 12px;
+        padding: 24px;
+        margin: 20px 0;
+        border: 1px solid #E2E8F0;
+    }
+    .rejection-badge {
+        display: inline-block;
+        background: #FEE2E2;
+        color: #991B1B;
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-size: 14px;
+        font-weight: 600;
+    }
+    .info-box {
+        background: #FEFCE8;
+        border-radius: 8px;
+        padding: 16px;
+        margin: 20px 0;
+        border-left: 4px solid #EAB308;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="content-box">
+    <div style="text-align: center; margin-bottom: 20px;">
+        <span class="rejection-badge">Application Update</span>
+    </div>
+    
+    <p style="margin-bottom: 16px; font-size: 16px;">Dear <strong>{{ username }}</strong>,</p>
+    
+    <p style="color: #475569; margin-bottom: 16px;">
+        Thank you for applying to Aqua Providers. Unfortunately, on this occasion your application has not passed our verification process.
+    </p>
+    
+    {% if company_name %}
+    <p style="color: #475569; margin-bottom: 16px;">
+        Your application for <strong>{{ company_name }}</strong> was not approved at this time.
+    </p>
+    {% endif %}
+    
+    <div class="info-box">
+        <strong>What can you do?</strong>
+        <p style="margin-top: 8px;">
+            If you believe this decision was made in error, please contact us at <a href="mailto:{{ support_email }}" style="color: #3B82F6;">{{ support_email }}</a>, stating your reasons and including any supporting documentation, and we will review your application again.
+        </p>
+    </div>
+    
+</div>
+{% endblock %}

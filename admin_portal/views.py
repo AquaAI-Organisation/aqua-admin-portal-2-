@@ -524,11 +524,10 @@ def _ensure_review(subject_type: str, profile, user) -> AIAccountReview:
         error="",
     )
 
-
-@operational_admin_required
 def intake_decide(request, entity_type, entity_id, action):
     if request.method != "POST":
         return redirect("admin_portal:intake_list")
+    
     next_url = request.POST.get("next") or reverse("admin_portal:intake_list")
     action = (action or "").strip().lower()
     if entity_type not in {"breeder", "consultant"}:
@@ -545,15 +544,31 @@ def intake_decide(request, entity_type, entity_id, action):
     try:
         if action == "approve":
             review = _ensure_review(entity_type, profile, user)
-            manual_override(review, "approved", "Approved from Pending Intake.", request.user)
             summary = f"{profile.company_name or user.email} approved from Pending Intake."
+            
+            # Send approval email
+            from .services.send_emails import send_breeder_approval_email, send_consultant_approval_email
+            activation_link = f"{settings.FRONTEND_HOST}/breeder/{profile.id}/payments/"
+            if entity_type == "breeder":
+                send_breeder_approval_email(profile, user, activation_link)
+            else:
+                manual_override(review, "approved", "Approved from Pending Intake.", request.user)
+                
         elif action == "reject":
             review = _ensure_review(entity_type, profile, user)
-            manual_override(review, "rejected", "Rejected from Pending Intake.", request.user)
             summary = f"{profile.company_name or user.email} rejected from Pending Intake."
+            
+            # Send rejection email
+            from .services.send_emails import send_breeder_rejection_email, send_consultant_rejection_email
+            
+            if entity_type == "breeder":
+                send_breeder_rejection_email(profile, user)
+            else:
+                manual_override(review, "rejected", "Rejected from Pending Intake.", request.user)
         else:
             activate = action == "reactivate"
             summary = _set_entity_active_state(entity_type, entity_id, activate=activate, actor=request.user)
+            
     except Exception as exc:
         messages.error(request, f"Could not update intake account: {exc}")
         return redirect(next_url)

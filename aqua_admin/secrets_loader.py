@@ -6,7 +6,6 @@ load_dotenv()
 
 SECRET_NAME = os.getenv("AWS_SECRET_NAME", "aqua_backend")
 REGION = os.getenv("AWS_REGION", "eu-west-2")
-
 def load_aws_secrets():
     client = boto3.client(
         "secretsmanager",
