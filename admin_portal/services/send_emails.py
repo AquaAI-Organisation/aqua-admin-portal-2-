@@ -1,4 +1,3 @@
-# services/send_emails.py
 import logging
 from django.core.mail import EmailMultiAlternatives, get_connection
 from django.template.loader import render_to_string
@@ -123,8 +122,8 @@ def send_consultant_approval_email(profile, user):
             "company_name": profile.company_name or "",
             "app_name": "AquaAI",
             "year": datetime.now().year,
-            "support_email": "consultants@aquaai.uk",
-            "dashboard_url": f"{settings.FRONTEND_HOST}/consultant/dashboard",
+            "support_email": "providers@aquaai.uk",
+            "dashboard_url": f"{settings.FRONTEND_HOST}/consultant-dashboard",
             "entity_type": "consultant",
         }
         
@@ -133,22 +132,14 @@ def send_consultant_approval_email(profile, user):
         
         subject = "Congratulations — your Aqua Providers application is approved"
         
-        connection = get_connection()
-        if connection.connection is None:
-            connection.open()
-        
         email = EmailMultiAlternatives(
             subject=subject,
             body=plain_message,
             from_email=settings.DEFAULT_FROM_EMAIL,
             to=[user.email],
-            connection=connection,
         )
         email.attach_alternative(html_message, "text/html")
         email.send(fail_silently=False)
-        
-        if connection.connection:
-            connection.close()
         
         logger.info(f"Consultant approval email sent to {user.email}")
         return True
@@ -172,7 +163,7 @@ def send_consultant_rejection_email(profile, user):
             "company_name": profile.company_name or "",
             "app_name": "AquaAI",
             "year": datetime.now().year,
-            "support_email": "consultants@aquaai.uk",
+            "support_email": "providers@aquaai.uk",
             "entity_type": "consultant",
         }
         
@@ -181,26 +172,20 @@ def send_consultant_rejection_email(profile, user):
         
         subject = "Your Aqua Providers application"
         
-        connection = get_connection()
-        if connection.connection is None:
-            connection.open()
-        
         email = EmailMultiAlternatives(
             subject=subject,
             body=plain_message,
             from_email=settings.DEFAULT_FROM_EMAIL,
             to=[user.email],
-            connection=connection,
         )
         email.attach_alternative(html_message, "text/html")
         email.send(fail_silently=False)
-        
-        if connection.connection:
-            connection.close()
         
         logger.info(f"Consultant rejection email sent to {user.email}")
         return True
         
     except Exception as e:
         logger.error(f"Error sending consultant rejection email: {str(e)}", exc_info=True)
-        return False
+        return False 
+    
+    

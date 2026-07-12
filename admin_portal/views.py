@@ -524,6 +524,7 @@ def _ensure_review(subject_type: str, profile, user) -> AIAccountReview:
         error="",
     )
 
+@operational_admin_required
 def intake_decide(request, entity_type, entity_id, action):
     if request.method != "POST":
         return redirect("admin_portal:intake_list")
@@ -544,27 +545,33 @@ def intake_decide(request, entity_type, entity_id, action):
     try:
         if action == "approve":
             review = _ensure_review(entity_type, profile, user)
+            # manual_override(review, "approved", "Approved from Pending Intake.", request.user)
             summary = f"{profile.company_name or user.email} approved from Pending Intake."
             
-            # Send approval email
+            # Send approval email based on entity type
             from .services.send_emails import send_breeder_approval_email, send_consultant_approval_email
-            activation_link = f"{settings.FRONTEND_HOST}/breeder/{profile.id}/payments/"
+            
             if entity_type == "breeder":
+                activation_link = f"{settings.FRONTEND_HOST}/breeder/{profile.id}/payments/"
                 send_breeder_approval_email(profile, user, activation_link)
             else:
-                manual_override(review, "approved", "Approved from Pending Intake.", request.user)
+                # Consultants - no activation link needed
+                send_consultant_approval_email(profile, user)
                 
         elif action == "reject":
             review = _ensure_review(entity_type, profile, user)
+            
+            # manual_override(review, "rejected", "Rejected from Pending Intake.", request.user)
             summary = f"{profile.company_name or user.email} rejected from Pending Intake."
             
-            # Send rejection email
+            # Send rejection email based on entity type
             from .services.send_emails import send_breeder_rejection_email, send_consultant_rejection_email
             
             if entity_type == "breeder":
                 send_breeder_rejection_email(profile, user)
             else:
-                manual_override(review, "rejected", "Rejected from Pending Intake.", request.user)
+                send_consultant_rejection_email(profile, user)
+                
         else:
             activate = action == "reactivate"
             summary = _set_entity_active_state(entity_type, entity_id, activate=activate, actor=request.user)

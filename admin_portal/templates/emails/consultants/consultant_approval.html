@@ -1,0 +1,59 @@
+
+{% extends 'emails/base.html' %}
+
+{% block title %}Application Approved - {{ app_name }}{% endblock %}
+
+{% block extra_styles %}
+<style>
+    .content-box {
+        background: #FFFFFF;
+        border-radius: 12px;
+        padding: 24px;
+        margin: 20px 0;
+        border: 1px solid #E2E8F0;
+    }
+    .success-badge {
+        display: inline-block;
+        background: #D1FAE5;
+        color: #065F46;
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-size: 14px;
+        font-weight: 600;
+    }
+    .info-box {
+        background: #EFF6FF;
+        border-radius: 8px;
+        padding: 16px;
+        margin: 20px 0;
+        border-left: 4px solid #3B82F6;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="content-box">
+    <div style="text-align: center; margin-bottom: 20px;">
+        <span class="success-badge">Application Approved</span>
+    </div>
+    
+    <p style="margin-bottom: 16px; font-size: 16px;">Dear <strong>{{ username }}</strong>,</p>
+    
+    <p style="color: #475569; margin-bottom: 16px;">
+        Congratulations — your credentials have been checked and verified, and your Aqua Providers application has been approved.
+    </p>
+    
+    <p style="color: #475569; margin-bottom: 16px;">
+        {% if company_name %}Your company <strong>{{ company_name }}</strong> is now verified and you can start offering your consulting services on Aqua Providers.{% else %}You are now verified and ready to start offering your consulting services on Aqua Providers.{% endif %}
+    </p>
+    
+    <p style="color: #475569; margin-bottom: 16px;">
+        Simply sign in to the Aqua Providers app and start offering your consulting services to our community.
+    </p>
+    
+    <div class="info-box">
+        <strong>Need help getting started?</strong>
+        <p style="margin-top: 8px;">If you have any questions about your approved application or setting up your consulting services, please contact us at <a href="mailto:{{ support_email }}" style="color: #3B82F6;">{{ support_email }}</a></p>
+    </div>
+</div>
+{% endblock %}
