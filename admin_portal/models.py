@@ -918,11 +918,16 @@ class ExternalBreederVerification(models.Model):
     seller = models.ForeignKey(
         ExternalUser, on_delete=models.DO_NOTHING, db_column="seller_id", related_name="+"
     )
+    document = models.TextField(blank=True)
     licence_number = models.CharField(max_length=100, blank=True)
     issuing_authority = models.CharField(max_length=255, blank=True)
     expiry_date = models.DateField(null=True, blank=True)
+    # Issue / "received" date of the certificate. Most certificates carry this even
+    # when they have no printed expiry, so it drives the 2-year renewal cycle.
+    awarded_date = models.DateField(null=True, blank=True)
     status = models.CharField(max_length=20, blank=True)
     rejection_reason = models.TextField(blank=True)
+    document_metadata = models.JSONField(default=dict, blank=True, null=True)
     reviewed_by_id = models.UUIDField(null=True, blank=True)
     reviewed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(null=True, blank=True)

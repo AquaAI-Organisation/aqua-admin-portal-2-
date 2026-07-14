@@ -10,3 +10,4 @@ whitenoise>=6.6
 google-api-python-client>=2.140
 google-auth>=2.34
 reportlab>=4.0
+boto3>=1.34

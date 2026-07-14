@@ -675,7 +675,20 @@ def review_override(request, review_id):
         new_decision=new_decision,
         reason=reason,
     )
-    messages.success(request, f"Review manually overridden to '{new_decision}'.")
+    # manual_override applies the decision to the live account but swallows any
+    # error there; confirm it actually landed so an admin isn't told "approved"
+    # when the account never activated.
+    review.refresh_from_db()
+    expected = "manual_approve" if new_decision == "approved" else "manual_reject"
+    applied_ok = any((a or {}).get("action") == expected for a in (review.applied_actions or []))
+    if applied_ok:
+        messages.success(request, f"Account {new_decision} — the change was applied to the live account.")
+    else:
+        messages.error(
+            request,
+            f"The review was marked '{new_decision}', but applying it to the live account failed. "
+            "The account may not exist in the backend, or the update was rejected — check the server logs and try again.",
+        )
     return redirect("admin_portal:review_detail", review_id=review.id)
 
 

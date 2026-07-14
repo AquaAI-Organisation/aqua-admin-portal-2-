@@ -128,3 +128,14 @@ def _do_cycle() -> None:
         process_pending_issues(limit_per_type=5, max_runtime_seconds=15)
     except Exception as exc:
         logger.warning("Auto issue-triage pass failed: %s", exc)
+    # Certificate renewal / re-verification reminders. Sends are de-duplicated, so
+    # this is safe to run each cycle, but throttle the scan to keep it cheap.
+    try:
+        from django.core.cache import cache
+
+        if cache.add("cert_checks_throttle", "1", 6 * 3600):
+            from .certificates import run_certificate_checks
+
+            run_certificate_checks()
+    except Exception as exc:
+        logger.warning("Auto certificate-reminder pass failed: %s", exc)
