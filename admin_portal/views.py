@@ -700,6 +700,12 @@ def _load_external_profile(review: AIAccountReview):
         return None
 
 
+# Erased accounts are anonymised in place to  deleted_<hex>@deleted.invalid  (and
+# is_active=False) by the backend erasure engine — that suffix is the clean signal
+# for "this account was deleted", distinct from a merely deactivated one.
+DELETED_EMAIL_SUFFIX = "@deleted.invalid"
+
+
 @admin_required
 def entity_directory(request):
     entity_type = (request.GET.get("entity_type") or "breeder").strip()
@@ -721,7 +727,11 @@ def entity_directory(request):
         if status == "active":
             qs = qs.filter(is_active=True, user__is_active=True)
         elif status == "inactive":
-            qs = qs.filter(Q(is_active=False) | Q(user__is_active=False))
+            qs = qs.filter(
+                (Q(is_active=False) | Q(user__is_active=False))
+            ).exclude(user__email__iendswith=DELETED_EMAIL_SUFFIX)
+        elif status == "deleted":
+            qs = qs.filter(user__email__iendswith=DELETED_EMAIL_SUFFIX)
         for profile in qs:
             rows.append(
                 {
@@ -732,6 +742,7 @@ def entity_directory(request):
                     "name": profile.user.name or f"{profile.user.first_name} {profile.user.last_name}".strip() or "-",
                     "role_label": "Consultant",
                     "is_active": bool(profile.is_active and profile.user.is_active),
+                    "is_deleted": (profile.user.email or "").lower().endswith(DELETED_EMAIL_SUFFIX),
                     "status_detail": f"Admin status: {profile.admin_status or '-'} | Verified: {'Yes' if profile.is_verified else 'No'}",
                     "created_at": profile.created_at,
                     "target": profile,
@@ -750,7 +761,9 @@ def entity_directory(request):
         if status == "active":
             qs = qs.filter(is_active=True)
         elif status == "inactive":
-            qs = qs.filter(is_active=False)
+            qs = qs.filter(is_active=False).exclude(email__iendswith=DELETED_EMAIL_SUFFIX)
+        elif status == "deleted":
+            qs = qs.filter(email__iendswith=DELETED_EMAIL_SUFFIX)
         for user in qs:
             rows.append(
                 {
@@ -761,6 +774,7 @@ def entity_directory(request):
                     "name": user.name or f"{user.first_name} {user.last_name}".strip() or "-",
                     "role_label": "User",
                     "is_active": bool(user.is_active),
+                    "is_deleted": (user.email or "").lower().endswith(DELETED_EMAIL_SUFFIX),
                     "status_detail": f"Role: {user.role or '-'} | Verified: {'Yes' if user.is_verified else 'No'}",
                     "created_at": user.created_at or user.date_joined,
                     "target": user,
@@ -781,7 +795,11 @@ def entity_directory(request):
         if status == "active":
             qs = qs.filter(is_active=True, user__is_active=True)
         elif status == "inactive":
-            qs = qs.filter(Q(is_active=False) | Q(user__is_active=False))
+            qs = qs.filter(
+                (Q(is_active=False) | Q(user__is_active=False))
+            ).exclude(user__email__iendswith=DELETED_EMAIL_SUFFIX)
+        elif status == "deleted":
+            qs = qs.filter(user__email__iendswith=DELETED_EMAIL_SUFFIX)
         for profile in qs:
             rows.append(
                 {
@@ -792,6 +810,7 @@ def entity_directory(request):
                     "name": profile.user.name or f"{profile.user.first_name} {profile.user.last_name}".strip() or "-",
                     "role_label": "Breeder",
                     "is_active": bool(profile.is_active and profile.user.is_active),
+                    "is_deleted": (profile.user.email or "").lower().endswith(DELETED_EMAIL_SUFFIX),
                     "status_detail": f"Verified: {'Yes' if profile.is_verified else 'No'} | Verification level: {profile.verification_level or '-'}",
                     "created_at": profile.created_at,
                     "target": profile,
