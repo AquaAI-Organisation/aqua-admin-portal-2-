@@ -1254,3 +1254,21 @@ class AdminAuditLog(models.Model):
 
     def __str__(self):
         return f"{self.action} by {self.actor_id or 'system'}"
+
+
+class AutomationLease(models.Model):
+    """Single-row lease used to elect ONE background-automation runner at a time.
+
+    Replaces the session-level Postgres advisory lock, which leaks/misbehaves
+    through a transaction-mode connection pooler (Supabase pgbouncer) and can
+    silently stop the scheduler forever. A lease is a plain row claimed with one
+    atomic UPDATE ... WHERE locked_until < now() — pooler-safe (no session state),
+    and self-healing: a crashed holder's lease expires after its TTL.
+    """
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1)
+    locked_until = models.DateTimeField(null=True, blank=True)
+    holder = models.CharField(max_length=120, blank=True, default="")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"AutomationLease(until={self.locked_until}, holder={self.holder})"

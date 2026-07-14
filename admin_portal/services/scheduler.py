@@ -6,8 +6,11 @@ are reviewed (and auto-approved when the operational toggle is on) without any
 external worker, cron, or Heroku Scheduler. Works the same on Heroku, a VPS,
 Docker, Render, etc. — wherever the web app runs.
 
-Safe with multiple web workers/instances: each cycle grabs a PostgreSQL
-advisory lock so only one process does the work at a time (no duplicate sends).
+Safe with multiple web workers/instances: each cycle claims a single-row
+AutomationLease (one atomic UPDATE) so only one process does the work at a
+time (no duplicate sends). This is pooler-safe, unlike a session-level advisory
+lock, which leaks through a transaction-mode pooler and can silently stall the
+scheduler forever; the lease also self-heals via a TTL if a holder crashes.
 """
 from __future__ import annotations
 
@@ -16,14 +19,13 @@ import os
 import sys
 import threading
 import time
+from datetime import timedelta
 
 from django.conf import settings
-from django.db import connection
+from django.db import connection, models
 
 logger = logging.getLogger(__name__)
 
-# Arbitrary, app-unique id for the advisory lock that serialises automation runs.
-_AUTOMATION_LOCK_ID = 728193
 _started = False
 
 
@@ -75,31 +77,61 @@ def _loop() -> None:
         time.sleep(interval)
 
 
+def _lease_ttl_seconds() -> int:
+    interval = max(30, int(getattr(settings, "INBOX_AUTOREFRESH_INTERVAL", 120)))
+    # Lease outlives a cycle (max ~35s of work) with headroom, so a crashed holder
+    # is reclaimed after the TTL; short enough that a dead process doesn't stall
+    # automation for long.
+    return interval * 3
+
+
+def _claim_lease() -> bool:
+    """Elect a single runner via a pooler-safe atomic UPDATE on a lease row.
+
+    Unlike session-level advisory locks (which leak through a transaction-mode
+    pooler and can silently stop automation forever), this is one atomic statement
+    with no session state, and self-heals via the lease TTL.
+    """
+    import os, socket
+    from django.utils import timezone
+    from ..models import AutomationLease
+
+    now = timezone.now()
+    until = now + timedelta(seconds=_lease_ttl_seconds())
+    holder = f"{socket.gethostname()}:{os.getpid()}"
+
+    AutomationLease.objects.get_or_create(id=1)
+    # Claim only if free or expired — a single atomic UPDATE ... WHERE.
+    claimed = AutomationLease.objects.filter(
+        models.Q(pk=1)
+        & (models.Q(locked_until__isnull=True) | models.Q(locked_until__lt=now))
+    ).update(locked_until=until, holder=holder)
+    return bool(claimed)
+
+
+def _release_lease() -> None:
+    """Expire our lease so the next cycle can claim immediately (best-effort)."""
+    try:
+        from django.utils import timezone
+        from ..models import AutomationLease
+        AutomationLease.objects.filter(pk=1).update(locked_until=timezone.now())
+    except Exception:
+        pass
+
+
 def _run_cycle_if_leader() -> None:
-    """Run one automation cycle, but only if we win the advisory lock."""
+    """Run one automation cycle, but only if we win the lease (pooler-safe)."""
     if connection.vendor != "postgresql":
-        # No advisory locks (e.g. sqlite in local dev) — single process assumed.
+        # Single process assumed in local/sqlite dev.
         _do_cycle()
         return
 
-    got_lock = False
+    if not _claim_lease():
+        return  # another instance holds the lease for this window
     try:
-        with connection.cursor() as cur:
-            cur.execute("SELECT pg_try_advisory_lock(%s)", [_AUTOMATION_LOCK_ID])
-            got_lock = bool(cur.fetchone()[0])
-        if not got_lock:
-            return  # another process is handling this cycle
         _do_cycle()
     finally:
-        if got_lock:
-            # Release on a FRESH cursor (the session still holds the lock). If the
-            # connection was closed/reset during the cycle, the lock was already
-            # auto-released with that session, so a failure here is safe to ignore.
-            try:
-                with connection.cursor() as cur:
-                    cur.execute("SELECT pg_advisory_unlock(%s)", [_AUTOMATION_LOCK_ID])
-            except Exception:
-                pass
+        _release_lease()
 
 
 def _do_cycle() -> None:

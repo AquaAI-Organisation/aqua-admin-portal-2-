@@ -194,6 +194,8 @@ def dashboard(request):
         "consultant_count": reviews.filter(subject_type="consultant").count(),
         "pending_breeder_count": ExternalBreederProfile.objects.filter(is_verified=False).count(),
         "pending_consultant_count": ExternalConsultantProfile.objects.filter(admin_status="pending").count(),
+        # erased accounts across all roles (anonymised to deleted_<hex>@deleted.invalid)
+        "deleted_accounts_count": ExternalUser.objects.filter(email__iendswith=DELETED_EMAIL_SUFFIX).count(),
     }
     return render(request, "admin_portal/dashboard.html", context)
 
@@ -700,6 +702,12 @@ def _load_external_profile(review: AIAccountReview):
         return None
 
 
+# Erased accounts are anonymised in place to  deleted_<hex>@deleted.invalid  (and
+# is_active=False) by the backend erasure engine — that suffix is the clean signal
+# for "this account was deleted", distinct from a merely deactivated one.
+DELETED_EMAIL_SUFFIX = "@deleted.invalid"
+
+
 @admin_required
 def entity_directory(request):
     entity_type = (request.GET.get("entity_type") or "breeder").strip()
@@ -721,7 +729,11 @@ def entity_directory(request):
         if status == "active":
             qs = qs.filter(is_active=True, user__is_active=True)
         elif status == "inactive":
-            qs = qs.filter(Q(is_active=False) | Q(user__is_active=False))
+            qs = qs.filter(
+                (Q(is_active=False) | Q(user__is_active=False))
+            ).exclude(user__email__iendswith=DELETED_EMAIL_SUFFIX)
+        elif status == "deleted":
+            qs = qs.filter(user__email__iendswith=DELETED_EMAIL_SUFFIX)
         for profile in qs:
             rows.append(
                 {
@@ -732,6 +744,9 @@ def entity_directory(request):
                     "name": profile.user.name or f"{profile.user.first_name} {profile.user.last_name}".strip() or "-",
                     "role_label": "Consultant",
                     "is_active": bool(profile.is_active and profile.user.is_active),
+                    "is_deleted": (profile.user.email or "").lower().endswith(DELETED_EMAIL_SUFFIX),
+                    "can_approve": not (profile.user.email or "").lower().endswith(DELETED_EMAIL_SUFFIX)
+                    and not bool(profile.is_active and profile.user.is_active),
                     "status_detail": f"Admin status: {profile.admin_status or '-'} | Verified: {'Yes' if profile.is_verified else 'No'}",
                     "created_at": profile.created_at,
                     "target": profile,
@@ -750,7 +765,9 @@ def entity_directory(request):
         if status == "active":
             qs = qs.filter(is_active=True)
         elif status == "inactive":
-            qs = qs.filter(is_active=False)
+            qs = qs.filter(is_active=False).exclude(email__iendswith=DELETED_EMAIL_SUFFIX)
+        elif status == "deleted":
+            qs = qs.filter(email__iendswith=DELETED_EMAIL_SUFFIX)
         for user in qs:
             rows.append(
                 {
@@ -761,6 +778,7 @@ def entity_directory(request):
                     "name": user.name or f"{user.first_name} {user.last_name}".strip() or "-",
                     "role_label": "User",
                     "is_active": bool(user.is_active),
+                    "is_deleted": (user.email or "").lower().endswith(DELETED_EMAIL_SUFFIX),
                     "status_detail": f"Role: {user.role or '-'} | Verified: {'Yes' if user.is_verified else 'No'}",
                     "created_at": user.created_at or user.date_joined,
                     "target": user,
@@ -781,7 +799,11 @@ def entity_directory(request):
         if status == "active":
             qs = qs.filter(is_active=True, user__is_active=True)
         elif status == "inactive":
-            qs = qs.filter(Q(is_active=False) | Q(user__is_active=False))
+            qs = qs.filter(
+                (Q(is_active=False) | Q(user__is_active=False))
+            ).exclude(user__email__iendswith=DELETED_EMAIL_SUFFIX)
+        elif status == "deleted":
+            qs = qs.filter(user__email__iendswith=DELETED_EMAIL_SUFFIX)
         for profile in qs:
             rows.append(
                 {
@@ -792,6 +814,9 @@ def entity_directory(request):
                     "name": profile.user.name or f"{profile.user.first_name} {profile.user.last_name}".strip() or "-",
                     "role_label": "Breeder",
                     "is_active": bool(profile.is_active and profile.user.is_active),
+                    "is_deleted": (profile.user.email or "").lower().endswith(DELETED_EMAIL_SUFFIX),
+                    "can_approve": not (profile.user.email or "").lower().endswith(DELETED_EMAIL_SUFFIX)
+                    and not bool(profile.is_active and profile.user.is_active),
                     "status_detail": f"Verified: {'Yes' if profile.is_verified else 'No'} | Verification level: {profile.verification_level or '-'}",
                     "created_at": profile.created_at,
                     "target": profile,
@@ -820,9 +845,40 @@ def entity_status_update(request, entity_type, entity_id):
     action = (request.POST.get("action") or "").strip()
     next_url = request.POST.get("next") or reverse("admin_portal:entity_directory")
     activate = action == "reactivate"
-    if action not in {"suspend", "reactivate"}:
+    if action not in {"suspend", "reactivate", "approve"}:
         messages.error(request, "Invalid account action.")
         return redirect(next_url)
+
+    # "Approve" runs the same path as Pending Intake approval (create/find the
+    # review, then manual_override -> "approved"), so an admin is never blocked
+    # from approving a breeder/consultant directly from the Accounts directory
+    # if the auto-approval scheduler hasn't picked it up.
+    if action == "approve":
+        if entity_type not in {"breeder", "consultant"}:
+            messages.error(request, "Only breeder and consultant accounts can be approved here.")
+            return redirect(next_url)
+        profile_model = ExternalBreederProfile if entity_type == "breeder" else ExternalConsultantProfile
+        try:
+            profile = get_object_or_404(profile_model.objects.select_related("user"), pk=entity_id)
+            review = _ensure_review(entity_type, profile, profile.user)
+            manual_override(review, "approved", "Approved from Accounts directory.", request.user)
+            summary = f"{profile.company_name or profile.user.email} approved from Accounts directory."
+        except Exception as exc:
+            messages.error(request, f"Could not approve account: {exc}")
+            return redirect(next_url)
+        audit.record_write(
+            request.user,
+            "entity.approve",
+            target_type=entity_type,
+            target_id=entity_id,
+            request=request,
+            summary=summary,
+            entity_type=entity_type,
+            requested_action=action,
+        )
+        messages.success(request, summary)
+        return redirect(next_url)
+
     try:
         summary = _set_entity_active_state(entity_type, entity_id, activate=activate, actor=request.user)
     except ValueError as exc:

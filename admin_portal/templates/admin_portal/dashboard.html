@@ -48,6 +48,7 @@ a.db-tile:hover{border-color:rgba(16,185,129,.4);}
 .tone-amber .db-kpi-ico{background:rgba(251,191,36,.16); color:#fbbf24;}
 .tone-red   .db-kpi-ico{background:rgba(240,97,109,.16); color:#fb7185;}
 .tone-teal  .db-kpi-ico{background:rgba(45,212,191,.16); color:#2dd4bf;}
+.tone-slate .db-kpi-ico{background:rgba(148,163,184,.16); color:#94a3b8;}
 
 /* section tiles */
 .db-tile h3{margin:0 0 14px; font-size:14px; font-weight:600; display:flex; align-items:center; gap:8px;}
@@ -120,6 +121,12 @@ a.db-tile:hover{border-color:rgba(16,185,129,.4);}
       <div class="db-kpi-label"><span class="db-kpi-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg></span> Pending intake</div>
       <div class="db-kpi-val">{{ pending_breeder_count|add:pending_consultant_count }}</div>
       <div class="db-kpi-sub">Breeders {{ pending_breeder_count }} · Consultants {{ pending_consultant_count }}</div>
+    </a>
+
+    <a class="db-tile tone-slate" href="{% url 'admin_portal:entity_directory' %}?status=deleted" style="animation-delay:.1s">
+      <div class="db-kpi-label"><span class="db-kpi-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h2a2 2 0 012 2v2"/></svg></span> Deleted accounts</div>
+      <div class="db-kpi-val">{{ deleted_accounts_count }}</div>
+      <div class="db-kpi-sub">Erased (all roles) · GDPR</div>
     </a>
 
     <a class="db-tile tone-red" href="{% url 'admin_portal:issue_list' %}" style="animation-delay:.12s">
