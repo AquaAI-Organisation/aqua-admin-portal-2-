@@ -64,6 +64,17 @@ class Command(BaseCommand):
                 )
         except Exception as exc:
             self.stderr.write(f"Issue triage pass failed: {exc}")
+        try:
+            from django.core.cache import cache
+
+            if cache.add("cert_checks_throttle", "1", 6 * 3600):
+                from admin_portal.services.certificates import run_certificate_checks
+
+                cert_counts = run_certificate_checks()
+                if cert_counts.get("sent"):
+                    self.stdout.write(f"Sent {cert_counts['sent']} certificate reminder(s).")
+        except Exception as exc:
+            self.stderr.write(f"Certificate reminder pass failed: {exc}")
 
     def handle(self, *args, **options):
         limit = int(options.get("limit") or 25)
