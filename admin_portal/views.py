@@ -194,6 +194,8 @@ def dashboard(request):
         "consultant_count": reviews.filter(subject_type="consultant").count(),
         "pending_breeder_count": ExternalBreederProfile.objects.filter(is_verified=False).count(),
         "pending_consultant_count": ExternalConsultantProfile.objects.filter(admin_status="pending").count(),
+        # erased accounts across all roles (anonymised to deleted_<hex>@deleted.invalid)
+        "deleted_accounts_count": ExternalUser.objects.filter(email__iendswith=DELETED_EMAIL_SUFFIX).count(),
     }
     return render(request, "admin_portal/dashboard.html", context)
 
