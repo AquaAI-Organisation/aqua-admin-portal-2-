@@ -68,18 +68,30 @@
         <td>
           {% if row.is_deleted %}
           <span class="muted">Deleted — no actions</span>
-          {% elif IS_SUPER_ADMIN %}
-          <form method="post" action="{% url 'admin_portal:entity_status_update' row.entity_type row.entity_id %}">
-            {% csrf_token %}
-            <input type="hidden" name="next" value="{{ request.get_full_path }}">
-            {% if row.is_active %}
-            <input type="hidden" name="action" value="suspend">
-            <button class="btn-danger btn-sm" type="submit" onclick="return confirm('Suspend or close down this account?')">Suspend / close down</button>
-            {% else %}
-            <input type="hidden" name="action" value="reactivate">
-            <button class="btn btn-sm" type="submit">Re-activate</button>
+          {% elif IS_SUPER_ADMIN or IS_ADMIN %}
+          <div class="action-stack" style="display:flex;flex-direction:column;gap:6px;align-items:flex-start;">
+            {% if row.can_approve and IS_ADMIN or row.can_approve and IS_SUPER_ADMIN %}
+            <form method="post" action="{% url 'admin_portal:entity_status_update' row.entity_type row.entity_id %}">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              <input type="hidden" name="action" value="approve">
+              <button class="btn btn-sm" type="submit" onclick="return confirm('Approve this account now?')">Approve</button>
+            </form>
             {% endif %}
-          </form>
+            {% if IS_SUPER_ADMIN %}
+            <form method="post" action="{% url 'admin_portal:entity_status_update' row.entity_type row.entity_id %}">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              {% if row.is_active %}
+              <input type="hidden" name="action" value="suspend">
+              <button class="btn-danger btn-sm" type="submit" onclick="return confirm('Suspend or close down this account?')">Suspend / close down</button>
+              {% else %}
+              <input type="hidden" name="action" value="reactivate">
+              <button class="btn btn-sm" type="submit">Re-activate</button>
+              {% endif %}
+            </form>
+            {% endif %}
+          </div>
           {% else %}
           <span class="muted">Super admin approval required</span>
           {% endif %}

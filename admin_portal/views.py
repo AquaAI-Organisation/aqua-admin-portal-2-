@@ -745,6 +745,8 @@ def entity_directory(request):
                     "role_label": "Consultant",
                     "is_active": bool(profile.is_active and profile.user.is_active),
                     "is_deleted": (profile.user.email or "").lower().endswith(DELETED_EMAIL_SUFFIX),
+                    "can_approve": not (profile.user.email or "").lower().endswith(DELETED_EMAIL_SUFFIX)
+                    and not bool(profile.is_active and profile.user.is_active),
                     "status_detail": f"Admin status: {profile.admin_status or '-'} | Verified: {'Yes' if profile.is_verified else 'No'}",
                     "created_at": profile.created_at,
                     "target": profile,
@@ -813,6 +815,8 @@ def entity_directory(request):
                     "role_label": "Breeder",
                     "is_active": bool(profile.is_active and profile.user.is_active),
                     "is_deleted": (profile.user.email or "").lower().endswith(DELETED_EMAIL_SUFFIX),
+                    "can_approve": not (profile.user.email or "").lower().endswith(DELETED_EMAIL_SUFFIX)
+                    and not bool(profile.is_active and profile.user.is_active),
                     "status_detail": f"Verified: {'Yes' if profile.is_verified else 'No'} | Verification level: {profile.verification_level or '-'}",
                     "created_at": profile.created_at,
                     "target": profile,
@@ -841,9 +845,40 @@ def entity_status_update(request, entity_type, entity_id):
     action = (request.POST.get("action") or "").strip()
     next_url = request.POST.get("next") or reverse("admin_portal:entity_directory")
     activate = action == "reactivate"
-    if action not in {"suspend", "reactivate"}:
+    if action not in {"suspend", "reactivate", "approve"}:
         messages.error(request, "Invalid account action.")
         return redirect(next_url)
+
+    # "Approve" runs the same path as Pending Intake approval (create/find the
+    # review, then manual_override -> "approved"), so an admin is never blocked
+    # from approving a breeder/consultant directly from the Accounts directory
+    # if the auto-approval scheduler hasn't picked it up.
+    if action == "approve":
+        if entity_type not in {"breeder", "consultant"}:
+            messages.error(request, "Only breeder and consultant accounts can be approved here.")
+            return redirect(next_url)
+        profile_model = ExternalBreederProfile if entity_type == "breeder" else ExternalConsultantProfile
+        try:
+            profile = get_object_or_404(profile_model.objects.select_related("user"), pk=entity_id)
+            review = _ensure_review(entity_type, profile, profile.user)
+            manual_override(review, "approved", "Approved from Accounts directory.", request.user)
+            summary = f"{profile.company_name or profile.user.email} approved from Accounts directory."
+        except Exception as exc:
+            messages.error(request, f"Could not approve account: {exc}")
+            return redirect(next_url)
+        audit.record_write(
+            request.user,
+            "entity.approve",
+            target_type=entity_type,
+            target_id=entity_id,
+            request=request,
+            summary=summary,
+            entity_type=entity_type,
+            requested_action=action,
+        )
+        messages.success(request, summary)
+        return redirect(next_url)
+
     try:
         summary = _set_entity_active_state(entity_type, entity_id, activate=activate, actor=request.user)
     except ValueError as exc:
