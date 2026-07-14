@@ -497,9 +497,11 @@ def _certificate_reminder_body(subject_type: str, user) -> str:
     name = (getattr(user, "name", "") or getattr(user, "first_name", "") or "there").strip()
     return (
         f"Hi {name},\n\n"
-        f"Thanks for registering as a {role} on Aqua AI. To complete your verification and keep "
-        "your account in good standing, please upload a valid certificate or licence — for example "
-        "your breeding licence or professional credential — in your Aqua AI account settings.\n\n"
+        f"Thanks for registering as a {role} on Aqua AI. We noticed you haven't uploaded a "
+        "verification certificate or licence yet.\n\n"
+        "Please upload a valid certificate — for example your breeding licence or professional "
+        "credential — in your Aqua AI account settings so you can unlock and explore the full "
+        "features of the app.\n\n"
         "If you have already uploaded one, please ignore this message.\n\n"
         "Thank you,\nThe Aqua AI Team"
     )
