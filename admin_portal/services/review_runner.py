@@ -465,6 +465,73 @@ def _approve(subject_type, profile, user):
         profile.metadata = metadata
         profile.save(update_fields=["is_active", "is_verified", "verified_at", "metadata"])
 
+    # On approval, remind the provider to upload a verification certificate if we
+    # don't have one on file yet (sent once per account).
+    _request_certificate_if_missing(subject_type, profile, user)
+
+
+def _has_certificate(subject_type, profile, user) -> bool:
+    """Whether the provider has a certificate / credential / licence on file."""
+    if list(getattr(user, "verification_documents", None) or []):
+        return True
+    if subject_type == "consultant" and list(getattr(profile, "credentials", None) or []):
+        return True
+    if subject_type == "breeder":
+        try:
+            from ..models import ExternalBreederVerification
+
+            if (
+                ExternalBreederVerification.objects
+                .filter(seller_id=user.id)
+                .exclude(status__iexact="rejected")
+                .exists()
+            ):
+                return True
+        except Exception:
+            logger.exception("Breeder verification lookup failed for %s", getattr(user, "id", ""))
+    return False
+
+
+def _certificate_reminder_body(subject_type: str, user) -> str:
+    role = "breeder" if subject_type == "breeder" else "consultant"
+    name = (getattr(user, "name", "") or getattr(user, "first_name", "") or "there").strip()
+    return (
+        f"Hi {name},\n\n"
+        f"Thanks for registering as a {role} on Aqua AI. To complete your verification and keep "
+        "your account in good standing, please upload a valid certificate or licence — for example "
+        "your breeding licence or professional credential — in your Aqua AI account settings.\n\n"
+        "If you have already uploaded one, please ignore this message.\n\n"
+        "Thank you,\nThe Aqua AI Team"
+    )
+
+
+def _request_certificate_if_missing(subject_type, profile, user) -> None:
+    """Email the provider a one-time reminder to upload a certificate if none is on file."""
+    try:
+        if _has_certificate(subject_type, profile, user):
+            return
+        metadata = dict(getattr(profile, "metadata", None) or {})
+        if metadata.get("certificate_reminder_sent_at"):
+            return  # already reminded — do not spam on every cycle
+        recipient = (getattr(user, "email", "") or "").strip()
+        if not recipient:
+            return
+        from .google_oauth import pick_alias_for_mailbox
+        from .notifier import send_custom_email
+
+        result = send_custom_email(
+            subject="Action needed: upload your verification certificate — Aqua AI",
+            body=_certificate_reminder_body(subject_type, user),
+            recipients=[recipient],
+            from_email=pick_alias_for_mailbox("providers"),
+        )
+        metadata["certificate_reminder_sent_at"] = timezone.now().isoformat()
+        metadata["certificate_reminder_ok"] = bool(result.get("ok"))
+        profile.metadata = metadata
+        profile.save(update_fields=["metadata"])
+    except Exception:
+        logger.exception("Certificate reminder failed for %s", getattr(user, "email", ""))
+
 
 def _deactivate(subject_type, profile, user, *, reason: str):
     profile.is_active = False
