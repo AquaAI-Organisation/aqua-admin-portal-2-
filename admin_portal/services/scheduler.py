@@ -6,8 +6,11 @@ are reviewed (and auto-approved when the operational toggle is on) without any
 external worker, cron, or Heroku Scheduler. Works the same on Heroku, a VPS,
 Docker, Render, etc. — wherever the web app runs.
 
-Safe with multiple web workers/instances: each cycle grabs a PostgreSQL
-advisory lock so only one process does the work at a time (no duplicate sends).
+Safe with multiple web workers/instances: each cycle claims a single-row
+AutomationLease (one atomic UPDATE) so only one process does the work at a
+time (no duplicate sends). This is pooler-safe, unlike a session-level advisory
+lock, which leaks through a transaction-mode pooler and can silently stall the
+scheduler forever; the lease also self-heals via a TTL if a holder crashes.
 """
 from __future__ import annotations
 
@@ -23,8 +26,6 @@ from django.db import connection, models
 
 logger = logging.getLogger(__name__)
 
-# Arbitrary, app-unique id for the advisory lock that serialises automation runs.
-_AUTOMATION_LOCK_ID = 728193
 _started = False
 
 

@@ -70,7 +70,7 @@
           <span class="muted">Deleted — no actions</span>
           {% elif IS_SUPER_ADMIN or IS_ADMIN %}
           <div class="action-stack" style="display:flex;flex-direction:column;gap:6px;align-items:flex-start;">
-            {% if row.can_approve and IS_ADMIN or row.can_approve and IS_SUPER_ADMIN %}
+            {% if row.can_approve %}
             <form method="post" action="{% url 'admin_portal:entity_status_update' row.entity_type row.entity_id %}">
               {% csrf_token %}
               <input type="hidden" name="next" value="{{ request.get_full_path }}">
