@@ -1,9 +1,10 @@
-"""All-in-one automation loop for the privacy/DSAR pipeline.
+"""All-in-one automation loop for the signup-review and privacy/DSAR pipelines.
 
 Designed to run as a single always-on worker dyno so the whole flow is hands-off:
 fetch the mailbox (which auto-analyses, auto-creates DSARs and sends verification
-links), then check for requesters who have logged in at aquaai.uk and deliver
-their data.
+links), check for requesters who have logged in at aquaai.uk and deliver their
+data, and review/triage new breeder & consultant signups (auto-approving them
+when the operational toggle is on).
 
   python manage.py run_automation                # loop forever (default 120s)
   python manage.py run_automation --interval 60  # custom cadence
@@ -16,7 +17,9 @@ import time
 from django.core.management.base import BaseCommand
 
 from admin_portal.services.dsar import run_due_login_checks
+from admin_portal.services.issue_runner import process_pending_issues
 from admin_portal.services.mailbox import fetch_support_inbox
+from admin_portal.services.review_runner import process_pending
 
 
 class Command(BaseCommand):
@@ -43,6 +46,35 @@ class Command(BaseCommand):
                 self.stdout.write(f"Confirmed {confirmed} login(s) of {checked} pending DSAR request(s).")
         except Exception as exc:
             self.stderr.write(f"DSAR login check failed: {exc}")
+        try:
+            review_counts = process_pending(limit_per_type=limit)
+            if review_counts.get("breeder") or review_counts.get("consultant"):
+                self.stdout.write(
+                    f"Reviewed {review_counts['breeder']} breeder(s) and "
+                    f"{review_counts['consultant']} consultant(s)."
+                )
+        except Exception as exc:
+            self.stderr.write(f"Account review pass failed: {exc}")
+        try:
+            issue_counts = process_pending_issues(limit_per_type=limit)
+            if issue_counts.get("incident") or issue_counts.get("consultant_warning"):
+                self.stdout.write(
+                    f"Triaged {issue_counts.get('incident', 0)} incident(s) and "
+                    f"{issue_counts.get('consultant_warning', 0)} consultant warning(s)."
+                )
+        except Exception as exc:
+            self.stderr.write(f"Issue triage pass failed: {exc}")
+        try:
+            from django.core.cache import cache
+
+            if cache.add("cert_checks_throttle", "1", 6 * 3600):
+                from admin_portal.services.certificates import run_certificate_checks
+
+                cert_counts = run_certificate_checks()
+                if cert_counts.get("sent"):
+                    self.stdout.write(f"Sent {cert_counts['sent']} certificate reminder(s).")
+        except Exception as exc:
+            self.stderr.write(f"Certificate reminder pass failed: {exc}")
 
     def handle(self, *args, **options):
         limit = int(options.get("limit") or 25)

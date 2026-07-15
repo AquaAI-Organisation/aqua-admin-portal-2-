@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import json
+import logging
 import secrets
+import time
 from datetime import timedelta
 from pathlib import Path
 
@@ -10,6 +12,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
+from django.core.cache import cache
 from django.core.paginator import Paginator
 from django.db.models import Count, Q
 from django.http import FileResponse, Http404, JsonResponse
@@ -60,6 +63,7 @@ from .services.dsar import (
     extend_dsar_request,
     prepare_dsar_request,
     reject_dsar_request,
+    run_due_login_checks,
 )
 from .services.feature_d_backend import (
     FeatureDBackendError,
@@ -85,6 +89,8 @@ from .services.notifier import notify_invite, notify_password_change
 from .services.issue_runner import process_pending_issues
 from .services.reporting import build_report_for
 from .services.review_runner import manual_override, process_pending, run_review
+
+logger = logging.getLogger(__name__)
 
 
 def background_video(request):
@@ -188,6 +194,8 @@ def dashboard(request):
         "consultant_count": reviews.filter(subject_type="consultant").count(),
         "pending_breeder_count": ExternalBreederProfile.objects.filter(is_verified=False).count(),
         "pending_consultant_count": ExternalConsultantProfile.objects.filter(admin_status="pending").count(),
+        # erased accounts across all roles (anonymised to deleted_<hex>@deleted.invalid)
+        "deleted_accounts_count": ExternalUser.objects.filter(email__iendswith=DELETED_EMAIL_SUFFIX).count(),
     }
     return render(request, "admin_portal/dashboard.html", context)
 
@@ -691,7 +699,20 @@ def review_override(request, review_id):
         new_decision=new_decision,
         reason=reason,
     )
-    messages.success(request, f"Review manually overridden to '{new_decision}'.")
+    # manual_override applies the decision to the live account but swallows any
+    # error there; confirm it actually landed so an admin isn't told "approved"
+    # when the account never activated.
+    review.refresh_from_db()
+    expected = "manual_approve" if new_decision == "approved" else "manual_reject"
+    applied_ok = any((a or {}).get("action") == expected for a in (review.applied_actions or []))
+    if applied_ok:
+        messages.success(request, f"Account {new_decision} — the change was applied to the live account.")
+    else:
+        messages.error(
+            request,
+            f"The review was marked '{new_decision}', but applying it to the live account failed. "
+            "The account may not exist in the backend, or the update was rejected — check the server logs and try again.",
+        )
     return redirect("admin_portal:review_detail", review_id=review.id)
 
 
@@ -701,6 +722,12 @@ def _load_external_profile(review: AIAccountReview):
         return model.objects.get(pk=review.subject_id)
     except model.DoesNotExist:
         return None
+
+
+# Erased accounts are anonymised in place to  deleted_<hex>@deleted.invalid  (and
+# is_active=False) by the backend erasure engine — that suffix is the clean signal
+# for "this account was deleted", distinct from a merely deactivated one.
+DELETED_EMAIL_SUFFIX = "@deleted.invalid"
 
 
 @admin_required
@@ -724,7 +751,11 @@ def entity_directory(request):
         if status == "active":
             qs = qs.filter(is_active=True, user__is_active=True)
         elif status == "inactive":
-            qs = qs.filter(Q(is_active=False) | Q(user__is_active=False))
+            qs = qs.filter(
+                (Q(is_active=False) | Q(user__is_active=False))
+            ).exclude(user__email__iendswith=DELETED_EMAIL_SUFFIX)
+        elif status == "deleted":
+            qs = qs.filter(user__email__iendswith=DELETED_EMAIL_SUFFIX)
         for profile in qs:
             rows.append(
                 {
@@ -735,6 +766,9 @@ def entity_directory(request):
                     "name": profile.user.name or f"{profile.user.first_name} {profile.user.last_name}".strip() or "-",
                     "role_label": "Consultant",
                     "is_active": bool(profile.is_active and profile.user.is_active),
+                    "is_deleted": (profile.user.email or "").lower().endswith(DELETED_EMAIL_SUFFIX),
+                    "can_approve": not (profile.user.email or "").lower().endswith(DELETED_EMAIL_SUFFIX)
+                    and not bool(profile.is_active and profile.user.is_active),
                     "status_detail": f"Admin status: {profile.admin_status or '-'} | Verified: {'Yes' if profile.is_verified else 'No'}",
                     "created_at": profile.created_at,
                     "target": profile,
@@ -753,7 +787,9 @@ def entity_directory(request):
         if status == "active":
             qs = qs.filter(is_active=True)
         elif status == "inactive":
-            qs = qs.filter(is_active=False)
+            qs = qs.filter(is_active=False).exclude(email__iendswith=DELETED_EMAIL_SUFFIX)
+        elif status == "deleted":
+            qs = qs.filter(email__iendswith=DELETED_EMAIL_SUFFIX)
         for user in qs:
             rows.append(
                 {
@@ -764,6 +800,7 @@ def entity_directory(request):
                     "name": user.name or f"{user.first_name} {user.last_name}".strip() or "-",
                     "role_label": "User",
                     "is_active": bool(user.is_active),
+                    "is_deleted": (user.email or "").lower().endswith(DELETED_EMAIL_SUFFIX),
                     "status_detail": f"Role: {user.role or '-'} | Verified: {'Yes' if user.is_verified else 'No'}",
                     "created_at": user.created_at or user.date_joined,
                     "target": user,
@@ -784,7 +821,11 @@ def entity_directory(request):
         if status == "active":
             qs = qs.filter(is_active=True, user__is_active=True)
         elif status == "inactive":
-            qs = qs.filter(Q(is_active=False) | Q(user__is_active=False))
+            qs = qs.filter(
+                (Q(is_active=False) | Q(user__is_active=False))
+            ).exclude(user__email__iendswith=DELETED_EMAIL_SUFFIX)
+        elif status == "deleted":
+            qs = qs.filter(user__email__iendswith=DELETED_EMAIL_SUFFIX)
         for profile in qs:
             rows.append(
                 {
@@ -795,6 +836,9 @@ def entity_directory(request):
                     "name": profile.user.name or f"{profile.user.first_name} {profile.user.last_name}".strip() or "-",
                     "role_label": "Breeder",
                     "is_active": bool(profile.is_active and profile.user.is_active),
+                    "is_deleted": (profile.user.email or "").lower().endswith(DELETED_EMAIL_SUFFIX),
+                    "can_approve": not (profile.user.email or "").lower().endswith(DELETED_EMAIL_SUFFIX)
+                    and not bool(profile.is_active and profile.user.is_active),
                     "status_detail": f"Verified: {'Yes' if profile.is_verified else 'No'} | Verification level: {profile.verification_level or '-'}",
                     "created_at": profile.created_at,
                     "target": profile,
@@ -823,9 +867,40 @@ def entity_status_update(request, entity_type, entity_id):
     action = (request.POST.get("action") or "").strip()
     next_url = request.POST.get("next") or reverse("admin_portal:entity_directory")
     activate = action == "reactivate"
-    if action not in {"suspend", "reactivate"}:
+    if action not in {"suspend", "reactivate", "approve"}:
         messages.error(request, "Invalid account action.")
         return redirect(next_url)
+
+    # "Approve" runs the same path as Pending Intake approval (create/find the
+    # review, then manual_override -> "approved"), so an admin is never blocked
+    # from approving a breeder/consultant directly from the Accounts directory
+    # if the auto-approval scheduler hasn't picked it up.
+    if action == "approve":
+        if entity_type not in {"breeder", "consultant"}:
+            messages.error(request, "Only breeder and consultant accounts can be approved here.")
+            return redirect(next_url)
+        profile_model = ExternalBreederProfile if entity_type == "breeder" else ExternalConsultantProfile
+        try:
+            profile = get_object_or_404(profile_model.objects.select_related("user"), pk=entity_id)
+            review = _ensure_review(entity_type, profile, profile.user)
+            manual_override(review, "approved", "Approved from Accounts directory.", request.user)
+            summary = f"{profile.company_name or profile.user.email} approved from Accounts directory."
+        except Exception as exc:
+            messages.error(request, f"Could not approve account: {exc}")
+            return redirect(next_url)
+        audit.record_write(
+            request.user,
+            "entity.approve",
+            target_type=entity_type,
+            target_id=entity_id,
+            request=request,
+            summary=summary,
+            entity_type=entity_type,
+            requested_action=action,
+        )
+        messages.success(request, summary)
+        return redirect(next_url)
+
     try:
         summary = _set_entity_active_state(entity_type, entity_id, activate=activate, actor=request.user)
     except ValueError as exc:
@@ -865,6 +940,8 @@ def operational_settings_view(request):
         )
         messages.success(request, "Operational settings updated.")
         return redirect("admin_portal:operational_settings")
+    schedule = list(config.auto_activate_delay_schedule or [])
+    cursor = (config.auto_activate_stagger_cursor or 0)
     return render(
         request,
         "admin_portal/operational_settings.html",
@@ -875,6 +952,9 @@ def operational_settings_view(request):
             "gmail_redirect_uri": _google_redirect_uri(request),
             "gmail_client_ready": bool(config.gmail_client_id and config.gmail_client_secret),
             "slack_status": slack_service.slack_status(),
+            "stagger_count": len(schedule),
+            "stagger_preview": schedule[:8],
+            "stagger_next": schedule[cursor % len(schedule)] if schedule else 0,
         },
     )
 
@@ -1123,6 +1203,55 @@ def support_inbox_refresh(request):
     else:
         mailbox = (request.GET.get("mailbox") or "general").strip()
     return redirect(f"{reverse('admin_portal:support_inbox_list')}?mailbox={mailbox}")
+
+
+# Minimum gap between real server-side mailbox fetches triggered by the inbox
+# auto-refresh poll, so multiple open tabs / admins don't hammer Gmail.
+_INBOX_SYNC_THROTTLE_KEY = "inbox_autosync_last_run"
+_INBOX_SYNC_MIN_INTERVAL = 30  # seconds
+
+
+@admin_required
+def support_inbox_sync(request):
+    """JSON endpoint the inbox page polls so new mail and DSAR progress appear
+    automatically, with no manual "Refresh inbox" click.
+
+    Operational admins additionally trigger a throttled live mailbox fetch +
+    DSAR login check on each poll, so whenever an inbox tab is open the whole
+    pipeline (ingest → analyse → DSAR intake → identity confirmation → auto
+    send) keeps moving even if the background scheduler is not running. The
+    response reports per-lane counts so the client can refresh when something
+    new has landed."""
+    fetched: dict | None = None
+    can_operate = getattr(request.user, "is_admin", False) or getattr(request.user, "is_super_admin", False)
+    if can_operate:
+        last = cache.get(_INBOX_SYNC_THROTTLE_KEY)
+        now_ts = time.time()
+        if not last or (now_ts - last) >= _INBOX_SYNC_MIN_INTERVAL:
+            # Reserve the slot before the slow work so concurrent polls skip it.
+            cache.set(_INBOX_SYNC_THROTTLE_KEY, now_ts, _INBOX_SYNC_MIN_INTERVAL * 4)
+            try:
+                fetched = fetch_support_inbox(limit=25)
+            except Exception as exc:
+                logger.warning("Inbox auto-sync fetch failed: %s", exc)
+            try:
+                run_due_login_checks()
+            except Exception as exc:
+                logger.warning("Inbox auto-sync DSAR login check failed: %s", exc)
+    counts = {
+        "general": SupportInquiry.objects.filter(mailbox_kind="general").count(),
+        "privacy": SupportInquiry.objects.filter(mailbox_kind="privacy").count(),
+        "providers": SupportInquiry.objects.filter(mailbox_kind="providers").count(),
+    }
+    return JsonResponse(
+        {
+            "ok": True,
+            "counts": counts,
+            "total": sum(counts.values()),
+            "added": (fetched or {}).get("added", 0),
+            "dsar_created": (fetched or {}).get("dsar_created", 0),
+        }
+    )
 
 
 @operational_admin_required

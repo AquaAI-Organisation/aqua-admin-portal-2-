@@ -29,6 +29,7 @@
         <option value="" {% if not status %}selected{% endif %}>All statuses</option>
         <option value="active" {% if status == "active" %}selected{% endif %}>Active</option>
         <option value="inactive" {% if status == "inactive" %}selected{% endif %}>Inactive / suspended</option>
+        <option value="deleted" {% if status == "deleted" %}selected{% endif %}>Deleted (erased)</option>
       </select>
     </div>
     <button type="submit">Search</button>
@@ -55,26 +56,42 @@
           <div class="cell-sub">{{ row.name }}</div>
         </td>
         <td>
-          {% if row.is_active %}
+          {% if row.is_deleted %}
+          <span class="badge danger">Deleted</span>
+          {% elif row.is_active %}
           <span class="badge ok">Active</span>
           {% else %}
           <span class="badge danger">Suspended</span>
           {% endif %}
-          <div class="cell-sub">{{ row.status_detail }}</div>
+          <div class="cell-sub">{% if row.is_deleted %}Account erased — personal data removed{% else %}{{ row.status_detail }}{% endif %}</div>
         </td>
         <td>
-          {% if IS_SUPER_ADMIN %}
-          <form method="post" action="{% url 'admin_portal:entity_status_update' row.entity_type row.entity_id %}">
-            {% csrf_token %}
-            <input type="hidden" name="next" value="{{ request.get_full_path }}">
-            {% if row.is_active %}
-            <input type="hidden" name="action" value="suspend">
-            <button class="btn-danger btn-sm" type="submit" onclick="return confirm('Suspend or close down this account?')">Suspend / close down</button>
-            {% else %}
-            <input type="hidden" name="action" value="reactivate">
-            <button class="btn btn-sm" type="submit">Re-activate</button>
+          {% if row.is_deleted %}
+          <span class="muted">Deleted — no actions</span>
+          {% elif IS_SUPER_ADMIN or IS_ADMIN %}
+          <div class="action-stack" style="display:flex;flex-direction:column;gap:6px;align-items:flex-start;">
+            {% if row.can_approve %}
+            <form method="post" action="{% url 'admin_portal:entity_status_update' row.entity_type row.entity_id %}">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              <input type="hidden" name="action" value="approve">
+              <button class="btn btn-sm" type="submit" onclick="return confirm('Approve this account now?')">Approve</button>
+            </form>
             {% endif %}
-          </form>
+            {% if IS_SUPER_ADMIN %}
+            <form method="post" action="{% url 'admin_portal:entity_status_update' row.entity_type row.entity_id %}">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              {% if row.is_active %}
+              <input type="hidden" name="action" value="suspend">
+              <button class="btn-danger btn-sm" type="submit" onclick="return confirm('Suspend or close down this account?')">Suspend / close down</button>
+              {% else %}
+              <input type="hidden" name="action" value="reactivate">
+              <button class="btn btn-sm" type="submit">Re-activate</button>
+              {% endif %}
+            </form>
+            {% endif %}
+          </div>
           {% else %}
           <span class="muted">Super admin approval required</span>
           {% endif %}

@@ -9,6 +9,7 @@ Two kinds of tables live here:
    flag guarantees migrations here will never touch the main backend's schema.
 """
 from datetime import timedelta
+import random
 import uuid
 
 from django.conf import settings
@@ -219,6 +220,22 @@ class AdminInvite(models.Model):
         )
 
 
+def default_stagger_schedule():
+    """A long, varied, deterministic sequence of per-account approval delays (in
+    minutes) that new accounts cycle through when staggered auto-activation is on.
+
+    It starts with a hand-picked set of human-looking values and then fills out to
+    a long list of varied delays, so approvals do not fall on an obvious repeating
+    pattern before the sequence recycles. Deterministic (fixed seed) so the schedule
+    is stable across processes and restarts."""
+    seed_values = [35, 22, 17, 8, 10, 50, 45, 12, 28, 6, 41, 19, 33, 9, 25]
+    rng = random.Random(20260611)
+    values = list(seed_values)
+    while len(values) < 720:
+        values.append(rng.randint(5, 55))
+    return values
+
+
 class OperationalSettings(models.Model):
     auto_activate_new_accounts = models.BooleanField(
         default=False,
@@ -226,6 +243,27 @@ class OperationalSettings(models.Model):
             "When enabled, new breeder and consultant accounts are automatically approved "
             "without AI review as soon as the review processor picks them up."
         ),
+    )
+    auto_activate_stagger_enabled = models.BooleanField(
+        default=False,
+        help_text=(
+            "When enabled (with automatic activation on), each new account is still "
+            "auto-approved, but only after a different, human-looking delay taken from the "
+            "approval-delay schedule below. The account stays pending during the wait, so "
+            "approvals look manual while remaining fully automatic."
+        ),
+    )
+    auto_activate_delay_schedule = models.JSONField(
+        default=default_stagger_schedule,
+        blank=True,
+        help_text=(
+            "Repeating sequence of per-account approval delays in minutes. Each new account "
+            "takes the next value; the sequence recycles once exhausted."
+        ),
+    )
+    auto_activate_stagger_cursor = models.PositiveIntegerField(
+        default=0,
+        help_text="Internal pointer into the delay schedule for the next new account.",
     )
     dsar_auto_send = models.BooleanField(
         default=True,
@@ -276,6 +314,19 @@ class OperationalSettings(models.Model):
     def get_solo(cls):
         obj, _ = cls.objects.get_or_create(pk=1)
         return obj
+
+    def take_next_stagger_delay(self):
+        """Return ``(index, delay_minutes)`` for the next new account and advance
+        the cursor (persisted), recycling when the schedule is exhausted."""
+        schedule = [int(x) for x in (self.auto_activate_delay_schedule or []) if isinstance(x, (int, float))]
+        if not schedule:
+            schedule = default_stagger_schedule()
+            self.auto_activate_delay_schedule = schedule
+        idx = (self.auto_activate_stagger_cursor or 0) % len(schedule)
+        delay = max(0, int(schedule[idx]))
+        self.auto_activate_stagger_cursor = (idx + 1) % len(schedule)
+        self.save(update_fields=["auto_activate_delay_schedule", "auto_activate_stagger_cursor", "updated_at"])
+        return idx, delay
 
     @property
     def masked_smtp_username(self):
@@ -449,6 +500,25 @@ class PlatformSession(models.Model):
     class Meta:
         managed = False
         db_table = "django_session"
+
+
+class ExternalOutstandingToken(models.Model):
+    """Read-only mirror of the main platform's SimpleJWT outstanding-token table.
+
+    The mobile app / API authenticates with JWT, not Django session cookies, so a
+    user logging in does NOT create a ``django_session`` row — it issues a refresh
+    token, recorded here with the user id and issue time. A row created after a
+    DSAR request was raised is therefore proof the subject logged in to confirm
+    their identity."""
+    id = models.BigAutoField(primary_key=True)
+    user_id = models.UUIDField(null=True, blank=True)
+    jti = models.CharField(max_length=255)
+    created_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "token_blacklist_outstandingtoken"
 
 
 class ExternalUser(models.Model):
@@ -848,11 +918,16 @@ class ExternalBreederVerification(models.Model):
     seller = models.ForeignKey(
         ExternalUser, on_delete=models.DO_NOTHING, db_column="seller_id", related_name="+"
     )
+    document = models.TextField(blank=True)
     licence_number = models.CharField(max_length=100, blank=True)
     issuing_authority = models.CharField(max_length=255, blank=True)
     expiry_date = models.DateField(null=True, blank=True)
+    # Issue / "received" date of the certificate. Most certificates carry this even
+    # when they have no printed expiry, so it drives the 2-year renewal cycle.
+    awarded_date = models.DateField(null=True, blank=True)
     status = models.CharField(max_length=20, blank=True)
     rejection_reason = models.TextField(blank=True)
+    document_metadata = models.JSONField(default=dict, blank=True, null=True)
     reviewed_by_id = models.UUIDField(null=True, blank=True)
     reviewed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(null=True, blank=True)
@@ -1179,3 +1254,21 @@ class AdminAuditLog(models.Model):
 
     def __str__(self):
         return f"{self.action} by {self.actor_id or 'system'}"
+
+
+class AutomationLease(models.Model):
+    """Single-row lease used to elect ONE background-automation runner at a time.
+
+    Replaces the session-level Postgres advisory lock, which leaks/misbehaves
+    through a transaction-mode connection pooler (Supabase pgbouncer) and can
+    silently stop the scheduler forever. A lease is a plain row claimed with one
+    atomic UPDATE ... WHERE locked_until < now() — pooler-safe (no session state),
+    and self-healing: a crashed holder's lease expires after its TTL.
+    """
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1)
+    locked_until = models.DateTimeField(null=True, blank=True)
+    holder = models.CharField(max_length=120, blank=True, default="")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"AutomationLease(until={self.locked_until}, holder={self.holder})"

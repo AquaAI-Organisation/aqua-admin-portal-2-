@@ -186,3 +186,18 @@
   </div>
 </div>
 {% endblock %}
+
+{% block extra_js %}
+{% if dsar_request.status != "fulfilled" and dsar_request.status != "rejected" and dsar_request.status != "withdrawn" %}
+<script>
+/* While this request is still in flight, reload periodically. Opening this page
+   already re-checks for a fresh aquaai.uk login (and auto-sends the data when
+   confirmed), so the case advances itself hands-free without "Re-check login". */
+(() => {
+  const RELOAD_MS = 60000;
+  const tick = () => { if (!document.hidden) { window.location.reload(); } };
+  setTimeout(tick, RELOAD_MS);
+})();
+</script>
+{% endif %}
+{% endblock %}

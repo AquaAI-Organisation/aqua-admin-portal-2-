@@ -1,3 +1,5 @@
+import re
+
 from django import forms
 from django.contrib.auth.forms import AuthenticationForm
 
@@ -114,10 +116,47 @@ class AcceptInviteForm(forms.Form):
 
 
 class OperationalSettingsForm(forms.ModelForm):
+    auto_activate_delay_minutes_text = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 3, "placeholder": "e.g. 35, 22, 17, 8, 10, 50, 45"}),
+        help_text=(
+            "Comma- or space-separated whole minutes. Each new account takes the next value; "
+            "the list repeats once exhausted. Leave blank to keep the current schedule."
+        ),
+    )
     gmail_client_secret = forms.CharField(
         required=False,
         widget=forms.PasswordInput(render_value=True, attrs={"placeholder": "Google OAuth client secret"}),
     )
+
+    def clean_auto_activate_delay_minutes_text(self):
+        raw = (self.cleaned_data.get("auto_activate_delay_minutes_text") or "").strip()
+        if not raw:
+            return None  # keep the existing schedule
+        values = []
+        for part in re.split(r"[,\s]+", raw):
+            if not part:
+                continue
+            try:
+                minutes = int(float(part))
+            except ValueError:
+                raise forms.ValidationError(f"'{part}' is not a whole number of minutes.")
+            if minutes < 0 or minutes > 1440:
+                raise forms.ValidationError("Each delay must be between 0 and 1440 minutes.")
+            values.append(minutes)
+        if not values:
+            return None
+        return values
+
+    def save(self, commit=True):
+        obj = super().save(commit=False)
+        parsed = self.cleaned_data.get("auto_activate_delay_minutes_text")
+        if parsed is not None:
+            obj.auto_activate_delay_schedule = parsed
+            obj.auto_activate_stagger_cursor = 0  # restart the cycle when the schedule changes
+        if commit:
+            obj.save()
+        return obj
     gmail_refresh_token = forms.CharField(
         required=False,
         widget=forms.PasswordInput(render_value=True, attrs={"placeholder": "Long-lived Gmail refresh token"}),
@@ -139,6 +178,7 @@ class OperationalSettingsForm(forms.ModelForm):
         model = OperationalSettings
         fields = [
             "auto_activate_new_accounts",
+            "auto_activate_stagger_enabled",
             "dsar_auto_send",
             "gmail_client_id",
             "gmail_client_secret",

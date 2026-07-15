@@ -83,11 +83,12 @@ The review command now processes both new account signups and new incident/warni
 ### Running the automation
 
 **Default — built into the web app (works on any host):** the web process runs an
-in-process scheduler that refreshes the mailbox and processes DSARs every
-`INBOX_AUTOREFRESH_INTERVAL` seconds (default 120). Nothing extra to run — just
-deploy the web app. It is safe with multiple web workers/instances (a PostgreSQL
-advisory lock ensures only one runs each cycle). This works identically on
-Heroku, a VPS, Docker, Render, etc. Disable with `INBOX_AUTOREFRESH=false`.
+in-process scheduler that refreshes the mailbox, processes DSARs, and reviews new
+breeder/consultant signups (auto-approving them when the operational toggle is on)
+every `INBOX_AUTOREFRESH_INTERVAL` seconds (default 120). Nothing extra to run —
+just deploy the web app. It is safe with multiple web workers/instances (a
+PostgreSQL advisory lock ensures only one runs each cycle). This works identically
+on Heroku, a VPS, Docker, Render, etc. Disable with `INBOX_AUTOREFRESH=false`.
 
 **Optional — dedicated worker/scheduler (for higher scale):** instead of the
 in-process scheduler you can run the loop in its own process:
@@ -107,7 +108,8 @@ needs no Heroku-specific pieces:
 
 - **In-process (recommended):** keep `INBOX_AUTOREFRESH=true` (the default). As
   long as the web app is running under gunicorn/uvicorn, the mailbox
-  auto-refreshes — no cron, worker, or scheduler required.
+  auto-refreshes and new signups are reviewed/auto-approved — no cron, worker, or
+  scheduler required.
 - **Dedicated process (optional):** run `python manage.py run_automation`
   supervised by whatever your host uses (a systemd service, a second Docker/
   Compose service, a Render/Railway background worker, a Kubernetes Deployment),

@@ -247,11 +247,11 @@
   </div>
 </div>
 
-{% if IS_SUPER_ADMIN and not review.manually_overridden and review.decision != "pending" %}
+{% if IS_SUPER_ADMIN and not review.manually_overridden %}
 <div class="card">
   <div class="card-header">
-    <div class="card-title">Manual override</div>
-    <div class="card-subtitle">Only Steven and Ben can force a different outcome.</div>
+    <div class="card-title">Manual approve / reject</div>
+    <div class="card-subtitle">Only Steven and Ben can set the outcome. Works for pending accounts too — approving here activates the account immediately.</div>
   </div>
   <form method="post" action="{% url 'admin_portal:review_override' review.id %}" class="stack">
     {% csrf_token %}
