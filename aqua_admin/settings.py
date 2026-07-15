@@ -133,9 +133,9 @@ CSRF_TRUSTED_ORIGINS = [
     f"https://{h}" for h in ALLOWED_HOSTS if h != "*"
 ]
 
-# Behind a TLS-terminating proxy (Heroku/Render/etc.) so that
-# request.build_absolute_uri() returns https:// URLs — required for the Google
-# OAuth redirect URI to match what is registered in the Cloud Console.
+# # Behind a TLS-terminating proxy (Heroku/Render/etc.) so that
+# # request.build_absolute_uri() returns https:// URLs — required for the Google
+# # OAuth redirect URI to match what is registered in the Cloud Console.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 USE_X_FORWARDED_HOST = True
 
@@ -190,12 +190,18 @@ SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN", "")
 SLACK_CHANNEL = os.getenv("SLACK_CHANNEL", "#aqua-admin-alerts")
 
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
-EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
-EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True").lower() == "true"
-EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
-EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
-DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Aqua Admin <admin@humara.io>")
+EMAIL_HOST = os.getenv("SMTP_HOST")
+EMAIL_PORT = int(os.getenv("SMTP_HOST_PORT", 587))
+EMAIL_HOST_USER = os.getenv("SMTP_HOST_USER")
+EMAIL_HOST_PASSWORD = os.getenv("SMTP_HOST_PASS")
+EMAIL_USE_TLS = True
+EMAIL_USE_SSL = False
+
+DEFAULT_FROM_EMAIL = "no-reply@aquaai.uk"
+SENDER_MAIL = "no-reply@aquaai.uk"
+SUPPORT_EMAIL = "support@aquaai.uk"
+
+FRONTEND_HOST= os.getenv("FRONTEND_HOST", "https://aquaai.uk")
 
 GMAIL_CLIENT_ID = os.getenv("GMAIL_CLIENT_ID", "")
 GMAIL_CLIENT_SECRET = os.getenv("GMAIL_CLIENT_SECRET", "")

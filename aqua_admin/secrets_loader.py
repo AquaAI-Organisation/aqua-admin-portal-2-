@@ -23,6 +23,19 @@ logger = logging.getLogger(__name__)
 SECRET_NAME = os.getenv("AWS_SECRET_NAME", "aqua_backend")
 REGION = os.getenv("AWS_REGION", "eu-west-2")
 
+def load_aws_secrets():
+    client = boto3.client(
+        "secretsmanager",
+        region_name=REGION,
+        aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+    )
+    response = client.get_secret_value(
+        SecretId=SECRET_NAME
+    )
+    secrets = json.loads(
+        response["SecretString"]
+
 
 def _aws_configured() -> bool:
     # Consider AWS "in use" when creds, an explicit secret name, or a region are set.
