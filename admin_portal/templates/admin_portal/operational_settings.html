@@ -102,7 +102,7 @@
       </div>
     </div>
 
-    <div class="form-row" style="align-items:center;margin-top:14px;">
+    <div class="form-row" id="stagger-row" style="align-items:center;margin-top:14px;">
       <label class="switch">
         {{ form.auto_activate_stagger_enabled }}
         <span class="switch-track" aria-hidden="true"></span>
@@ -114,7 +114,18 @@
       </div>
     </div>
 
-    <div class="form-group" style="margin-top:16px;">
+    <!-- Live "current mode" banner. Rendered server-side for the saved state and
+         updated instantly by JS as the toggles change (which also auto-save). -->
+    <div id="approval-mode-banner"
+         data-next-delay="{{ stagger_next }}"
+         data-mode-immediate="Immediate — every new breeder/consultant account is approved as soon as it is created."
+         data-mode-scheduled="Scheduled — each new account is held pending, then auto-approved after its assigned delay from the schedule below."
+         data-mode-review="AI review — new accounts are routed through the normal AI approval &amp; risk-review flow (automatic activation is off)."
+         style="margin-top:16px;padding:12px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);font-size:14px;line-height:1.5;">
+      <strong>Current mode:</strong> <span id="approval-mode-text">…</span>
+    </div>
+
+    <div class="form-group" id="delay-schedule-group" style="margin-top:16px;">
       <label for="id_auto_activate_delay_minutes_text">Approval delay schedule (minutes)</label>
       <div class="helper-text" style="margin-bottom:8px;">
         Currently <strong>{{ stagger_count }}</strong> delays in the cycle{% if stagger_preview %},
@@ -303,4 +314,64 @@
     <button class="btn-primary" type="submit">Save settings</button>
   </div>
 </form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  var primary = document.getElementById("id_auto_activate_new_accounts");   // Automatic account activation
+  var stagger = document.getElementById("id_auto_activate_stagger_enabled"); // Staggered (scheduled) approval
+  var banner  = document.getElementById("approval-mode-banner");
+  var text    = document.getElementById("approval-mode-text");
+  var staggerRow = document.getElementById("stagger-row");
+  var scheduleGroup = document.getElementById("delay-schedule-group");
+  if (!primary || !stagger || !banner || !text) return;
+
+  var nextDelay = banner.getAttribute("data-next-delay") || "";
+
+  function setDimmed(el, dimmed) {
+    if (!el) return;
+    el.style.opacity = dimmed ? "0.45" : "1";
+    el.style.pointerEvents = dimmed ? "none" : "auto";
+  }
+
+  // Reflect the current toggle states in the banner + dependent controls.
+  // Staggered only has meaning while automatic activation is on; the schedule
+  // only matters in staggered mode.
+  function refresh() {
+    if (!primary.checked) {
+      text.textContent = banner.getAttribute("data-mode-review");
+      setDimmed(staggerRow, true);
+      setDimmed(scheduleGroup, true);
+    } else if (stagger.checked) {
+      var msg = banner.getAttribute("data-mode-scheduled");
+      if (nextDelay) { msg += " Next account waits " + nextDelay + " min."; }
+      text.textContent = msg;
+      setDimmed(staggerRow, false);
+      setDimmed(scheduleGroup, false);
+    } else {
+      text.textContent = banner.getAttribute("data-mode-immediate");
+      setDimmed(staggerRow, false);
+      setDimmed(scheduleGroup, true);
+    }
+  }
+
+  // Auto-save: flipping a switch immediately submits the settings form, so the
+  // choice can never be silently lost by forgetting to press "Save settings".
+  var saving = false;
+  function autoSave() {
+    if (saving) return;
+    saving = true;
+    text.textContent = "Saving…";
+    // Use form.submit() (not requestSubmit) so client-side HTML5 validation can
+    // never silently block the auto-save; the server still validates on POST.
+    primary.form.submit();
+  }
+
+  primary.addEventListener("change", function () { refresh(); autoSave(); });
+  stagger.addEventListener("change", function () { refresh(); autoSave(); });
+
+  refresh();
+})();
+</script>
 {% endblock %}
