@@ -5,7 +5,7 @@ import logging
 from typing import Iterable
 
 from django.conf import settings
-from django.core.mail import EmailMessage, get_connection
+from django.core.mail import EmailMessage, EmailMultiAlternatives, get_connection
 from django.utils import timezone
 
 from .google_oauth import gmail_configured, pick_alias_for_mailbox, send_gmail_message
@@ -228,6 +228,7 @@ def _send_email_result(
     *,
     from_email: str | None = None,
     attachments: list[dict] | None = None,
+    html_body: str | None = None,
 ) -> dict[str, str | bool]:
     recipients = [r for r in recipients if r]
     if not recipients:
@@ -243,6 +244,7 @@ def _send_email_result(
                 recipients=recipients,
                 from_email=from_email,
                 attachments=attachments,
+                html_body=html_body,
             )
             return {"ok": True, "error": ""}
         config = get_email_runtime_config()
@@ -254,13 +256,23 @@ def _send_email_result(
             use_tls=config.use_tls,
             fail_silently=False,
         )
-        email = EmailMessage(
-            subject,
-            body,
-            from_email or config.default_from_email,
-            recipients,
-            connection=connection,
-        )
+        if html_body:
+            email = EmailMultiAlternatives(
+                subject,
+                body,
+                from_email or config.default_from_email,
+                recipients,
+                connection=connection,
+            )
+            email.attach_alternative(html_body, "text/html")
+        else:
+            email = EmailMessage(
+                subject,
+                body,
+                from_email or config.default_from_email,
+                recipients,
+                connection=connection,
+            )
         for item in attachments or []:
             email.attach_file(item["path"], mimetype=item.get("mime_type"))
         email.send(fail_silently=False)
@@ -282,6 +294,7 @@ def send_custom_email(
     recipients: Iterable[str],
     from_email: str | None = None,
     attachments: list[dict] | None = None,
+    html_body: str | None = None,
 ) -> dict[str, str | bool]:
     return _send_email_result(
         subject,
@@ -289,6 +302,7 @@ def send_custom_email(
         recipients,
         from_email=from_email,
         attachments=attachments,
+        html_body=html_body,
     )
 
 

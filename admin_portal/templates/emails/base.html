@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{{ app_name|default:'AquaAI' }}{% endblock %}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: #333333;
+            background-color: #f5f7fa;
+            margin: 0;
+            padding: 20px 0;
+        }
+        .email-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+        .header {
+            background: linear-gradient(135deg, #1E3A8A 0%, #3B82F6 100%);
+            color: white;
+            padding: 32px 24px;
+            text-align: center;
+        }
+        .logo {
+            margin-bottom: 16px;
+        }
+        .logo img {
+            max-width: 60px;
+            height: auto;
+        }
+        .header h1 {
+            font-size: 24px;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+        .header p {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        .content {
+            padding: 32px 28px;
+        }
+        .footer {
+            background: #F8FAFC;
+            padding: 24px 28px;
+            text-align: center;
+            border-top: 1px solid #E2E8F0;
+        }
+        .footer-links {
+            margin-bottom: 16px;
+        }
+        .footer-links a {
+            color: #64748B;
+            text-decoration: none;
+            font-size: 13px;
+            margin: 0 12px;
+        }
+        .support-email {
+            margin: 12px 0;
+            font-size: 13px;
+            color: #64748B;
+        }
+        .support-email a {
+            color: #3B82F6;
+            text-decoration: none;
+        }
+        .copyright {
+            font-size: 12px;
+            color: #94A3B8;
+        }
+        @media (max-width: 550px) {
+            .content {
+                padding: 24px 20px;
+            }
+            .footer-links a {
+                margin: 0 8px;
+            }
+        }
+    </style>
+    {% block extra_styles %}{% endblock %}
+</head>
+<body>
+    <div class="email-container">
+        <div class="header">
+            <div class="logo">
+                <img src="https://aquaai.uk/icon.png" alt="{{ app_name }}" width="50" height="50">
+            </div>
+            <h1>AquaAI</h1>
+            <p>SMART CARE. HEALTHY AQUARIUMS.</p>
+        </div>
+        
+        <div class="content">
+            {% block content %}{% endblock %}
+        </div>
+        
+        <div class="footer">
+            <div class="footer-links">
+                <a href="{{ support_url|default:'https://aquaai.uk/support' }}">Help Center</a>
+                <a href="https://aquaai.uk/privacy">Privacy Policy</a>
+                <a href="https://aquaai.uk/terms">Terms of Service</a>
+                <a href="{{ unsubscribe_url|default:'https://aquaai.uk/unsubscribe' }}">Unsubscribe</a>
+            </div>
+            <div class="support-email">
+                Need help? Contact us at <a href="mailto:support@aquaai.uk">support@aquaai.uk</a>
+            </div>
+            <div class="copyright">
+                &copy; {{ year|default:2026 }} {{ app_name }}. All rights reserved.<br>
+                This is an automated message, please do not reply directly to this email.
+            </div>
+        </div>
+    </div>
+</body>
+</html>
