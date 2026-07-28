@@ -465,6 +465,11 @@ def _approve(subject_type, profile, user):
         profile.metadata = metadata
         profile.save(update_fields=["is_active", "is_verified", "verified_at", "metadata"])
 
+    # Tell the provider their account is approved/verified. Done here because the
+    # admin portal owns the approval action; the backend's approval-email signal
+    # never fires for these direct-DB writes. Sent once per account.
+    _notify_account_approved(subject_type, profile, user)
+
     # On approval, remind the provider to upload a verification certificate if we
     # don't have one on file yet (sent once per account).
     _request_certificate_if_missing(subject_type, profile, user)
@@ -505,6 +510,52 @@ def _certificate_reminder_body(subject_type: str, user) -> str:
         "If you have already uploaded one, please ignore this message.\n\n"
         "Thank you,\nThe Aqua AI Team"
     )
+
+
+def _account_approved_body(subject_type: str, user) -> str:
+    role = "breeder" if subject_type == "breeder" else "consultant"
+    name = (getattr(user, "name", "") or getattr(user, "first_name", "") or "there").strip()
+    return (
+        f"Hi {name},\n\n"
+        f"Good news — your {role} account on Aqua AI has been approved and verified. "
+        "Your account is now active and you have full access to the app.\n\n"
+        "You can sign in and get started here: https://app.aquaai.uk\n\n"
+        "If you haven't uploaded a verification certificate or licence yet, please add one in "
+        "your account settings so all features stay unlocked.\n\n"
+        "Welcome aboard,\nThe Aqua AI Team"
+    )
+
+
+def _notify_account_approved(subject_type, profile, user) -> None:
+    """Email the provider that their account has been approved/verified.
+
+    Sent from the admin portal because approval happens here (the backend's
+    ConsultantProfile post_save signal never fires for these direct-DB writes).
+    Sent once per account, guarded via profile.metadata, so re-processing a
+    still-eligible profile can't re-send it.
+    """
+    try:
+        recipient = (getattr(user, "email", "") or "").strip()
+        if not recipient:
+            return
+        metadata = dict(getattr(profile, "metadata", None) or {})
+        if metadata.get("approval_email_sent_at"):
+            return  # already notified — do not resend
+        from .google_oauth import pick_alias_for_mailbox
+        from .notifier import send_custom_email
+
+        result = send_custom_email(
+            subject="Your Aqua AI account has been approved",
+            body=_account_approved_body(subject_type, user),
+            recipients=[recipient],
+            from_email=pick_alias_for_mailbox("providers"),
+        )
+        metadata["approval_email_sent_at"] = timezone.now().isoformat()
+        metadata["approval_email_ok"] = bool(result.get("ok"))
+        profile.metadata = metadata
+        profile.save(update_fields=["metadata"])
+    except Exception:
+        logger.exception("Approval email failed for %s", getattr(user, "email", ""))
 
 
 def _request_certificate_if_missing(subject_type, profile, user) -> None:
