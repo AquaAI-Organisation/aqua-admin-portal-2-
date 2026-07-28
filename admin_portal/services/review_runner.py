@@ -546,7 +546,7 @@ def _render_provider_email(subject_type: str, kind: str, user, profile) -> tuple
         "username": username,
         "company_name": (getattr(profile, "company_name", "") or ""),
         "support_email": "support@aquaai.uk",
-        "activation_link": "https://app.aquaai.uk",
+        "activation_link": "https://aquaai.uk",
         "year": timezone.now().year,
     }
     html = render_to_string(template, context)
@@ -617,8 +617,14 @@ def _notify_account_rejected(subject_type, profile, user) -> None:
 
 
 def _request_certificate_if_missing(subject_type, profile, user) -> None:
-    """Email the provider a one-time reminder to upload a certificate if none is on file."""
+    """Email the provider a one-time reminder to upload a certificate if none is on file.
+
+    Breeders only — consultants are not required to upload a verification
+    certificate, so they never receive this prompt/reminder/email.
+    """
     try:
+        if subject_type != "breeder":
+            return
         if _has_certificate(subject_type, profile, user):
             return
         metadata = dict(getattr(profile, "metadata", None) or {})
