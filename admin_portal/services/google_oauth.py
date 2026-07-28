@@ -163,21 +163,32 @@ def send_gmail_message(
     recipients: list[str],
     from_email: str | None = None,
     attachments: list[dict] | None = None,
+    html_body: str | None = None,
 ) -> None:
     service = get_gmail_service()
     runtime = get_gmail_runtime_config()
     from_addr = from_email or runtime.sender
 
+    def _body_part():
+        # multipart/alternative (plain + HTML) when an HTML body is supplied, so
+        # clients that can't render HTML still get the plain-text version.
+        if html_body:
+            alt = MIMEMultipart("alternative")
+            alt.attach(MIMEText(body, "plain", "utf-8"))
+            alt.attach(MIMEText(html_body, "html", "utf-8"))
+            return alt
+        return MIMEText(body, "plain", "utf-8")
+
     if attachments:
-        msg = MIMEMultipart()
-        msg.attach(MIMEText(body, "plain", "utf-8"))
+        msg = MIMEMultipart("mixed")
+        msg.attach(_body_part())
         for item in attachments:
             path = Path(item["path"])
             part = MIMEApplication(path.read_bytes(), Name=item.get("filename") or path.name)
             part["Content-Disposition"] = f'attachment; filename="{item.get("filename") or path.name}"'
             msg.attach(part)
     else:
-        msg = MIMEText(body, "plain", "utf-8")
+        msg = _body_part()
 
     msg["To"] = ", ".join([r for r in recipients if r])
     msg["From"] = from_addr

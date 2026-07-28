@@ -9,8 +9,10 @@ import time
 from datetime import timedelta
 from typing import Iterable
 
+from django.template.loader import render_to_string
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
+from django.utils.html import strip_tags
 
 from ..models import (
     AIAccountReview, AIFlag, OperationalSettings,
@@ -374,7 +376,7 @@ def manual_override(review: AIAccountReview, new_decision: str, reason: str, adm
                 {"action": "manual_approve", "by": admin_user.email}
             ]
         elif new_decision == "rejected":
-            _deactivate(review.subject_type, profile, user, reason=f"Manual reject: {reason}")
+            _deactivate(review.subject_type, profile, user, reason=f"Manual reject: {reason}", notify=True)
             review.applied_actions = list(review.applied_actions or []) + [
                 {"action": "manual_reject", "by": admin_user.email}
             ]
@@ -405,7 +407,7 @@ def _apply_actions(subject_type: str, profile, user, review) -> list[dict]:
                 _approve(subject_type, profile, user)
                 applied.append(action)
             elif name == "reject_account" and review.decision == "rejected":
-                _deactivate(subject_type, profile, user, reason="AI auto-reject")
+                _deactivate(subject_type, profile, user, reason="AI auto-reject", notify=True)
                 applied.append(action)
             elif name == "deactivate_pending_docs":
                 _deactivate(subject_type, profile, user, reason="Awaiting documents")
@@ -428,7 +430,7 @@ def _apply_actions(subject_type: str, profile, user, review) -> list[dict]:
             logger.exception("Auto-approve failed")
     if review.decision == "rejected" and not any(a.get("action") == "reject_account" for a in applied):
         try:
-            _deactivate(subject_type, profile, user, reason="AI auto-reject")
+            _deactivate(subject_type, profile, user, reason="AI auto-reject", notify=True)
             applied.append({"action": "reject_account", "auto": True})
         except Exception:
             logger.exception("Auto-reject failed")
@@ -464,6 +466,11 @@ def _approve(subject_type, profile, user):
         })
         profile.metadata = metadata
         profile.save(update_fields=["is_active", "is_verified", "verified_at", "metadata"])
+
+    # Tell the provider their account is approved/verified. Done here because the
+    # admin portal owns the approval action; the backend's approval-email signal
+    # never fires for these direct-DB writes. Sent once per account.
+    _notify_account_approved(subject_type, profile, user)
 
     # On approval, remind the provider to upload a verification certificate if we
     # don't have one on file yet (sent once per account).
@@ -507,9 +514,117 @@ def _certificate_reminder_body(subject_type: str, user) -> str:
     )
 
 
-def _request_certificate_if_missing(subject_type, profile, user) -> None:
-    """Email the provider a one-time reminder to upload a certificate if none is on file."""
+def _html_to_text(html: str) -> str:
+    """Plain-text fallback from an HTML email. Drops <head>/<style>/<script>
+    blocks first so their inner CSS/JS text doesn't leak into the message, then
+    strips remaining tags and collapses whitespace."""
+    import re
+
+    cleaned = re.sub(r"(?is)<(head|style|script)[^>]*>.*?</\1>", " ", html)
+    text = strip_tags(cleaned)
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\n\s*\n\s*\n+", "\n\n", text)
+    return text.strip()
+
+
+def _render_provider_email(subject_type: str, kind: str, user, profile) -> tuple[str, str]:
+    """Render the shared breeder/consultant HTML email + a plain-text fallback.
+
+    kind is "approval" or "rejection"; the same templates are used for breeders
+    and consultants (role folder/prefix swapped).
+    """
+    role = "breeder" if subject_type == "breeder" else "consultant"
+    folder = "breeders" if role == "breeder" else "consultants"
+    template = f"emails/{folder}/{role}_{kind}.html"
+    username = (
+        getattr(user, "name", "")
+        or f"{getattr(user, 'first_name', '')} {getattr(user, 'last_name', '')}".strip()
+        or "there"
+    ).strip()
+    context = {
+        "app_name": "AquaAI",
+        "username": username,
+        "company_name": (getattr(profile, "company_name", "") or ""),
+        "support_email": "support@aquaai.uk",
+        "activation_link": "https://aquaai.uk",
+        "year": timezone.now().year,
+    }
+    html = render_to_string(template, context)
+    return html, _html_to_text(html)
+
+
+def _notify_account_approved(subject_type, profile, user) -> None:
+    """Email the provider that their account has been approved/verified.
+
+    Sent from the admin portal because approval happens here (the backend's
+    ConsultantProfile post_save signal never fires for these direct-DB writes).
+    Sent once per account, guarded via profile.metadata, so re-processing a
+    still-eligible profile can't re-send it.
+    """
     try:
+        recipient = (getattr(user, "email", "") or "").strip()
+        if not recipient:
+            return
+        metadata = dict(getattr(profile, "metadata", None) or {})
+        if metadata.get("approval_email_sent_at"):
+            return  # already notified — do not resend
+        from .google_oauth import pick_alias_for_mailbox
+        from .notifier import send_custom_email
+
+        html, text = _render_provider_email(subject_type, "approval", user, profile)
+        result = send_custom_email(
+            subject="Your Aqua Providers application has been approved",
+            body=text,
+            html_body=html,
+            recipients=[recipient],
+            from_email=pick_alias_for_mailbox("providers"),
+        )
+        metadata["approval_email_sent_at"] = timezone.now().isoformat()
+        metadata["approval_email_ok"] = bool(result.get("ok"))
+        profile.metadata = metadata
+        profile.save(update_fields=["metadata"])
+    except Exception:
+        logger.exception("Approval email failed for %s", getattr(user, "email", ""))
+
+
+def _notify_account_rejected(subject_type, profile, user) -> None:
+    """Email the provider that their application was not approved. Sent once per
+    account; only for genuine rejections (not 'awaiting documents')."""
+    try:
+        recipient = (getattr(user, "email", "") or "").strip()
+        if not recipient:
+            return
+        metadata = dict(getattr(profile, "metadata", None) or {})
+        if metadata.get("rejection_email_sent_at"):
+            return  # already notified — do not resend
+        from .google_oauth import pick_alias_for_mailbox
+        from .notifier import send_custom_email
+
+        html, text = _render_provider_email(subject_type, "rejection", user, profile)
+        result = send_custom_email(
+            subject="An update on your Aqua Providers application",
+            body=text,
+            html_body=html,
+            recipients=[recipient],
+            from_email=pick_alias_for_mailbox("providers"),
+        )
+        metadata["rejection_email_sent_at"] = timezone.now().isoformat()
+        metadata["rejection_email_ok"] = bool(result.get("ok"))
+        profile.metadata = metadata
+        profile.save(update_fields=["metadata"])
+    except Exception:
+        logger.exception("Rejection email failed for %s", getattr(user, "email", ""))
+
+
+def _request_certificate_if_missing(subject_type, profile, user) -> None:
+    """Email the provider a one-time reminder to upload a certificate if none is on file.
+
+    Breeders only — consultants are not required to upload a verification
+    certificate, so they never receive this prompt/reminder/email.
+    """
+    try:
+        if subject_type != "breeder":
+            return
         if _has_certificate(subject_type, profile, user):
             return
         metadata = dict(getattr(profile, "metadata", None) or {})
@@ -535,7 +650,7 @@ def _request_certificate_if_missing(subject_type, profile, user) -> None:
         logger.exception("Certificate reminder failed for %s", getattr(user, "email", ""))
 
 
-def _deactivate(subject_type, profile, user, *, reason: str):
+def _deactivate(subject_type, profile, user, *, reason: str, notify: bool = False):
     profile.is_active = False
     if subject_type == "consultant":
         profile.admin_status = "rejected"
@@ -557,6 +672,10 @@ def _deactivate(subject_type, profile, user, *, reason: str):
         })
         profile.metadata = metadata
         profile.save(update_fields=["is_active", "metadata"])
+
+    # Only email the applicant on a genuine rejection (not "awaiting documents").
+    if notify:
+        _notify_account_rejected(subject_type, profile, user)
 
 
 # ---------------------------------------------------------------------------
