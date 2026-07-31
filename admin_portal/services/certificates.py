@@ -135,8 +135,8 @@ def _renewal_body(user, detail: str) -> str:
     return (
         f"Hi {name},\n\n"
         f"This is a friendly reminder from Aqua AI: your verification certificate {detail}.\n\n"
-        "To keep your account fully verified and continue exploring all provider features on "
-        "Aqua AI, please upload a current or renewed certificate in your account settings.\n\n"
+        "To keep your account fully verified and continue exploring all breeder features on "
+        "Aqua Breeder, please upload a current or renewed certificate in your account settings.\n\n"
         "If you have already renewed it, please ignore this message.\n\n"
         "Thank you,\nThe Aqua AI Team"
     )
