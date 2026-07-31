@@ -571,9 +571,10 @@ def _notify_account_approved(subject_type, profile, user) -> None:
         from .google_oauth import pick_alias_for_mailbox
         from .notifier import send_custom_email
 
+        brand = "Aqua Breeder" if subject_type == "breeder" else "Aqua Consultant"
         html, text = _render_provider_email(subject_type, "approval", user, profile)
         result = send_custom_email(
-            subject="Your Aqua Providers application has been approved",
+            subject=f"Your {brand} application has been approved",
             body=text,
             html_body=html,
             recipients=[recipient],
@@ -600,9 +601,10 @@ def _notify_account_rejected(subject_type, profile, user) -> None:
         from .google_oauth import pick_alias_for_mailbox
         from .notifier import send_custom_email
 
+        brand = "Aqua Breeder" if subject_type == "breeder" else "Aqua Consultant"
         html, text = _render_provider_email(subject_type, "rejection", user, profile)
         result = send_custom_email(
-            subject="An update on your Aqua Providers application",
+            subject=f"An update on your {brand} application",
             body=text,
             html_body=html,
             recipients=[recipient],
