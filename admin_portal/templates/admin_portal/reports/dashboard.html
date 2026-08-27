@@ -25,9 +25,11 @@
 
   {% if dash.note %}<div class="bi-note">{{ dash.note }}</div>{% endif %}
 
+  {# ---- KPI row ---- #}
   <div class="kpi-grid">
     {% for k in dash.kpis %}
     <div class="kpi">
+      <span class="kpi-accent"></span>
       <div class="v">{{ k.value }}</div>
       <div class="l">{{ k.label }}</div>
       {% if k.hint %}<div class="h">{{ k.hint }}</div>{% endif %}
@@ -35,40 +37,67 @@
     {% endfor %}
   </div>
 
-  {% for c in charts %}
+  {# ---- Trend charts (line/area) ---- #}
+  {% for l in visuals.lines %}
   <div class="bi-card">
-    <h3>{{ c.title }} <span class="bi-sub" style="font-weight:400;">&middot; peak {{ c.peak }}</span></h3>
-    <div class="chart">
-      {% for b in c.bars %}
-      <div class="bar" title="{{ b.label }}: {{ b.display }}">
-        <div class="fill" style="height:{{ b.h }}%;"></div>
-        <div class="xl">{{ b.label }}</div>
-      </div>
+    <div class="card-head"><h3>{{ l.title }}</h3><span class="peak">peak {{ l.peak }}</span></div>
+    <svg class="svg-chart" viewBox="0 0 {{ l.geom.w }} {{ l.geom.h }}" width="100%" preserveAspectRatio="xMidYMid meet" role="img" aria-label="{{ l.title }}">
+      <defs>
+        <linearGradient id="grad{{ forloop.counter }}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#3B82F6" stop-opacity="0.32"/>
+          <stop offset="100%" stop-color="#3B82F6" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      {% for g in l.geom.grid %}
+      <line x1="{{ g.x1 }}" y1="{{ g.y }}" x2="{{ g.x2 }}" y2="{{ g.y }}" stroke="#1e293b" stroke-width="1"/>
+      <text x="{{ g.label_x }}" y="{{ g.label_y }}" text-anchor="end" font-size="9" fill="#64748b">{{ g.label }}</text>
       {% endfor %}
+      {% if l.geom.area %}<path d="{{ l.geom.area }}" fill="url(#grad{{ forloop.counter }})"/>{% endif %}
+      <polyline points="{{ l.geom.line }}" fill="none" stroke="#3B82F6" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+      {% for d in l.geom.dots %}<circle cx="{{ d.x }}" cy="{{ d.y }}" r="2.6" fill="#0f172a" stroke="#3B82F6" stroke-width="1.6"/>{% endfor %}
+      {% for x in l.geom.xlabels %}<text x="{{ x.x }}" y="{{ l.geom.xlabel_y }}" text-anchor="middle" font-size="9" fill="#64748b">{{ x.label }}</text>{% endfor %}
+    </svg>
+  </div>
+  {% endfor %}
+
+  {# ---- Breakdown donuts ---- #}
+  {% if visuals.donuts %}
+  <div class="donut-grid">
+    {% for d in visuals.donuts %}
+    <div class="bi-card">
+      <div class="card-head"><h3>{{ d.title }}</h3></div>
+      <div class="donut-row">
+        <svg class="donut" viewBox="0 0 {{ d.geom.size }} {{ d.geom.size }}" width="150" height="150" role="img" aria-label="{{ d.title }}">
+          <circle cx="{{ d.geom.cx }}" cy="{{ d.geom.cy }}" r="{{ d.geom.r }}" fill="none" stroke="#1e293b" stroke-width="{{ d.geom.thickness }}"/>
+          {% for s in d.geom.segments %}
+          <path d="{{ s.d }}" fill="none" stroke="{{ s.color }}" stroke-width="{{ d.geom.thickness }}" stroke-linecap="butt"/>
+          {% endfor %}
+          <text x="{{ d.geom.cx }}" y="{{ d.geom.total_y }}" text-anchor="middle" font-size="26" font-weight="700" fill="#f1f5f9">{{ d.geom.total }}</text>
+          <text x="{{ d.geom.cx }}" y="{{ d.geom.caption_y }}" text-anchor="middle" font-size="9" fill="#94a3b8" letter-spacing="1">TOTAL</text>
+        </svg>
+        <div class="legend">
+          {% for s in d.geom.segments %}
+          <div class="leg-row">
+            <span class="dot" style="background:{{ s.color }}"></span>
+            <span class="leg-label">{{ s.label }}</span>
+            <span class="leg-val">{{ s.value }}</span>
+            <span class="leg-pct">{{ s.pct }}</span>
+          </div>
+          {% endfor %}
+          {% if d.geom.empty %}<div class="bi-sub">No data in this period.</div>{% endif %}
+        </div>
+      </div>
     </div>
+    {% endfor %}
   </div>
-  {% endfor %}
+  {% endif %}
 
-  {% for t in dash.tables %}
-  <div class="bi-card">
-    <h3>{{ t.title }}</h3>
-    {% if t.rows %}
-    <table class="bi-table">
-      <thead><tr>{% for col in t.columns %}<th>{{ col }}</th>{% endfor %}</tr></thead>
-      <tbody>
-        {% for row in t.rows %}<tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>{% endfor %}
-      </tbody>
-    </table>
-    {% else %}<div class="bi-sub">No data in this period.</div>{% endif %}
-  </div>
-  {% endfor %}
-
-  <form method="post" action="{% url 'admin_portal:reports_export' %}" style="display:flex;gap:10px;margin-top:8px;">
+  <form method="post" action="{% url 'admin_portal:reports_export' %}" class="export-actions">
     {% csrf_token %}
     <input type="hidden" name="start" value="{{ start }}">
     <input type="hidden" name="end" value="{{ end }}">
     <input type="hidden" name="dash_{{ active }}" value="1">
-    <button class="bi-btn" name="format" value="pdf" type="submit">Export this as PDF</button>
+    <button class="bi-btn" name="format" value="pdf" type="submit">Export this dashboard (PDF)</button>
     <button class="bi-btn secondary" name="format" value="csv" type="submit">Export CSV</button>
   </form>
 </div>

@@ -431,79 +431,180 @@ def to_csv(dashboards, start, end) -> str:
 
 
 def to_pdf(dashboards, start, end) -> bytes:
-    """Professional, insurer-ready PDF via reportlab (already a project dep)."""
+    """Professional, insurer-ready PDF: branded header/footer, KPI cards, and
+    native charts (line trends + pie breakdowns) via reportlab.graphics."""
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import mm
     from reportlab.platypus import (
-        SimpleDocTemplate, Paragraph, Spacer, Table as RLTable, TableStyle,
+        SimpleDocTemplate, Paragraph, Spacer, PageBreak, KeepTogether,
+        Table as RLTable, TableStyle,
     )
+    from reportlab.graphics.shapes import Drawing
+    from reportlab.graphics.charts.linecharts import HorizontalLineChart
+    from reportlab.graphics.charts.piecharts import Pie
+
+    from .charts import PALETTE
+
+    PAL = [colors.HexColor(c) for c in PALETTE]
+    NAVY = colors.HexColor("#1E3A8A")
+    BLUE = colors.HexColor("#3B82F6")
+    INK = colors.HexColor("#0F172A")
+    SLATE = colors.HexColor("#475569")
+    MUTE = colors.HexColor("#94A3B8")
+    HAIR = colors.HexColor("#E2E8F0")
+    CARD = colors.HexColor("#F8FAFC")
+
+    ss = getSampleStyleSheet()
+    h2 = ParagraphStyle("h2", parent=ss["Heading2"], fontSize=15, spaceBefore=6, spaceAfter=2, textColor=NAVY)
+    h3 = ParagraphStyle("h3", parent=ss["Heading3"], fontSize=10.5, spaceBefore=10, spaceAfter=4, textColor=INK)
+    body = ParagraphStyle("body", parent=ss["Normal"], fontSize=9, textColor=SLATE, leading=12)
+    small = ParagraphStyle("small", parent=ss["Normal"], fontSize=8, textColor=MUTE, leading=11)
+    kpi_v = ParagraphStyle("kpi_v", parent=ss["Normal"], fontSize=15, textColor=INK, leading=17)
+    kpi_l = ParagraphStyle("kpi_l", parent=ss["Normal"], fontSize=7.5, textColor=SLATE, leading=9)
 
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
         buf, pagesize=A4, title="Aqua AI — BI Report",
-        leftMargin=16 * mm, rightMargin=16 * mm, topMargin=16 * mm, bottomMargin=16 * mm,
+        leftMargin=16 * mm, rightMargin=16 * mm, topMargin=26 * mm, bottomMargin=16 * mm,
     )
-    ss = getSampleStyleSheet()
-    h1 = ParagraphStyle("h1", parent=ss["Title"], fontSize=20, spaceAfter=4, textColor=colors.HexColor("#0F172A"))
-    h2 = ParagraphStyle("h2", parent=ss["Heading2"], fontSize=14, spaceBefore=14, spaceAfter=6, textColor=colors.HexColor("#1E3A8A"))
-    h3 = ParagraphStyle("h3", parent=ss["Heading3"], fontSize=11, spaceBefore=8, spaceAfter=4, textColor=colors.HexColor("#334155"))
-    body = ParagraphStyle("body", parent=ss["Normal"], fontSize=9, textColor=colors.HexColor("#475569"))
-    small = ParagraphStyle("small", parent=ss["Normal"], fontSize=8, textColor=colors.HexColor("#94A3B8"))
+    content_w = doc.width
+    period = f"{start.strftime('%d %b %Y')} – {(end - timedelta(days=1)).strftime('%d %b %Y')}"
+    gen = timezone.now().strftime("%d %b %Y %H:%M UTC")
+
+    def _decorate(canvas, dc):
+        canvas.saveState()
+        canvas.setFillColor(NAVY)
+        canvas.rect(0, A4[1] - 18 * mm, A4[0], 18 * mm, fill=1, stroke=0)
+        canvas.setFillColor(colors.white)
+        canvas.setFont("Helvetica-Bold", 12)
+        canvas.drawString(16 * mm, A4[1] - 12 * mm, "Aqua AI — Business Intelligence Report")
+        canvas.setFillColor(colors.HexColor("#C7D2FE"))
+        canvas.setFont("Helvetica", 8)
+        canvas.drawRightString(A4[0] - 16 * mm, A4[1] - 12 * mm, period)
+        canvas.setStrokeColor(HAIR)
+        canvas.setLineWidth(0.5)
+        canvas.line(16 * mm, 14 * mm, A4[0] - 16 * mm, 14 * mm)
+        canvas.setFillColor(MUTE)
+        canvas.setFont("Helvetica", 7.5)
+        canvas.drawString(16 * mm, 10 * mm, f"Confidential · Generated {gen}")
+        canvas.drawRightString(A4[0] - 16 * mm, 10 * mm, f"Page {dc.page}")
+        canvas.restoreState()
+
+    def kpi_cards(kpis):
+        cells = []
+        for k in kpis:
+            inner = RLTable(
+                [[Paragraph(f"<b>{k.value}</b>", kpi_v)],
+                 [Paragraph(k.label, kpi_l)]]
+                + ([[Paragraph(k.hint, small)]] if k.hint else []),
+                colWidths=[content_w / 3.0 - 6],
+            )
+            inner.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, -1), CARD),
+                ("LINEABOVE", (0, 0), (-1, 0), 2, BLUE),
+                ("BOX", (0, 0), (-1, -1), 0.5, HAIR),
+                ("LEFTPADDING", (0, 0), (-1, -1), 9), ("RIGHTPADDING", (0, 0), (-1, -1), 9),
+                ("TOPPADDING", (0, 0), (0, 0), 8), ("BOTTOMPADDING", (0, -1), (-1, -1), 8),
+                ("TOPPADDING", (0, 1), (-1, -1), 1),
+            ]))
+            cells.append(inner)
+        while len(cells) % 3:
+            cells.append("")
+        rows = [cells[i:i + 3] for i in range(0, len(cells), 3)]
+        t = RLTable(rows, colWidths=[content_w / 3.0] * 3, hAlign="LEFT")
+        t.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ]))
+        return t
+
+    def line_chart_flow(series):
+        try:
+            dw = Drawing(content_w, 130)
+            lc = HorizontalLineChart()
+            lc.x = 34
+            lc.y = 20
+            lc.width = content_w - 48
+            lc.height = 95
+            lc.data = [[float(v or 0) for v in series.values] or [0]]
+            lc.categoryAxis.categoryNames = [str(l) for l in series.labels]
+            lc.categoryAxis.labels.fontSize = 6
+            lc.categoryAxis.labels.angle = 30
+            lc.categoryAxis.labels.dy = -4
+            lc.categoryAxis.labels.boxAnchor = "ne"
+            lc.valueAxis.valueMin = 0
+            lc.valueAxis.labels.fontSize = 6.5
+            lc.valueAxis.strokeColor = HAIR
+            lc.lines[0].strokeColor = BLUE
+            lc.lines[0].strokeWidth = 2
+            lc.fillColor = None
+            dw.add(lc)
+            return dw
+        except Exception:
+            logger.exception("pdf line chart failed")
+            return Paragraph("(chart unavailable)", small)
+
+    def pie_block(table):
+        data = [(str(l), float(v or 0)) for l, v in table.rows if float(v or 0) > 0]
+        if not data:
+            return Paragraph("No data in this period.", small)
+        try:
+            dw = Drawing(150, 150)
+            pie = Pie()
+            pie.x, pie.y, pie.width, pie.height = 20, 18, 112, 112
+            pie.data = [v for _l, v in data]
+            pie.simpleLabels = 1
+            pie.slices.label_visible = 0
+            for i in range(len(data)):
+                pie.slices[i].fillColor = PAL[i % len(PAL)]
+                pie.slices[i].strokeColor = colors.white
+                pie.slices[i].strokeWidth = 0.75
+            dw.add(pie)
+        except Exception:
+            logger.exception("pdf pie failed")
+            dw = Paragraph("(chart unavailable)", small)
+
+        total = sum(v for _l, v in data) or 1
+        leg_rows = []
+        leg_style = [("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                     ("LEFTPADDING", (0, 0), (-1, -1), 2), ("TOPPADDING", (0, 0), (-1, -1), 2),
+                     ("BOTTOMPADDING", (0, 0), (-1, -1), 2)]
+        for i, (label, value) in enumerate(data):
+            leg_rows.append([
+                "", Paragraph(label.title(), body),
+                Paragraph(f"<b>{int(value)}</b> · {value / total * 100:.0f}%", body),
+            ])
+            leg_style.append(("BACKGROUND", (0, i), (0, i), PAL[i % len(PAL)]))
+        legend = RLTable(leg_rows, colWidths=[9, content_w - 150 - 90, 78])
+        legend.setStyle(TableStyle(leg_style))
+        block = RLTable([[dw, legend]], colWidths=[150, content_w - 150])
+        block.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
+        return block
 
     story = []
-    story.append(Paragraph("Aqua AI — Business Intelligence Report", h1))
-    story.append(Paragraph(
-        f"Reporting period: {start.strftime('%d %b %Y')} – {(end - timedelta(days=1)).strftime('%d %b %Y')}", body))
-    story.append(Paragraph(f"Generated {timezone.now().strftime('%d %b %Y %H:%M UTC')} · Confidential", small))
-    story.append(Spacer(1, 6))
-
-    grid = TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1E3A8A")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTSIZE", (0, 0), (-1, -1), 8.5),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F1F5F9")]),
-        ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#E2E8F0")),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 6),
-        ("TOPPADDING", (0, 0), (-1, -1), 4),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-    ])
-
-    for d in dashboards:
-        story.append(Paragraph(d.title, h2))
+    for di, d in enumerate(dashboards):
+        if di:
+            story.append(PageBreak())
+        head = [Paragraph(d.title, h2)]
         if d.subtitle:
-            story.append(Paragraph(d.subtitle, body))
+            head.append(Paragraph(d.subtitle, body))
         if d.note:
-            story.append(Paragraph(d.note, small))
+            head.append(Paragraph(d.note, small))
+        head.append(Spacer(1, 6))
+        head.append(kpi_cards(d.kpis))
+        story.append(KeepTogether(head))
 
-        # KPI grid (3 columns)
-        cells = [[Paragraph(f"<b>{k.value}</b><br/><font size=7 color='#64748B'>{k.label}</font>", body)] for k in d.kpis]
-        rows = [cells[i:i + 3] for i in range(0, len(cells), 3)]
-        rows = [r + [[Paragraph("", body)]] * (3 - len(r)) for r in rows]
-        flat = [[c[0] for c in r] for r in rows]
-        if flat:
-            kt = RLTable(flat, colWidths=[doc.width / 3.0] * 3)
-            kt.setStyle(TableStyle([
-                ("BOX", (0, 0), (-1, -1), 0.4, colors.HexColor("#E2E8F0")),
-                ("INNERGRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#E2E8F0")),
-                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F8FAFC")),
-                ("TOPPADDING", (0, 0), (-1, -1), 8), ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
-                ("LEFTPADDING", (0, 0), (-1, -1), 8),
-            ]))
-            story.append(kt)
+        for s in d.series:
+            story.append(Paragraph(s.title, h3))
+            story.append(line_chart_flow(s))
 
         for t in d.tables:
             if not t.rows:
                 continue
-            story.append(Paragraph(t.title, h3))
-            data = [t.columns] + [[str(c) for c in row] for row in t.rows]
-            rlt = RLTable(data, repeatRows=1)
-            rlt.setStyle(grid)
-            story.append(rlt)
-        story.append(Spacer(1, 8))
+            story.append(KeepTogether([Paragraph(t.title, h3), pie_block(t)]))
 
-    doc.build(story)
+    doc.build(story, onFirstPage=_decorate, onLaterPages=_decorate)
     return buf.getvalue()

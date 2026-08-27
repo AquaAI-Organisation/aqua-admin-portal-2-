@@ -2063,24 +2063,29 @@ def reports_home(request):
     )
 
 
-def _charts_for(dash, bi):
-    charts = []
+def _visuals_for(dash, bi):
+    """Build polished chart geometry (line trends + donut breakdowns) for a dashboard."""
+    from .services import charts as ch
+
+    lines = []
     for s in dash.series:
-        mx = max(s.values) if s.values else 0
-        bars = []
-        for lbl, v in zip(s.labels, s.values):
-            h = (float(v) / float(mx) * 100.0) if mx else 0.0
-            bars.append({
-                "label": lbl,
-                "h": round(h, 1),
-                "display": bi.money(v) if s.money else bi.num(v),
-            })
-        charts.append({
+        peak = max(s.values) if s.values else 0
+        lines.append({
             "title": s.title,
-            "bars": bars,
-            "peak": bi.money(mx) if s.money else bi.num(mx),
+            "peak": bi.money(peak) if s.money else bi.num(peak),
+            "geom": ch.line_chart(s.labels, s.values, money=s.money),
         })
-    return charts
+
+    donuts = []
+    for t in dash.tables:
+        if not t.rows:
+            continue
+        donuts.append({
+            "title": t.title,
+            "columns": t.columns,
+            "geom": ch.donut_chart(t.rows),
+        })
+    return {"lines": lines, "donuts": donuts}
 
 
 @admin_required
@@ -2096,7 +2101,7 @@ def reports_dashboard(request, key):
         "admin_portal/reports/dashboard.html",
         {
             "dash": dash,
-            "charts": _charts_for(dash, bi),
+            "visuals": _visuals_for(dash, bi),
             "meta": [(k, bi.REGISTRY[k][0]) for k in bi.ORDER],
             "active": key,
             "start": start.strftime("%Y-%m-%d"),
