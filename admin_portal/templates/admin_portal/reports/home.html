@@ -1,0 +1,50 @@
+{% extends "admin_portal/base.html" %}
+{% block title %}BI & Reporting | {{ APP_NAME }}{% endblock %}
+{% block topbar_title %}BI & Reporting{% endblock %}
+{% block content %}
+{% include "admin_portal/reports/_styles.html" %}
+<div class="bi-wrap">
+  <div class="bi-head">
+    <div>
+      <h1 class="bi-title">BI &amp; Reporting</h1>
+      <div class="bi-sub">Professional, exportable analytics across providers, stores, marketplace and consultants — for insurers and partners.</div>
+    </div>
+    <form method="get" class="bi-toolbar">
+      <div class="bi-field"><label>From</label><input class="bi-input" type="date" name="start" value="{{ start }}"></div>
+      <div class="bi-field"><label>To</label><input class="bi-input" type="date" name="end" value="{{ end }}"></div>
+      <button class="bi-btn secondary" type="submit">Apply dates</button>
+    </form>
+  </div>
+
+  <div class="kpi-grid">
+    {% for key, title in dashboards_meta %}
+    <a class="kpi kpi-link" href="{% url 'admin_portal:reports_dashboard' key %}?start={{ start }}&amp;end={{ end }}">
+      <div class="v" style="font-size:17px;">{{ title }}</div>
+      <div class="h">Open dashboard &rarr;</div>
+    </a>
+    {% endfor %}
+  </div>
+
+  <div class="bi-card">
+    <h3>Export a report</h3>
+    <form method="post" action="{% url 'admin_portal:reports_export' %}" class="export-panel">
+      {% csrf_token %}
+      <input type="hidden" name="start" value="{{ start }}">
+      <input type="hidden" name="end" value="{{ end }}">
+      <div>
+        <div class="bi-sub" style="margin-bottom:8px;">Dashboards to include</div>
+        {% for key, title in dashboards_meta %}
+        <label class="check"><input type="checkbox" name="dash_{{ key }}" checked> {{ title }}</label>
+        {% endfor %}
+      </div>
+      <div>
+        <div class="bi-sub" style="margin-bottom:8px;">Format</div>
+        <label class="check"><input type="radio" name="format" value="pdf" checked> PDF &mdash; professional report</label>
+        <label class="check"><input type="radio" name="format" value="csv"> CSV &mdash; data extract</label>
+      </div>
+      <button class="bi-btn" type="submit">Download export</button>
+    </form>
+    <div class="bi-sub" style="margin-top:12px;">Covers {{ start }} &rarr; {{ end }}. Uncheck any dashboard to leave it out of the export.</div>
+  </div>
+</div>
+{% endblock %}

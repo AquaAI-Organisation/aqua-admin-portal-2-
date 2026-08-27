@@ -2041,3 +2041,101 @@ def _set_entity_active_state(entity_type: str, entity_id: str, *, activate: bool
         user.save(update_fields=["is_active"])
         return f"{user.email} was {'re-activated' if activate else 'suspended'}."
     raise ValueError("Unknown entity type.")
+
+
+# ---------------------------------------------------------------------------
+# BI / Reports — exportable dashboards for insurers & partners
+# ---------------------------------------------------------------------------
+
+@admin_required
+def reports_home(request):
+    from .services import bi
+
+    start, end = bi.parse_range(request.GET.get("start"), request.GET.get("end"))
+    return render(
+        request,
+        "admin_portal/reports/home.html",
+        {
+            "dashboards_meta": [(k, bi.REGISTRY[k][0]) for k in bi.ORDER],
+            "start": start.strftime("%Y-%m-%d"),
+            "end": (end - timedelta(days=1)).strftime("%Y-%m-%d"),
+        },
+    )
+
+
+def _charts_for(dash, bi):
+    charts = []
+    for s in dash.series:
+        mx = max(s.values) if s.values else 0
+        bars = []
+        for lbl, v in zip(s.labels, s.values):
+            h = (float(v) / float(mx) * 100.0) if mx else 0.0
+            bars.append({
+                "label": lbl,
+                "h": round(h, 1),
+                "display": bi.money(v) if s.money else bi.num(v),
+            })
+        charts.append({
+            "title": s.title,
+            "bars": bars,
+            "peak": bi.money(mx) if s.money else bi.num(mx),
+        })
+    return charts
+
+
+@admin_required
+def reports_dashboard(request, key):
+    from .services import bi
+
+    start, end = bi.parse_range(request.GET.get("start"), request.GET.get("end"))
+    dash = bi.build_dashboard(key, start, end)
+    if not dash:
+        raise Http404("Unknown dashboard")
+    return render(
+        request,
+        "admin_portal/reports/dashboard.html",
+        {
+            "dash": dash,
+            "charts": _charts_for(dash, bi),
+            "meta": [(k, bi.REGISTRY[k][0]) for k in bi.ORDER],
+            "active": key,
+            "start": start.strftime("%Y-%m-%d"),
+            "end": (end - timedelta(days=1)).strftime("%Y-%m-%d"),
+        },
+    )
+
+
+@admin_required
+def reports_export(request):
+    from django.http import HttpResponse
+
+    from .services import bi
+
+    if request.method != "POST":
+        return redirect("admin_portal:reports_home")
+
+    start, end = bi.parse_range(request.POST.get("start"), request.POST.get("end"))
+    keys = [k for k in bi.ORDER if request.POST.get(f"dash_{k}")]
+    if not keys:
+        keys = list(bi.ORDER)
+    fmt = (request.POST.get("format") or "pdf").lower()
+
+    try:
+        dashboards = bi.build_many(keys, start, end)
+        stamp = timezone.now().strftime("%Y%m%d")
+        audit.record_write(
+            request.user, "reports.export", target_type="bi_report", target_id=fmt,
+            request=request, summary=f"Exported BI report ({fmt}): {', '.join(keys)}",
+        )
+        if fmt == "csv":
+            resp = HttpResponse(bi.to_csv(dashboards, start, end), content_type="text/csv")
+            resp["Content-Disposition"] = f'attachment; filename="aquaai-bi-{stamp}.csv"'
+            return resp
+        pdf_bytes = bi.to_pdf(dashboards, start, end)
+        resp = HttpResponse(pdf_bytes, content_type="application/pdf")
+        resp["Content-Disposition"] = f'attachment; filename="aquaai-bi-{stamp}.pdf"'
+        return resp
+    except Exception as exc:
+        logger.exception("BI export failed")
+        messages.error(request, f"Could not generate the report: {exc}")
+        return redirect("admin_portal:reports_home")

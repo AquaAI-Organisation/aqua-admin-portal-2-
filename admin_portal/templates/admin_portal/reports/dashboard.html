@@ -1,0 +1,75 @@
+{% extends "admin_portal/base.html" %}
+{% block title %}{{ dash.title }} · BI | {{ APP_NAME }}{% endblock %}
+{% block topbar_title %}BI & Reporting{% endblock %}
+{% block content %}
+{% include "admin_portal/reports/_styles.html" %}
+<div class="bi-wrap">
+  <div class="bi-head">
+    <div>
+      <h1 class="bi-title">{{ dash.title }}</h1>
+      <div class="bi-sub">{{ dash.subtitle }}</div>
+    </div>
+    <form method="get" class="bi-toolbar">
+      <div class="bi-field"><label>From</label><input class="bi-input" type="date" name="start" value="{{ start }}"></div>
+      <div class="bi-field"><label>To</label><input class="bi-input" type="date" name="end" value="{{ end }}"></div>
+      <button class="bi-btn secondary" type="submit">Apply</button>
+    </form>
+  </div>
+
+  <div class="bi-tabs">
+    {% for key, title in meta %}
+    <a class="bi-tab {% if key == active %}active{% endif %}" href="{% url 'admin_portal:reports_dashboard' key %}?start={{ start }}&amp;end={{ end }}">{{ title }}</a>
+    {% endfor %}
+    <a class="bi-tab" href="{% url 'admin_portal:reports_home' %}?start={{ start }}&amp;end={{ end }}">All / Export</a>
+  </div>
+
+  {% if dash.note %}<div class="bi-note">{{ dash.note }}</div>{% endif %}
+
+  <div class="kpi-grid">
+    {% for k in dash.kpis %}
+    <div class="kpi">
+      <div class="v">{{ k.value }}</div>
+      <div class="l">{{ k.label }}</div>
+      {% if k.hint %}<div class="h">{{ k.hint }}</div>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+  {% for c in charts %}
+  <div class="bi-card">
+    <h3>{{ c.title }} <span class="bi-sub" style="font-weight:400;">&middot; peak {{ c.peak }}</span></h3>
+    <div class="chart">
+      {% for b in c.bars %}
+      <div class="bar" title="{{ b.label }}: {{ b.display }}">
+        <div class="fill" style="height:{{ b.h }}%;"></div>
+        <div class="xl">{{ b.label }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+
+  {% for t in dash.tables %}
+  <div class="bi-card">
+    <h3>{{ t.title }}</h3>
+    {% if t.rows %}
+    <table class="bi-table">
+      <thead><tr>{% for col in t.columns %}<th>{{ col }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        {% for row in t.rows %}<tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>{% endfor %}
+      </tbody>
+    </table>
+    {% else %}<div class="bi-sub">No data in this period.</div>{% endif %}
+  </div>
+  {% endfor %}
+
+  <form method="post" action="{% url 'admin_portal:reports_export' %}" style="display:flex;gap:10px;margin-top:8px;">
+    {% csrf_token %}
+    <input type="hidden" name="start" value="{{ start }}">
+    <input type="hidden" name="end" value="{{ end }}">
+    <input type="hidden" name="dash_{{ active }}" value="1">
+    <button class="bi-btn" name="format" value="pdf" type="submit">Export this as PDF</button>
+    <button class="bi-btn secondary" name="format" value="csv" type="submit">Export CSV</button>
+  </form>
+</div>
+{% endblock %}
