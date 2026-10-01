@@ -2188,7 +2188,7 @@ def content_reports_list(request):
     return render(request, "admin_portal/content_reports_list.html", context)
 
 
-@operational_admin_required
+@super_admin_required
 def content_moderation_mode(request):
     """Switch between automatic enforcement and manual (admin-decides) review."""
     from .services import moderation_backend
@@ -2262,3 +2262,22 @@ def content_report_action(request, report_id):
     except moderation_backend.ModerationBackendError as exc:
         messages.error(request, str(exc))
     return redirect("admin_portal:content_report_detail", report_id=report_id)
+
+
+@admin_required
+def content_user_moderation(request, user_id):
+    """A user's moderation history, trust score and tier (brief A5).
+
+    The admin portal is the single place this is visible, so the case page links
+    here for both the content author and anyone we have ejected.
+    """
+    from .services import moderation_backend
+
+    context = {"configured": moderation_backend.is_configured(), "user_id": user_id,
+               "profile": None, "error": None}
+    if context["configured"]:
+        try:
+            context["profile"] = moderation_backend.fetch_user_moderation(user_id)
+        except moderation_backend.ModerationBackendError as exc:
+            context["error"] = str(exc)
+    return render(request, "admin_portal/content_user_moderation.html", context)

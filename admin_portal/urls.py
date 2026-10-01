@@ -61,6 +61,7 @@ urlpatterns = [
     # Content moderation — user reports of objectionable content (Apple 1.2)
     path("content-reports/", views.content_reports_list, name="content_reports_list"),
     path("content-reports/mode/", views.content_moderation_mode, name="content_moderation_mode"),
+    path("content-reports/users/<str:user_id>/", views.content_user_moderation, name="content_user_moderation"),
     path("content-reports/<str:report_id>/", views.content_report_detail, name="content_report_detail"),
     path("content-reports/<str:report_id>/action/", views.content_report_action, name="content_report_action"),
     path("flags/", views.flag_list, name="flag_list"),

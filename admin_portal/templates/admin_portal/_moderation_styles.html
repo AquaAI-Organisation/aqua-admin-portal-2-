@@ -1,0 +1,41 @@
+{% comment %}
+Styles for the content-moderation pages. The dashboard's KPI CSS is scoped to
+that page, so these live here and are used by the reports queue, the case page
+and the user moderation history.
+{% endcomment %}
+<style>
+  .stat-row{display:flex; flex-wrap:wrap; gap:14px; margin-top:4px;}
+  /* Content kinds are long unbroken identifiers; let them wrap instead of
+     spilling into the next column. */
+  .table td, .table th{vertical-align:top;}
+  td.kind{overflow-wrap:anywhere; word-break:break-word; max-width:190px;}
+  .stat{
+    flex:1 1 150px; min-width:140px; padding:14px 16px; border-radius:12px;
+    background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.07);
+  }
+  .stat-value{font-size:30px; font-weight:800; letter-spacing:-.02em; line-height:1;}
+  .stat-label{
+    font-size:11px; letter-spacing:.08em; text-transform:uppercase;
+    opacity:.65; margin-top:8px;
+  }
+  /* The base theme only ships a neutral .badge, so give the urgent states a tone. */
+  .badge-critical{
+    background:rgba(240,97,109,.18) !important; color:#fb7185 !important;
+    border:1px solid rgba(240,97,109,.35);
+  }
+  .badge-warn{
+    background:rgba(251,191,36,.16) !important; color:#fbbf24 !important;
+    border:1px solid rgba(251,191,36,.32);
+  }
+  /* Decision buttons: make the two escalation choices read as primary. */
+  .decision-row{display:flex; flex-wrap:wrap; gap:10px; margin-top:6px;}
+  .decision-row button{padding:10px 16px; font-weight:600;}
+  .btn-danger{
+    background:rgba(240,97,109,.16); color:#fb7185;
+    border:1px solid rgba(240,97,109,.4);
+  }
+  .btn-safe{
+    background:rgba(16,185,129,.14); color:#34d399;
+    border:1px solid rgba(16,185,129,.35);
+  }
+</style>

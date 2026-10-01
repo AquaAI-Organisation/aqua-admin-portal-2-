@@ -85,6 +85,11 @@ def fetch_stats() -> Dict[str, Any]:
     return _request("GET", "/api/v1/moderation/admin/stats/")
 
 
+def fetch_user_moderation(user_id: str) -> Dict[str, Any]:
+    """A single user's moderation history, trust score and tier (brief A5)."""
+    return _request("GET", f"/api/v1/moderation/admin/users/{user_id}/")
+
+
 def fetch_settings() -> Dict[str, Any]:
     """Current enforcement mode (automatic vs manual)."""
     return _request("GET", "/api/v1/moderation/admin/settings/")

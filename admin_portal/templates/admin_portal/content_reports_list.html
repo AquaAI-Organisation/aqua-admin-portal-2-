@@ -1,6 +1,7 @@
 {% extends "admin_portal/base.html" %}
 {% block title %}Content Reports | {{ APP_NAME }}{% endblock %}
 {% block topbar_title %}Content Reports{% endblock %}
+{% block extra_head %}{% include "admin_portal/_moderation_styles.html" %}{% endblock %}
 {% block content %}
 <div class="page-header">
   <div>
@@ -101,13 +102,14 @@
       {% for r in reports %}
       <tr>
         <td>{{ r.created_at }}</td>
-        <td>{{ r.content_kind }}</td>
+        <td class="kind">{{ r.content_kind }}</td>
         <td>{{ r.reason_display }}</td>
         <td>
           {{ r.status_display }}
           {% if r.is_overdue %}<span class="badge badge-critical">OVERDUE</span>{% endif %}
+          {% if r.urgent_posted_at %}<span class="badge badge-critical">URGENT</span>{% endif %}
         </td>
-        <td>
+        <td style="white-space:nowrap">
           {% if r.ai_violation == True %}
             <span class="badge badge-critical">{{ r.ai_label }}</span>
             {% if r.ai_confidence %}{{ r.ai_confidence|floatformat:2 }}{% endif %}

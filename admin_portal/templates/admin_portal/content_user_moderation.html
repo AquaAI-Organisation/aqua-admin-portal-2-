@@ -1,0 +1,108 @@
+{% extends "admin_portal/base.html" %}
+{% block title %}User Moderation History | {{ APP_NAME }}{% endblock %}
+{% block topbar_title %}User Moderation History{% endblock %}
+{% block extra_head %}{% include "admin_portal/_moderation_styles.html" %}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>User moderation history</h1>
+    <p class="page-subtitle"><a href="{% url 'admin_portal:content_reports_list' %}">&larr; Back to content reports</a></p>
+  </div>
+</div>
+
+{% if error %}<div class="card"><p class="error">{{ error }}</p></div>{% endif %}
+{% if not configured %}
+<div class="card"><p><strong>Backend bridge not configured.</strong>
+  Set <code>AQUAAI_BACKEND_API_URL</code> and <code>AQUAAI_BACKEND_API_TOKEN</code>.</p></div>
+{% endif %}
+
+{% if profile %}
+{% with u=profile.user m=profile.moderation_status c=profile.counts %}
+<div class="card">
+  <h2>{{ u.email|default:"(no email)" }}</h2>
+  <table class="table">
+    <tr><th>Account</th><td>
+      {% if m.is_banned %}<span class="badge badge-critical">EJECTED</span>
+      {% elif not u.is_active %}<span class="badge">inactive</span>
+      {% else %}<span class="badge">active</span>{% endif %}
+    </td></tr>
+    <tr><th>User ID</th><td><code>{{ u.id }}</code></td></tr>
+    <tr><th>Joined</th><td>{{ u.date_joined|default:"—" }}</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Trust &amp; tier</h2>
+  <p class="page-subtitle">Ejection raises an L4 incident, so these update exactly as for any other L4 event.</p>
+  <div class="stat-row">
+    <div class="stat"><div class="stat-value">{{ u.trust_score|default:"0" }}</div><div class="stat-label">Trust score</div></div>
+    <div class="stat"><div class="stat-value">{{ u.regulatory_tier|default:"—" }}</div><div class="stat-label">Tier</div></div>
+    <div class="stat"><div class="stat-value">{{ m.strikes|default:"0" }}</div><div class="stat-label">Strikes</div></div>
+    <div class="stat"><div class="stat-value">{{ c.cases_against|default:"0" }}</div><div class="stat-label">Cases</div></div>
+    <div class="stat"><div class="stat-value">{{ c.content_hidden|default:"0" }}</div><div class="stat-label">Content hidden</div></div>
+    <div class="stat"><div class="stat-value">{{ c.blocked_by_others|default:"0" }}</div><div class="stat-label">Blocked by</div></div>
+  </div>
+  <p class="page-subtitle">Trust last calculated: {{ u.last_trust_calculation|default:"never" }}</p>
+</div>
+
+{% if m.is_banned %}
+<div class="card">
+  <h2>Ejection</h2>
+  <table class="table">
+    <tr><th>Ejected at</th><td>{{ m.banned_at }}</td></tr>
+    <tr><th>Until</th><td>{{ m.banned_until|default:"permanent" }}</td></tr>
+    <tr><th>By</th><td>{% if m.banned_by_system %}automatic (AI){% else %}an admin{% endif %}</td></tr>
+    <tr><th>Reason</th><td>{{ m.ban_reason|default:"—" }}</td></tr>
+  </table>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Cases against this user</h2>
+  <div class="table-wrap">
+    <table class="table">
+      <tr><th>Reported</th><th>Type</th><th>Reason</th><th>Status</th><th>Verdict</th><th></th></tr>
+      {% for r in profile.cases %}
+      <tr>
+        <td>{{ r.created_at }}</td>
+        <td class="kind">{{ r.content_kind }}</td>
+        <td>{{ r.reason_display }}</td>
+        <td>{{ r.status_display }}</td>
+        <td>
+          {% if r.verdict == "clear_breach" %}<span class="badge badge-critical">clear breach</span>
+          {% elif r.verdict == "unclear" %}<span class="badge">unclear</span>
+          {% elif r.verdict == "no_breach" %}<span class="badge">no breach</span>
+          {% else %}—{% endif %}
+        </td>
+        <td><a href="{% url 'admin_portal:content_report_detail' r.id %}">Open</a></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6">No cases against this user.</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Moderation actions</h2>
+  <div class="table-wrap">
+    <table class="table">
+      <tr><th>When</th><th>Action</th><th>By</th><th>Reason</th></tr>
+      {% for a in profile.actions %}
+      <tr>
+        <td>{{ a.created_at }}</td>
+        <td>{{ a.action }}</td>
+        <td>{{ a.actor_label }}</td>
+        <td>{{ a.reason|default:"—"|truncatechars:160 }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="4">No actions recorded.</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+{% endwith %}
+{% elif configured and not error %}
+<div class="card"><p>User not found.</p></div>
+{% endif %}
+{% endblock %}
