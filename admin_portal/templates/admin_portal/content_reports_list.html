@@ -23,6 +23,35 @@
 <div class="card"><p class="error">{{ error }}</p></div>
 {% endif %}
 
+{% if mod_settings %}
+<div class="card">
+  <h2>Enforcement mode</h2>
+  <p class="page-subtitle">
+    Currently: <strong>{{ mod_settings.enforcement_mode_display }}</strong>
+    {% if mod_settings.is_automatic %}
+      — the AI removes offending content and blocks the author on its own
+      (at {{ mod_settings.auto_min_confidence|floatformat:2 }} confidence or above). You can reverse any decision.
+    {% else %}
+      — the AI reviews and posts its verdict to Slack, but removes nothing.
+      You decide on each report.
+    {% endif %}
+  </p>
+  <form method="post" action="{% url 'admin_portal:content_moderation_mode' %}">
+    {% csrf_token %}
+    <div class="filter-row">
+      <button type="submit" name="enforcement_mode" value="automatic"
+              {% if mod_settings.is_automatic %}disabled{% endif %}>
+        Use automatic (AI removes &amp; blocks)
+      </button>
+      <button type="submit" name="enforcement_mode" value="manual"
+              {% if not mod_settings.is_automatic %}disabled{% endif %}>
+        Use manual (AI advises, I decide)
+      </button>
+    </div>
+  </form>
+</div>
+{% endif %}
+
 {% if stats %}
 <div class="card">
   <div class="stat-row">

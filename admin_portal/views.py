@@ -2181,7 +2181,38 @@ def content_reports_list(request):
             context["stats"] = moderation_backend.fetch_stats()
         except moderation_backend.ModerationBackendError:
             pass
+        try:
+            context["mod_settings"] = moderation_backend.fetch_settings().get("settings", {})
+        except moderation_backend.ModerationBackendError:
+            context["mod_settings"] = {}
     return render(request, "admin_portal/content_reports_list.html", context)
+
+
+@operational_admin_required
+def content_moderation_mode(request):
+    """Switch between automatic enforcement and manual (admin-decides) review."""
+    from .services import moderation_backend
+
+    if request.method != "POST":
+        return redirect("admin_portal:content_reports_list")
+
+    mode = (request.POST.get("enforcement_mode") or "").strip()
+    try:
+        result = moderation_backend.update_settings(enforcement_mode=mode)
+        label = result.get("settings", {}).get("enforcement_mode_display", mode)
+        messages.success(request, f"Moderation mode set to: {label}")
+        audit.record_write(
+            request.user,
+            "moderation.mode.update",
+            summary=f"Moderation enforcement mode set to {mode}",
+            target_type="moderation_settings",
+            target_id="1",
+            request=request,
+            backend_result=result.get("settings", {}),
+        )
+    except moderation_backend.ModerationBackendError as exc:
+        messages.error(request, str(exc))
+    return redirect("admin_portal:content_reports_list")
 
 
 @admin_required

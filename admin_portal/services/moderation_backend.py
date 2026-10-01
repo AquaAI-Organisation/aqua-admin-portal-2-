@@ -85,10 +85,25 @@ def fetch_stats() -> Dict[str, Any]:
     return _request("GET", "/api/v1/moderation/admin/stats/")
 
 
+def fetch_settings() -> Dict[str, Any]:
+    """Current enforcement mode (automatic vs manual)."""
+    return _request("GET", "/api/v1/moderation/admin/settings/")
+
+
+def update_settings(enforcement_mode: str = "", auto_min_confidence: Optional[float] = None) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {}
+    if enforcement_mode:
+        payload["enforcement_mode"] = enforcement_mode
+    if auto_min_confidence is not None:
+        payload["auto_min_confidence"] = auto_min_confidence
+    return _request("POST", "/api/v1/moderation/admin/settings/", payload=payload)
+
+
 # --- actions ----------------------------------------------------------------
 
 VALID_ACTIONS = {
-    "remove", "ban", "remove_and_ban", "dismiss", "restore", "unban", "reanalyze",
+    "remove", "ban", "remove_and_ban", "dismiss", "leave_user",
+    "restore", "unban", "reanalyze",
 }
 
 

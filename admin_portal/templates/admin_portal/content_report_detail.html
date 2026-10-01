@@ -51,18 +51,34 @@
 </div>
 
 <div class="card">
-  <h2>Take action</h2>
-  <p class="page-subtitle">Any automatic decision can be reversed here.</p>
+  <h2>Your decision</h2>
+  {% if report.status == "escalated" %}
+    <p class="page-subtitle">
+      The AI has given its verdict above and taken <strong>no action</strong>. Choose one:
+    </p>
+  {% else %}
+    <p class="page-subtitle">Any automatic decision can be reversed here.</p>
+  {% endif %}
   <form method="post" action="{% url 'admin_portal:content_report_action' report.id %}">
     {% csrf_token %}
     <div class="form-group">
       <label for="id_note">Note (recorded in the audit log)</label>
       <textarea id="id_note" name="note" rows="2"></textarea>
     </div>
+
+    <!-- The two primary choices for a manual review -->
     <div class="filter-row">
-      <button type="submit" name="action" value="remove_and_ban">Remove content &amp; block user</button>
+      <button type="submit" name="action" value="remove_and_ban">
+        Block user &amp; remove content
+      </button>
+      <button type="submit" name="action" value="leave_user">
+        Leave user
+      </button>
+    </div>
+
+    <p class="page-subtitle" style="margin-top:12px;">Other options</p>
+    <div class="filter-row">
       <button type="submit" name="action" value="remove">Remove content only</button>
-      <button type="submit" name="action" value="dismiss">Dismiss report</button>
       <button type="submit" name="action" value="restore">Restore content</button>
       <button type="submit" name="action" value="unban">Unblock user</button>
       <button type="submit" name="action" value="reanalyze">Re-run AI review</button>
