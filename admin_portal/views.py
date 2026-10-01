@@ -2144,3 +2144,84 @@ def reports_export(request):
         logger.exception("BI export failed")
         messages.error(request, f"Could not generate the report: {exc}")
         return redirect("admin_portal:reports_home")
+
+
+# ---------------------------------------------------------------------------
+# Content moderation — user reports of objectionable content (Apple Guideline 1.2)
+# ---------------------------------------------------------------------------
+
+@admin_required
+def content_reports_list(request):
+    """Queue of content reported by users, served by the backend moderation API."""
+    from .services import moderation_backend
+
+    context = {
+        "configured": moderation_backend.is_configured(),
+        "reports": [],
+        "stats": {},
+        "filters": {
+            "status": (request.GET.get("status") or "").strip(),
+            "content_kind": (request.GET.get("content_kind") or "").strip(),
+            "overdue": request.GET.get("overdue") == "true",
+        },
+        "error": None,
+    }
+    if context["configured"]:
+        try:
+            data = moderation_backend.fetch_reports(
+                status=context["filters"]["status"],
+                content_kind=context["filters"]["content_kind"],
+                overdue=context["filters"]["overdue"],
+            )
+            context["reports"] = data.get("results", [])
+            context["total"] = data.get("count", 0)
+        except moderation_backend.ModerationBackendError as exc:
+            context["error"] = str(exc)
+        try:
+            context["stats"] = moderation_backend.fetch_stats()
+        except moderation_backend.ModerationBackendError:
+            pass
+    return render(request, "admin_portal/content_reports_list.html", context)
+
+
+@admin_required
+def content_report_detail(request, report_id):
+    from .services import moderation_backend
+
+    context = {"report": None, "actions": [], "error": None,
+               "configured": moderation_backend.is_configured()}
+    if context["configured"]:
+        try:
+            data = moderation_backend.fetch_report(report_id)
+            context["report"] = data.get("report")
+            context["actions"] = data.get("actions", [])
+        except moderation_backend.ModerationBackendError as exc:
+            context["error"] = str(exc)
+    return render(request, "admin_portal/content_report_detail.html", context)
+
+
+@operational_admin_required
+def content_report_action(request, report_id):
+    """Apply an admin decision to a report (and reverse AI decisions)."""
+    from .services import moderation_backend
+
+    if request.method != "POST":
+        return redirect("admin_portal:content_report_detail", report_id=report_id)
+
+    action = (request.POST.get("action") or "").strip()
+    note = (request.POST.get("note") or "").strip()
+    try:
+        result = moderation_backend.action_report(report_id, action, note)
+        messages.success(request, f"Report {action.replace('_', ' ')} applied.")
+        audit.record_write(
+            request.user,
+            f"moderation.report.{action}",
+            summary=f"Content report {report_id}: {action}",
+            target_type="content_report",
+            target_id=str(report_id),
+            request=request,
+            backend_result=result.get("report", {}),
+        )
+    except moderation_backend.ModerationBackendError as exc:
+        messages.error(request, str(exc))
+    return redirect("admin_portal:content_report_detail", report_id=report_id)

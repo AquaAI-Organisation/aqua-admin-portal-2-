@@ -58,6 +58,10 @@ urlpatterns = [
     path("issues/<uuid:issue_id>/resolve/", views.issue_resolve, name="issue_resolve"),
 
     # Flags
+    # Content moderation — user reports of objectionable content (Apple 1.2)
+    path("content-reports/", views.content_reports_list, name="content_reports_list"),
+    path("content-reports/<str:report_id>/", views.content_report_detail, name="content_report_detail"),
+    path("content-reports/<str:report_id>/action/", views.content_report_action, name="content_report_action"),
     path("flags/", views.flag_list, name="flag_list"),
     path("flags/<int:flag_id>/", views.flag_detail, name="flag_detail"),
     path("flags/<int:flag_id>/resolve/", views.flag_resolve, name="flag_resolve"),

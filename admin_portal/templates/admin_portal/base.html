@@ -91,6 +91,10 @@
           {% if OPEN_ISSUE_COUNT %}<span class="badge">{{ OPEN_ISSUE_COUNT }}</span>{% endif %}
           <span class="tip">Flagged Issues</span>
         </a>
+        <a href="{% url 'admin_portal:content_reports_list' %}" class="dock-item {% if 'content_report' in request.resolver_match.url_name %}active{% endif %}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7"/><path d="M4 14V4"/><path d="M4 4h12l-2 4 2 4H4"/><circle cx="18" cy="17" r="4"/><line x1="18" y1="15" x2="18" y2="17.5"/><line x1="18" y1="19" x2="18.01" y2="19"/></svg>
+          <span class="tip">Content Reports</span>
+        </a>
         <a href="{% url 'admin_portal:feature_d_dashboard' %}" class="dock-item {% if 'feature_d' in request.resolver_match.url_name %}active{% endif %}">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19h16"/><path d="M6 16V8"/><path d="M12 16V5"/><path d="M18 16v-3"/><path d="M8 8h8"/><path d="M12 5l3 3"/><path d="M12 5L9 8"/></svg>
           <span class="tip">Feature D Ops</span>

@@ -1,0 +1,98 @@
+{% extends "admin_portal/base.html" %}
+{% block title %}Content Reports | {{ APP_NAME }}{% endblock %}
+{% block topbar_title %}Content Reports{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Content reports</h1>
+    <p class="page-subtitle">
+      Objectionable content reported by users in the Community and Marketplace.
+      Each report is reviewed automatically and must be actioned within 24 hours.
+    </p>
+  </div>
+</div>
+
+{% if not configured %}
+<div class="card">
+  <p><strong>Backend bridge not configured.</strong> Set <code>AQUAAI_BACKEND_API_URL</code>
+     and <code>AQUAAI_BACKEND_API_TOKEN</code> to load the moderation queue.</p>
+</div>
+{% endif %}
+
+{% if error %}
+<div class="card"><p class="error">{{ error }}</p></div>
+{% endif %}
+
+{% if stats %}
+<div class="card">
+  <div class="stat-row">
+    <div class="stat"><div class="stat-value">{{ stats.open|default:"0" }}</div><div class="stat-label">Open</div></div>
+    <div class="stat"><div class="stat-value">{{ stats.overdue|default:"0" }}</div><div class="stat-label">Overdue</div></div>
+    <div class="stat"><div class="stat-value">{{ stats.actioned_total|default:"0" }}</div><div class="stat-label">Actioned</div></div>
+    <div class="stat"><div class="stat-value">{{ stats.sla_hours|default:"6" }}h</div><div class="stat-label">Review target</div></div>
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <form method="get" class="filter-row">
+    <div class="form-group">
+      <label for="id_status">Status</label>
+      <select id="id_status" name="status">
+        <option value="">All statuses</option>
+        <option value="pending"   {% if filters.status == "pending" %}selected{% endif %}>Pending review</option>
+        <option value="escalated" {% if filters.status == "escalated" %}selected{% endif %}>Escalated — needs a human</option>
+        <option value="actioned"  {% if filters.status == "actioned" %}selected{% endif %}>Actioned</option>
+        <option value="dismissed" {% if filters.status == "dismissed" %}selected{% endif %}>Dismissed</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="id_overdue">Overdue only</label>
+      <select id="id_overdue" name="overdue">
+        <option value="">No</option>
+        <option value="true" {% if filters.overdue %}selected{% endif %}>Yes</option>
+      </select>
+    </div>
+    <button type="submit">Apply filters</button>
+  </form>
+</div>
+
+<div class="card">
+  <div class="table-wrap">
+    <table class="table">
+      <tr>
+        <th>Reported</th>
+        <th>Type</th>
+        <th>Reason</th>
+        <th>Status</th>
+        <th>AI verdict</th>
+        <th>Due</th>
+        <th></th>
+      </tr>
+      {% for r in reports %}
+      <tr>
+        <td>{{ r.created_at }}</td>
+        <td>{{ r.content_kind }}</td>
+        <td>{{ r.reason_display }}</td>
+        <td>
+          {{ r.status_display }}
+          {% if r.is_overdue %}<span class="badge badge-critical">OVERDUE</span>{% endif %}
+        </td>
+        <td>
+          {% if r.ai_violation == True %}
+            <span class="badge badge-critical">{{ r.ai_label }}</span>
+            {% if r.ai_confidence %}{{ r.ai_confidence|floatformat:2 }}{% endif %}
+          {% elif r.ai_violation == False %}
+            <span class="badge">no violation</span>
+          {% else %}—{% endif %}
+        </td>
+        <td>{{ r.due_at }}</td>
+        <td><a href="{% url 'admin_portal:content_report_detail' r.id %}">Review</a></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="7">No reports match these filters.</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}
