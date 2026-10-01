@@ -18,7 +18,9 @@
     <tr><th>Status</th><td>{{ report.status_display }}{% if report.is_overdue %} <span class="badge badge-critical">OVERDUE</span>{% endif %}</td></tr>
     <tr><th>Reported</th><td>{{ report.created_at }}</td></tr>
     <tr><th>Review due</th><td>{{ report.due_at }}</td></tr>
-    <tr><th>Reported by</th><td>{{ report.reporter_email|default:"—" }}</td></tr>
+    <tr><th>Reports</th><td><strong>{{ report.reporter_count|default:"1" }}</strong>
+        {% if report.reasons_given %}({{ report.reasons_given|join:", " }}){% endif %}</td></tr>
+    <tr><th>First reported by</th><td>{{ report.reporter_email|default:"—" }}</td></tr>
     <tr><th>Content author</th><td>{{ report.owner_email|default:"—" }}</td></tr>
     <tr><th>Content ID</th><td><code>{{ report.object_id }}</code></td></tr>
     <tr><th>Reporter's note</th><td>{{ report.details|default:"—" }}</td></tr>
@@ -39,7 +41,11 @@
   <h2>AI review</h2>
   {% if report.analyzed_at %}
   <table class="table">
-    <tr><th>Verdict</th><td>{% if report.ai_violation %}<span class="badge badge-critical">Violation — {{ report.ai_label }}</span>{% else %}<span class="badge">No violation</span>{% endif %}</td></tr>
+    <tr><th>Verdict</th><td>
+      {% if report.verdict == "clear_breach" %}<span class="badge badge-critical">Clear breach — {{ report.ai_label }}</span>
+      {% elif report.verdict == "unclear" %}<span class="badge">Unclear — needs a human</span>
+      {% elif report.verdict == "no_breach" %}<span class="badge">No breach</span>
+      {% else %}—{% endif %}</td></tr>
     <tr><th>Confidence</th><td>{{ report.ai_confidence|floatformat:2 }}</td></tr>
     <tr><th>Severity</th><td>{{ report.ai_severity|default:"—" }}</td></tr>
     <tr><th>Reasoning</th><td>{{ report.ai_reasoning|default:"—" }}</td></tr>
@@ -54,7 +60,9 @@
   <h2>Your decision</h2>
   {% if report.status == "escalated" %}
     <p class="page-subtitle">
-      The AI has given its verdict above and taken <strong>no action</strong>. Choose one:
+      The investigator has given its verdict above. The content is
+      <strong>hidden from everyone</strong> while this case is open.
+      Choosing <em>Keep user</em> restores it.
     </p>
   {% else %}
     <p class="page-subtitle">Any automatic decision can be reversed here.</p>
@@ -66,13 +74,23 @@
       <textarea id="id_note" name="note" rows="2"></textarea>
     </div>
 
-    <!-- The two primary choices for a manual review -->
+    {% if preselected_action %}
+      <p class="page-subtitle">
+        <strong>You arrived from a
+        {% if preselected_action == "eject" %}“Eject user”{% else %}“Keep user”{% endif %}
+        link.</strong> Nothing has been actioned yet — confirm below to apply it.
+      </p>
+    {% endif %}
+
+    <!-- The two escalation decisions (brief A3.4) -->
     <div class="filter-row">
-      <button type="submit" name="action" value="remove_and_ban">
-        Block user &amp; remove content
+      <button type="submit" name="action" value="eject"
+              {% if preselected_action == "eject" %}autofocus{% endif %}>
+        Eject user
       </button>
-      <button type="submit" name="action" value="leave_user">
-        Leave user
+      <button type="submit" name="action" value="keep"
+              {% if preselected_action == "keep" %}autofocus{% endif %}>
+        Keep user (restore content)
       </button>
     </div>
 

@@ -2228,6 +2228,12 @@ def content_report_detail(request, report_id):
             context["actions"] = data.get("actions", [])
         except moderation_backend.ModerationBackendError as exc:
             context["error"] = str(exc)
+
+    # A Slack/email button only PRE-SELECTS the decision (brief A4). The admin
+    # is signed in to reach this page and must still confirm below; opening or
+    # pre-fetching the link actions nothing.
+    preselect = (request.GET.get("action") or "").strip().lower()
+    context["preselected_action"] = preselect if preselect in {"eject", "keep"} else ""
     return render(request, "admin_portal/content_report_detail.html", context)
 
 

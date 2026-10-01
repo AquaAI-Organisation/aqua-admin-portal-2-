@@ -102,6 +102,9 @@ def update_settings(enforcement_mode: str = "", auto_min_confidence: Optional[fl
 # --- actions ----------------------------------------------------------------
 
 VALID_ACTIONS = {
+    # the two escalation decisions (brief A3.4)
+    "eject", "keep",
+    # finer-grained / reversal actions
     "remove", "ban", "remove_and_ban", "dismiss", "leave_user",
     "restore", "unban", "reanalyze",
 }
