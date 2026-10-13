@@ -73,10 +73,16 @@ urlpatterns = [
     path("flags/<int:flag_id>/", views.flag_detail, name="flag_detail"),
     path("flags/<int:flag_id>/resolve/", views.flag_resolve, name="flag_resolve"),
 
-    # Daily reports
-    path("reports/", views.daily_report_list, name="daily_report_list"),
-    path("reports/<int:report_id>/", views.daily_report_detail, name="daily_report_detail"),
-    path("reports/run-now/", views.daily_report_run_now, name="daily_report_run_now"),
+    # Daily reports.
+    # These used to live under "reports/", which the BI reporting block above
+    # already claims ("reports/" and "reports/<str:key>/"). Django resolves the
+    # first match, so all three of these views were unreachable: reverse() for
+    # them produced URLs that landed on the BI dashboards instead. They are
+    # mounted under their own prefix now. The URL *names* are unchanged, so
+    # templates and reverse() calls keep working.
+    path("daily-reports/", views.daily_report_list, name="daily_report_list"),
+    path("daily-reports/run-now/", views.daily_report_run_now, name="daily_report_run_now"),
+    path("daily-reports/<int:report_id>/", views.daily_report_detail, name="daily_report_detail"),
 
     # Audit log
     path("audit/", views.audit_log, name="audit_log"),

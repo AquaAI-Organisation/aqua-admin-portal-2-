@@ -339,7 +339,12 @@ def consultants_dashboard(start, end) -> Dashboard:
         revenue = _sum(period, "full_price")
         fees = _sum(period, "booking_fee")
         completed = _count(period.filter(status__iexact="completed"))
-        cancelled = _count(period.filter(status__iexact="cancelled"))
+        # The backend stores ConsultantBooking.STATUS_CANCELED as "canceled"
+        # (one L). Matching only the British "cancelled" made this KPI read 0
+        # for every report even when bookings had in fact been cancelled, so
+        # accept both spellings.
+        cancelled = _count(period.filter(
+            Q(status__iexact="canceled") | Q(status__iexact="cancelled")))
         successful = _count(period.filter(was_successful=True))
         try:
             avg_rating = period.filter(rating__isnull=False).aggregate(a=Avg("rating"))["a"] or 0

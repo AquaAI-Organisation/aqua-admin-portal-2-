@@ -12,6 +12,10 @@
   </div>
 </div>
 
+{% if not configured %}
+<div class="card"><p><strong>Backend bridge not configured.</strong>
+  Set <code>AQUAAI_BACKEND_API_URL</code> and <code>AQUAAI_BACKEND_API_TOKEN</code>.</p></div>
+{% endif %}
 {% if error %}<div class="card"><p class="error">{{ error }}</p></div>{% endif %}
 
 {% if payload %}
