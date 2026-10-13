@@ -59,6 +59,11 @@ urlpatterns = [
 
     # Flags
     # Content moderation — user reports of objectionable content (Apple 1.2)
+    # App analytics (Users / Consultants / Breeders)
+    path("analytics/", views.app_analytics, name="app_analytics"),
+    path("analytics/<str:entity_type>/", views.app_analytics, name="app_analytics_typed"),
+    path("analytics/<str:entity_type>/<str:entity_id>/", views.app_analytics_entity,
+         name="app_analytics_entity"),
     path("content-reports/", views.content_reports_list, name="content_reports_list"),
     path("content-reports/mode/", views.content_moderation_mode, name="content_moderation_mode"),
     path("content-reports/users/<str:user_id>/", views.content_user_moderation, name="content_user_moderation"),

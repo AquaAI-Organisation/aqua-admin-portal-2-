@@ -91,6 +91,10 @@
           {% if OPEN_ISSUE_COUNT %}<span class="badge">{{ OPEN_ISSUE_COUNT }}</span>{% endif %}
           <span class="tip">Flagged Issues</span>
         </a>
+        <a href="{% url 'admin_portal:app_analytics' %}" class="dock-item {% if 'app_analytics' in request.resolver_match.url_name %}active{% endif %}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="4" width="3" height="14"/></svg>
+          <span class="tip">App Analytics</span>
+        </a>
         <a href="{% url 'admin_portal:content_reports_list' %}" class="dock-item {% if 'content_report' in request.resolver_match.url_name %}active{% endif %}">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7"/><path d="M4 14V4"/><path d="M4 4h12l-2 4 2 4H4"/><circle cx="18" cy="17" r="4"/><line x1="18" y1="15" x2="18" y2="17.5"/><line x1="18" y1="19" x2="18.01" y2="19"/></svg>
           <span class="tip">Content Reports</span>

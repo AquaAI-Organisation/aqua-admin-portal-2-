@@ -1,0 +1,164 @@
+{% extends "admin_portal/base.html" %}
+{% block title %}App Analytics | {{ APP_NAME }}{% endblock %}
+{% block topbar_title %}App Analytics{% endblock %}
+{% block extra_head %}{% include "admin_portal/_moderation_styles.html" %}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>App analytics</h1>
+    <p class="page-subtitle">
+      How each side of the platform is performing, and the analytics of any single
+      account. Figures are computed by the backend's own services, so they match
+      exactly what the user or provider sees in their app.
+    </p>
+  </div>
+</div>
+
+{% if not configured %}
+<div class="card"><p><strong>Backend bridge not configured.</strong>
+  Set <code>AQUAAI_BACKEND_API_URL</code> and <code>AQUAAI_BACKEND_API_TOKEN</code>.</p></div>
+{% endif %}
+{% if error %}<div class="card"><p class="error">{{ error }}</p></div>{% endif %}
+
+{# ---- which app, and over what period ---- #}
+<div class="card">
+  <h2>Choose an app</h2>
+  <div class="filter-row">
+    {% for key, label in types %}
+      <a href="{% url 'admin_portal:app_analytics_typed' key %}?period={{ selected.period }}"
+         class="badge {% if entity_type == key %}badge-warn{% endif %}"
+         style="padding:9px 16px; text-decoration:none;">{{ label }}</a>
+    {% endfor %}
+  </div>
+
+  <form method="get" class="filter-row" style="margin-top:14px;">
+    <div class="form-group">
+      <label for="id_period">Period</label>
+      <select id="id_period" name="period">
+        {% for value, label in periods %}
+          <option value="{{ value }}" {% if selected.period == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="id_start">From (optional)</label>
+      <input type="date" id="id_start" name="start" value="{{ selected.start }}">
+    </div>
+    <div class="form-group">
+      <label for="id_end">To (optional)</label>
+      <input type="date" id="id_end" name="end" value="{{ selected.end }}">
+    </div>
+    <button type="submit">Apply</button>
+  </form>
+</div>
+
+{# ---- the platform overview ---- #}
+{% if overview %}
+<div class="card">
+  <h2>{{ entity_label }} — overview</h2>
+  <p class="page-subtitle">
+    {{ overview.time_period.start_date|default:"the beginning" }}
+    to {{ overview.time_period.end_date }}
+  </p>
+
+  {% if entity_type == "users" %}
+    <div class="stat-row">
+      <div class="stat"><div class="stat-value">{{ overview.accounts.total }}</div><div class="stat-label">Accounts</div></div>
+      <div class="stat"><div class="stat-value">{{ overview.accounts.new_in_period }}</div><div class="stat-label">New</div></div>
+      <div class="stat"><div class="stat-value">{{ overview.accounts.active }}</div><div class="stat-label">Active</div></div>
+      <div class="stat"><div class="stat-value">{{ overview.purchasing.buyers }}</div><div class="stat-label">Buyers</div></div>
+      <div class="stat"><div class="stat-value">£{{ overview.purchasing.settled_spend }}</div><div class="stat-label">Spend</div></div>
+      <div class="stat"><div class="stat-value">£{{ overview.purchasing.average_order_value }}</div><div class="stat-label">Avg order</div></div>
+      <div class="stat"><div class="stat-value">{{ overview.consultations.bookings }}</div><div class="stat-label">Bookings</div></div>
+    </div>
+  {% elif entity_type == "consultants" %}
+    <div class="stat-row">
+      <div class="stat"><div class="stat-value">{{ overview.consultants.total }}</div><div class="stat-label">Consultants</div></div>
+      <div class="stat"><div class="stat-value">{{ overview.consultants.with_bookings_in_period }}</div><div class="stat-label">With bookings</div></div>
+      <div class="stat"><div class="stat-value">{{ overview.bookings.total }}</div><div class="stat-label">Bookings</div></div>
+      <div class="stat"><div class="stat-value">{{ overview.bookings.completed }}</div><div class="stat-label">Completed</div></div>
+      <div class="stat"><div class="stat-value">{{ overview.bookings.cancelled }}</div><div class="stat-label">Cancelled</div></div>
+      <div class="stat"><div class="stat-value">£{{ overview.bookings.gross_value }}</div><div class="stat-label">Gross value</div></div>
+      <div class="stat"><div class="stat-value">£{{ overview.bookings.average_price }}</div><div class="stat-label">Avg price</div></div>
+    </div>
+  {% else %}
+    <div class="stat-row">
+      <div class="stat"><div class="stat-value">{{ overview.breeders.total }}</div><div class="stat-label">Breeders</div></div>
+      <div class="stat"><div class="stat-value">{{ overview.breeders.selling_in_period }}</div><div class="stat-label">Selling</div></div>
+      <div class="stat"><div class="stat-value">{{ overview.sales.settled_orders }}</div><div class="stat-label">Orders</div></div>
+      <div class="stat"><div class="stat-value">{{ overview.sales.cancelled }}</div><div class="stat-label">Cancelled</div></div>
+      <div class="stat"><div class="stat-value">£{{ overview.sales.gross_value }}</div><div class="stat-label">Gross value</div></div>
+      <div class="stat"><div class="stat-value">£{{ overview.sales.average_order_value }}</div><div class="stat-label">Avg order</div></div>
+    </div>
+    {% if overview.fulfilment %}
+      <p class="page-subtitle" style="margin-top:14px;">Fulfilment:
+        {% for method, n in overview.fulfilment.items %}<strong>{{ method }}</strong> {{ n }}{% if not forloop.last %} · {% endif %}{% endfor %}
+      </p>
+    {% endif %}
+  {% endif %}
+</div>
+
+{# ---- leaderboards ---- #}
+{% if overview.most_booked %}
+<div class="card">
+  <h2>Most booked consultants</h2>
+  <div class="table-wrap"><table class="table">
+    <tr><th>Consultant</th><th>Bookings</th><th>Gross value</th><th></th></tr>
+    {% for r in overview.most_booked %}
+    <tr>
+      <td class="kind">{{ r.consultant_id }}</td><td>{{ r.bookings }}</td><td>£{{ r.gross_value }}</td>
+      <td><a href="{% url 'admin_portal:app_analytics_entity' 'consultants' r.consultant_id %}">Open</a></td>
+    </tr>
+    {% endfor %}
+  </table></div>
+</div>
+{% endif %}
+{% if overview.top_sellers %}
+<div class="card">
+  <h2>Top selling breeders</h2>
+  <div class="table-wrap"><table class="table">
+    <tr><th>Breeder</th><th>Orders</th><th>Revenue</th><th></th></tr>
+    {% for r in overview.top_sellers %}
+    <tr>
+      <td class="kind">{{ r.breeder_id }}</td><td>{{ r.orders }}</td><td>£{{ r.revenue }}</td>
+      <td><a href="{% url 'admin_portal:app_analytics_entity' 'breeders' r.breeder_id %}">Open</a></td>
+    </tr>
+    {% endfor %}
+  </table></div>
+</div>
+{% endif %}
+{% endif %}
+
+{# ---- find one account ---- #}
+<div class="card">
+  <h2>Find a {{ entity_label|slice:":-1"|lower }}</h2>
+  <p class="page-subtitle">Search by email, name or ID to see that account's own analytics.</p>
+  <form method="get" class="filter-row">
+    <input type="hidden" name="period" value="{{ selected.period }}">
+    <div class="form-group" style="flex:1 1 320px;">
+      <label for="id_q">Email, name or ID</label>
+      <input type="text" id="id_q" name="q" value="{{ query }}" placeholder="e.g. sam@example.com">
+    </div>
+    <button type="submit">Search</button>
+  </form>
+
+  {% if query %}
+    <div class="table-wrap" style="margin-top:14px;">
+      <table class="table">
+        <tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th></th></tr>
+        {% for r in results %}
+        <tr>
+          <td>{{ r.name|default:"—" }}</td>
+          <td class="kind">{{ r.email }}</td>
+          <td>{{ r.role }}</td>
+          <td>{% if r.is_active %}active{% else %}<span class="badge badge-critical">inactive</span>{% endif %}</td>
+          <td><a href="{% url 'admin_portal:app_analytics_entity' entity_type r.id %}?period={{ selected.period }}">View analytics</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5">No {{ entity_label|lower }} match “{{ query }}”.</td></tr>
+        {% endfor %}
+      </table>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

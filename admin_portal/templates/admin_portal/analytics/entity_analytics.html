@@ -1,0 +1,106 @@
+{% extends "admin_portal/base.html" %}
+{% block title %}Account Analytics | {{ APP_NAME }}{% endblock %}
+{% block topbar_title %}Account Analytics{% endblock %}
+{% block extra_head %}{% include "admin_portal/_moderation_styles.html" %}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Account analytics</h1>
+    <p class="page-subtitle">
+      <a href="{% url 'admin_portal:app_analytics_typed' entity_type %}">&larr; Back to {{ entity_label|lower }}</a>
+    </p>
+  </div>
+</div>
+
+{% if error %}<div class="card"><p class="error">{{ error }}</p></div>{% endif %}
+
+{% if payload %}
+{% with a=payload.account u=payload.user_analytics %}
+<div class="card">
+  <h2>{{ a.email|default:"(no email)" }}</h2>
+  <table class="table">
+    <tr><th>Name</th><td>{{ a.name|default:"—" }}</td></tr>
+    <tr><th>Account ID</th><td><code>{{ a.id }}</code></td></tr>
+    <tr><th>Role</th><td>{{ a.role }}</td></tr>
+    <tr><th>Status</th><td>{% if a.is_active %}active{% else %}<span class="badge badge-critical">inactive</span>{% endif %}</td></tr>
+    <tr><th>Joined</th><td>{{ a.date_joined|default:"—" }}</td></tr>
+    <tr><th>Trust score / tier</th><td>{{ a.trust_score|default:"—" }} / {{ a.regulatory_tier|default:"—" }}</td></tr>
+  </table>
+  <form method="get" class="filter-row" style="margin-top:12px;">
+    <div class="form-group">
+      <label for="id_period">Period</label>
+      <select id="id_period" name="period" onchange="this.form.submit()">
+        {% for value, label in periods %}
+          <option value="{{ value }}" {% if selected.period == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </form>
+</div>
+
+{# ---- what they do as a user of the app ---- #}
+{% if u and not u.error %}
+<div class="card">
+  <h2>Activity in the app</h2>
+  <div class="stat-row">
+    <div class="stat"><div class="stat-value">{{ u.purchases.orders|default:"0" }}</div><div class="stat-label">Orders</div></div>
+    <div class="stat"><div class="stat-value">£{{ u.purchases.settled_spend|default:"0" }}</div><div class="stat-label">Spend</div></div>
+    <div class="stat"><div class="stat-value">{{ u.consultants.bookings|default:"0" }}</div><div class="stat-label">Bookings</div></div>
+    <div class="stat"><div class="stat-value">{{ u.marketplace.listings.total|default:"0" }}</div><div class="stat-label">Listings</div></div>
+    <div class="stat"><div class="stat-value">{{ u.community.showcases_published|default:"0" }}</div><div class="stat-label">Showcases</div></div>
+    <div class="stat"><div class="stat-value">{{ u.planner.ai_tasks_completed|default:"0" }}</div><div class="stat-label">AI tasks done</div></div>
+    <div class="stat"><div class="stat-value">{{ u.moderation.reports_against_me|default:"0" }}</div><div class="stat-label">Reports against</div></div>
+  </div>
+</div>
+
+{% if u.items.items %}
+<div class="card">
+  <h2>What they bought</h2>
+  <div class="table-wrap"><table class="table">
+    <tr><th>Item</th><th>Qty</th><th>Spend</th><th>Avg unit price</th></tr>
+    {% for i in u.items.items %}
+    <tr><td class="kind">{{ i.item }}</td><td>{{ i.quantity }}</td><td>£{{ i.spend }}</td><td>£{{ i.average_unit_price }}</td></tr>
+    {% endfor %}
+  </table></div>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Fulfilment &amp; consultants</h2>
+  <div class="stat-row">
+    <div class="stat"><div class="stat-value">{{ u.fulfilment.click_and_collect.orders|default:"0" }}</div><div class="stat-label">Click &amp; collect</div></div>
+    <div class="stat"><div class="stat-value">{{ u.fulfilment.delivery.orders|default:"0" }}</div><div class="stat-label">Delivery</div></div>
+    <div class="stat"><div class="stat-value">{{ u.consultants.cancellations.count|default:"0" }}</div><div class="stat-label">Cancellations</div></div>
+    <div class="stat"><div class="stat-value">£{{ u.consultants.average_service_price|default:"0" }}</div><div class="stat-label">Avg service</div></div>
+    <div class="stat"><div class="stat-value">{{ u.recommendations.times_used|default:"0" }}</div><div class="stat-label">AI recs used</div></div>
+    <div class="stat"><div class="stat-value">{{ u.affiliate.store_visits|default:"0" }}</div><div class="stat-label">Store visits</div></div>
+  </div>
+</div>
+{% elif u.error %}
+<div class="card"><p class="error">{{ u.error }}</p></div>
+{% endif %}
+
+{# ---- provider-side performance, when they are one ---- #}
+{% if payload.provider_analytics %}
+<div class="card">
+  <h2>{{ entity_label|slice:":-1" }} performance</h2>
+  {% if payload.provider_analytics.unavailable %}
+    <p class="page-subtitle">{{ payload.provider_analytics.unavailable }}</p>
+  {% elif payload.provider_analytics.error %}
+    <p class="error">{{ payload.provider_analytics.error }}</p>
+  {% else %}
+    {% with k=payload.provider_analytics.kpi %}
+    <div class="stat-row">
+      {% for key, value in k.items %}
+        <div class="stat"><div class="stat-value">{{ value }}</div><div class="stat-label">{{ key }}</div></div>
+      {% endfor %}
+    </div>
+    {% endwith %}
+  {% endif %}
+</div>
+{% endif %}
+{% endwith %}
+{% elif configured and not error %}
+<div class="card"><p>Account not found.</p></div>
+{% endif %}
+{% endblock %}

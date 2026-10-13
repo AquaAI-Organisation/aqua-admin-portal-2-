@@ -2281,3 +2281,90 @@ def content_user_moderation(request, user_id):
         except moderation_backend.ModerationBackendError as exc:
             context["error"] = str(exc)
     return render(request, "admin_portal/content_user_moderation.html", context)
+
+
+# ---------------------------------------------------------------------------
+# App analytics — platform overviews and per-account drill-down
+# ---------------------------------------------------------------------------
+
+def _analytics_period(request):
+    """Period selection shared by the analytics views."""
+    return {
+        "period": (request.GET.get("period") or "1m").strip(),
+        "start": (request.GET.get("start") or "").strip(),
+        "end": (request.GET.get("end") or "").strip(),
+    }
+
+
+@admin_required
+def app_analytics(request, entity_type="users"):
+    """Overview of how one side of the platform is performing, plus a search
+    box to drill into a single account."""
+    from .services import analytics_backend as ab
+
+    entity_type = (entity_type or "users").strip().lower()
+    if entity_type not in ab.ENTITY_TYPES:
+        entity_type = "users"
+
+    sel = _analytics_period(request)
+    query = (request.GET.get("q") or "").strip()
+
+    context = {
+        "configured": ab.is_configured(),
+        "entity_type": entity_type,
+        "entity_label": ab.TYPE_LABELS[entity_type],
+        "types": [(k, ab.TYPE_LABELS[k]) for k in ab.ENTITY_TYPES],
+        "periods": ab.PERIODS,
+        "selected": sel,
+        "query": query,
+        "overview": None,
+        "results": [],
+        "error": None,
+    }
+    if not context["configured"]:
+        return render(request, "admin_portal/analytics/app_analytics.html", context)
+
+    try:
+        context["overview"] = ab.fetch_overview(
+            entity_type, sel["period"], sel["start"], sel["end"]).get("data")
+    except ab.AnalyticsBackendError as exc:
+        context["error"] = str(exc)
+
+    if query:
+        try:
+            context["results"] = ab.search_entities(entity_type, query).get(
+                "data", {}).get("results", [])
+        except ab.AnalyticsBackendError as exc:
+            context["error"] = context["error"] or str(exc)
+
+    return render(request, "admin_portal/analytics/app_analytics.html", context)
+
+
+@admin_required
+def app_analytics_entity(request, entity_type, entity_id):
+    """One account's analytics, as the account owner themselves would see it."""
+    from .services import analytics_backend as ab
+
+    entity_type = (entity_type or "users").strip().lower()
+    if entity_type not in ab.ENTITY_TYPES:
+        entity_type = "users"
+
+    sel = _analytics_period(request)
+    context = {
+        "configured": ab.is_configured(),
+        "entity_type": entity_type,
+        "entity_label": ab.TYPE_LABELS[entity_type],
+        "entity_id": entity_id,
+        "periods": ab.PERIODS,
+        "selected": sel,
+        "payload": None,
+        "error": None,
+    }
+    if context["configured"]:
+        try:
+            context["payload"] = ab.fetch_entity(
+                entity_type, entity_id, sel["period"], sel["start"], sel["end"]
+            ).get("data")
+        except ab.AnalyticsBackendError as exc:
+            context["error"] = str(exc)
+    return render(request, "admin_portal/analytics/entity_analytics.html", context)
