@@ -1,59 +1,49 @@
-{% extends 'emails/base.html' %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="x-apple-disable-message-reformatting">
+<title>Your Aqua Providers application</title>
+</head>
+<body style="margin:0;padding:0;background-color:#F1F5F9;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#F1F5F9;">
+<tr><td align="center" style="padding:32px 12px;">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;background-color:#FFFFFF;border-radius:16px;overflow:hidden;font-family:Inter,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
 
-{% block title %}Application Update - {{ app_name }}{% endblock %}
+<!-- Banner -->
+<tr><td align="center" style="background-color:#2563EB;background-image:linear-gradient(135deg,#1E3A8A 0%,#3B82F6 100%);padding:36px 24px 32px;">
+{% if logo_url %}<img src="{{ logo_url }}" width="64" height="64" alt="AQUA AI" style="display:block;margin:0 auto 14px;width:64px;height:64px;border:0;border-radius:12px;">{% endif %}
+<div style="font-size:28px;line-height:1.2;font-weight:700;color:#FFFFFF;">AQUA AI</div>
+<div style="font-size:13px;line-height:1.4;letter-spacing:1px;color:#DBEAFE;padding-top:10px;">SMART CARE. HEALTHY AQUARIUMS.</div>
+</td></tr>
 
-{% block extra_styles %}
-<style>
-    .content-box {
-        background: #FFFFFF;
-        border-radius: 12px;
-        padding: 24px;
-        margin: 20px 0;
-        border: 1px solid #E2E8F0;
-    }
-    .rejection-badge {
-        display: inline-block;
-        background: #FEE2E2;
-        color: #991B1B;
-        padding: 8px 16px;
-        border-radius: 20px;
-        font-size: 14px;
-        font-weight: 600;
-    }
-    .info-box {
-        background: #FEFCE8;
-        border-radius: 8px;
-        padding: 16px;
-        margin: 20px 0;
-        border-left: 4px solid #EAB308;
-    }
-</style>
-{% endblock %}
+<!-- Card -->
+<tr><td style="padding:32px 28px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid #E2E8F0;border-radius:12px;">
+<tr><td style="padding:28px 28px 12px;">
+<table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto 24px;"><tr>
+<td style="background-color:#E2E8F0;color:#334155;border-radius:999px;padding:8px 20px;font-size:14px;font-weight:600;">Application Reviewed</td>
+</tr></table>
+<p style="margin:0 0 16px;font-size:16px;line-height:1.6;color:#334155;">Dear <strong style="color:#0F172A;">{{ name }}</strong>,</p>
+<p style="margin:0 0 16px;font-size:16px;line-height:1.6;color:#334155;">Thank you for applying to join Aqua Providers as a Breeder. We’ve reviewed the application for <strong style="color:#0F172A;">{{ company_name }}</strong>, and on this occasion we’re unable to approve it.</p>
+<p style="margin:0 0 16px;font-size:16px;line-height:1.6;color:#334155;">If you think we’ve got this wrong, or your details have changed, we’d genuinely like to hear from you. Reply to this email or contact <a href="mailto:support@aquaai.uk" style="color:#2563EB;text-decoration:underline;">support@aquaai.uk</a> with any further information or supporting documents, and our team will review your application again.</p>
+<p style="margin:0 0 16px;font-size:16px;line-height:1.6;color:#334155;">Thank you for your interest in AQUA AI.<br>The AQUA AI team</p>
+</td></tr>
+</table>
+</td></tr>
 
-{% block content %}
-<div class="content-box">
-    <div style="text-align: center; margin-bottom: 20px;">
-        <span class="rejection-badge">Application Update</span>
-    </div>
-    
-    <p style="margin-bottom: 16px; font-size: 16px;">Dear <strong>{{ username }}</strong>,</p>
-    
-    <p style="color: #475569; margin-bottom: 16px;">
-        Thank you for applying to Aqua Breeder. Unfortunately, on this occasion your application has not passed our verification process.
-    </p>
-    
-    {% if company_name %}
-    <p style="color: #475569; margin-bottom: 16px;">
-        Your application for <strong>{{ company_name }}</strong> was not approved at this time.
-    </p>
-    {% endif %}
-    
-    <div class="info-box">
-        <strong>What can you do?</strong>
-        <p style="margin-top: 8px;">
-            If you believe this decision was made in error, please contact us at <a href="mailto:{{ support_email }}" style="color: #3B82F6;">{{ support_email }}</a>, stating your reasons and including any supporting documentation, and we will review your application again.
-        </p>
-    </div>
-    
-</div>
-{% endblock %}
+<!-- Footer -->
+<tr><td align="center" style="background-color:#F8FAFC;border-top:1px solid #E2E8F0;padding:24px 24px 28px;font-size:13px;line-height:1.6;color:#64748B;">
+<a href="https://aquaai.uk/faqs" style="color:#475569;text-decoration:none;padding:0 10px;">Help Center</a>
+<a href="{{ privacy_url }}" style="color:#475569;text-decoration:none;padding:0 10px;">Privacy Policy</a>
+<a href="{{ terms_url }}" style="color:#475569;text-decoration:none;padding:0 10px;">Terms of Service</a>
+<div style="padding-top:14px;color:#475569;">Need help? Contact us at <a href="mailto:support@aquaai.uk" style="color:#2563EB;text-decoration:none;">support@aquaai.uk</a></div>
+<div style="padding-top:12px;color:#94A3B8;">&copy; {% now "Y" %} AQUA AI. All rights reserved.</div>
+</td></tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>

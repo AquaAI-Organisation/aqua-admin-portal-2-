@@ -229,6 +229,7 @@ def _send_email_result(
     from_email: str | None = None,
     attachments: list[dict] | None = None,
     html_body: str | None = None,
+    reply_to: str | None = None,
 ) -> dict[str, str | bool]:
     recipients = [r for r in recipients if r]
     if not recipients:
@@ -245,6 +246,7 @@ def _send_email_result(
                 from_email=from_email,
                 attachments=attachments,
                 html_body=html_body,
+                reply_to=reply_to,
             )
             return {"ok": True, "error": ""}
         config = get_email_runtime_config()
@@ -263,6 +265,7 @@ def _send_email_result(
                 from_email or config.default_from_email,
                 recipients,
                 connection=connection,
+                reply_to=[reply_to] if reply_to else None,
             )
             email.attach_alternative(html_body, "text/html")
         else:
@@ -272,6 +275,7 @@ def _send_email_result(
                 from_email or config.default_from_email,
                 recipients,
                 connection=connection,
+                reply_to=[reply_to] if reply_to else None,
             )
         for item in attachments or []:
             email.attach_file(item["path"], mimetype=item.get("mime_type"))
@@ -295,6 +299,7 @@ def send_custom_email(
     from_email: str | None = None,
     attachments: list[dict] | None = None,
     html_body: str | None = None,
+    reply_to: str | None = None,
 ) -> dict[str, str | bool]:
     return _send_email_result(
         subject,
@@ -303,6 +308,7 @@ def send_custom_email(
         from_email=from_email,
         attachments=attachments,
         html_body=html_body,
+        reply_to=reply_to,
     )
 
 

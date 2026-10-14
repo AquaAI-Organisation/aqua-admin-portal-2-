@@ -200,6 +200,18 @@ DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Aqua Admin <admin@humara.i
 GMAIL_CLIENT_ID = os.getenv("GMAIL_CLIENT_ID", "")
 GMAIL_CLIENT_SECRET = os.getenv("GMAIL_CLIENT_SECRET", "")
 GMAIL_REFRESH_TOKEN = os.getenv("GMAIL_REFRESH_TOKEN", "")
+# --- Provider decision emails (approval / rejection) ---------------------
+# EMAIL_LOGO_URL must be an ABSOLUTE https URL to a PNG or JPG that anyone can
+# open without signing in. A relative path, a /static/ path or an SVG is the
+# usual cause of the broken banner image. When this is blank the templates omit
+# the <img> entirely and the AQUA AI wordmark carries the banner on its own.
+EMAIL_LOGO_URL = os.getenv("EMAIL_LOGO_URL", "")
+PRIVACY_POLICY_URL = os.getenv("PRIVACY_POLICY_URL", "https://aquaai.uk/privacy")
+TERMS_URL = os.getenv("TERMS_URL", "https://aquaai.uk/terms")
+# Where Reply goes. Blank falls back to the support address printed in the
+# email body, so Reply and the written address agree.
+PROVIDER_EMAIL_REPLY_TO = os.getenv("PROVIDER_EMAIL_REPLY_TO", "")
+
 GMAIL_SENDER = os.getenv("GMAIL_SENDER", "support@aquaai.uk")
 SUPPORT_ALIAS_EMAIL = os.getenv("SUPPORT_ALIAS_EMAIL", "support@aquaai.uk")
 PRIVACY_ALIAS_EMAIL = os.getenv("PRIVACY_ALIAS_EMAIL", "privacy@aquaai.uk")

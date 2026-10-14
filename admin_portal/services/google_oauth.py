@@ -164,6 +164,7 @@ def send_gmail_message(
     from_email: str | None = None,
     attachments: list[dict] | None = None,
     html_body: str | None = None,
+    reply_to: str | None = None,
 ) -> None:
     service = get_gmail_service()
     runtime = get_gmail_runtime_config()
@@ -193,6 +194,8 @@ def send_gmail_message(
     msg["To"] = ", ".join([r for r in recipients if r])
     msg["From"] = from_addr
     msg["Subject"] = subject
+    if reply_to:
+        msg["Reply-To"] = reply_to
     raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
     service.users().messages().send(userId="me", body={"raw": raw}).execute()
 

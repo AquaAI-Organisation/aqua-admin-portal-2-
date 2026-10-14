@@ -9,6 +9,7 @@ import time
 from datetime import timedelta
 from typing import Iterable
 
+from django.conf import settings
 from django.template.loader import render_to_string
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -26,6 +27,11 @@ from .openai_review import (
 )
 
 logger = logging.getLogger(__name__)
+
+#: Address a provider reaches by hitting Reply. These are account emails, not
+#: marketing, so a reply must land in a monitored inbox — the templates no
+#: longer tell the provider not to reply.
+PROVIDER_SUPPORT_EMAIL = "support@aquaai.uk"
 
 
 def _global_auto_activate_enabled() -> bool:
@@ -527,6 +533,16 @@ def _html_to_text(html: str) -> str:
     return text.strip()
 
 
+def _provider_reply_to() -> str:
+    """Where a provider's reply lands.
+
+    Defaults to the support inbox named in the email body, so Reply and the
+    address in the text reach the same place. Override with
+    PROVIDER_EMAIL_REPLY_TO to route replies elsewhere (e.g. providers@).
+    """
+    return (getattr(settings, "PROVIDER_EMAIL_REPLY_TO", "") or PROVIDER_SUPPORT_EMAIL).strip()
+
+
 def _render_provider_email(subject_type: str, kind: str, user, profile) -> tuple[str, str]:
     """Render the shared breeder/consultant HTML email + a plain-text fallback.
 
@@ -542,11 +558,21 @@ def _render_provider_email(subject_type: str, kind: str, user, profile) -> tuple
         or "there"
     ).strip()
     context = {
-        "app_name": "AquaAI",
-        "username": username,
+        # Keys the current templates read.
+        "name": username,
         "company_name": (getattr(profile, "company_name", "") or ""),
-        "support_email": "support@aquaai.uk",
-        "activation_link": "https://aquaai.uk",
+        # Must be an absolute https URL to a PNG or JPG. A relative path, a
+        # /static/ path or an SVG is what breaks the banner image in mail
+        # clients. Left blank, the template renders no <img> at all rather than
+        # a broken-image icon — the AQUA AI wordmark still shows.
+        "logo_url": (getattr(settings, "EMAIL_LOGO_URL", "") or "").strip(),
+        "privacy_url": getattr(settings, "PRIVACY_POLICY_URL", "https://aquaai.uk/privacy"),
+        "terms_url": getattr(settings, "TERMS_URL", "https://aquaai.uk/terms"),
+        # Retained so older or re-added templates keep rendering.
+        "app_name": "AQUA AI",
+        "username": username,
+        "support_email": PROVIDER_SUPPORT_EMAIL,
+        "activation_link": "https://aquaai.uk/download",
         "year": timezone.now().year,
     }
     html = render_to_string(template, context)
@@ -571,14 +597,14 @@ def _notify_account_approved(subject_type, profile, user) -> None:
         from .google_oauth import pick_alias_for_mailbox
         from .notifier import send_custom_email
 
-        brand = "Aqua Breeder" if subject_type == "breeder" else "Aqua Consultant"
         html, text = _render_provider_email(subject_type, "approval", user, profile)
         result = send_custom_email(
-            subject=f"Your {brand} application has been approved",
+            subject="Welcome to Aqua Providers — You're Approved",
             body=text,
             html_body=html,
             recipients=[recipient],
             from_email=pick_alias_for_mailbox("providers"),
+            reply_to=_provider_reply_to(),
         )
         metadata["approval_email_sent_at"] = timezone.now().isoformat()
         metadata["approval_email_ok"] = bool(result.get("ok"))
@@ -601,14 +627,14 @@ def _notify_account_rejected(subject_type, profile, user) -> None:
         from .google_oauth import pick_alias_for_mailbox
         from .notifier import send_custom_email
 
-        brand = "Aqua Breeder" if subject_type == "breeder" else "Aqua Consultant"
         html, text = _render_provider_email(subject_type, "rejection", user, profile)
         result = send_custom_email(
-            subject=f"An update on your {brand} application",
+            subject="Your Aqua Providers application",
             body=text,
             html_body=html,
             recipients=[recipient],
             from_email=pick_alias_for_mailbox("providers"),
+            reply_to=_provider_reply_to(),
         )
         metadata["rejection_email_sent_at"] = timezone.now().isoformat()
         metadata["rejection_email_ok"] = bool(result.get("ok"))
