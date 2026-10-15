@@ -1119,6 +1119,10 @@ class AIAccountReview(models.Model):
     #: When the submitted event was queued — the 2h target and 12h evidence
     #: deadline in §12.1 are both measured from this, not from profile creation.
     submitted_event_at = models.DateTimeField(null=True, blank=True)
+    #: The user UUID sent as ``aqua_provider_id``. Captured when the submitted
+    #: event is built so a later decision event can still identify the provider
+    #: after the profile itself has been erased.
+    aqua_provider_id = models.UUIDField(null=True, blank=True)
 
     class Meta:
         ordering = ["-created_at"]

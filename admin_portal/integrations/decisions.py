@@ -41,12 +41,20 @@ DECISION_PATHS = tuple(value for value, _label in V2_DECISION_PATH_CHOICES)
 #: with any unresolved flag, is not a clean case.
 CLEAN_CASE_MIN_SCORE = 0.75
 
-#: §21.1 — where a decision leaves the review.
-_STATE_FOR_PATH = {
-    "automatic_clean_case": "automatic_approved",
-    "system_safety_hold": "human_review",
-    "human_review": "decided",
-}
+def _state_after(status: str, decision_path: str) -> str:
+    """Where a decision leaves the review in the §21.1 state machine.
+
+    Status decides this, not the path. ``held`` is not an outcome: §12.3 says a
+    held case MUST reach a named person and MUST NOT auto-promote, so it stays
+    in ``human_review`` whichever path recorded it — an operator recording
+    "needs more evidence" leaves the case just as open as a system safety hold
+    does. Only an approval or a rejection is terminal.
+    """
+    if status == "held":
+        return "human_review"
+    if status == "approved" and decision_path == "automatic_clean_case":
+        return "automatic_approved"
+    return "decided"
 
 
 class DecisionRefused(ValueError):
@@ -148,7 +156,7 @@ def record_decision(
         locked.decision_path = decision_path
         locked.rationale = reason_text
         locked.decided_at = timezone.now()
-        locked.review_state = _STATE_FOR_PATH[decision_path]
+        locked.review_state = _state_after(status, decision_path)
         if score is not None:
             locked.confidence = float(score)
         if actor is not None:

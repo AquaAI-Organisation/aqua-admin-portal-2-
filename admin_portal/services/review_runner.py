@@ -241,7 +241,9 @@ def _enqueue_submitted_event(review, subject_type: str, profile, user) -> None:
         enqueue(event)
         review.submitted_event_at = timezone.now()
         review.review_state = "awaiting_crm_evidence"
-        review.save(update_fields=["submitted_event_at", "review_state"])
+        review.aqua_provider_id = getattr(user, "id", None) or None
+        review.save(update_fields=[
+            "submitted_event_at", "review_state", "aqua_provider_id"])
     except Exception:
         logger.exception("could not queue the CRM submitted event for %s", review.subject_id)
         raise

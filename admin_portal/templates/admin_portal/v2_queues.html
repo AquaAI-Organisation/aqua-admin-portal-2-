@@ -1,0 +1,67 @@
+{% extends "admin_portal/base.html" %}
+{% block title %}Review Queues | {{ APP_NAME }}{% endblock %}
+{% block topbar_title %}Review Queues{% endblock %}
+{% block extra_head %}{% include "admin_portal/_moderation_styles.html" %}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>{{ selected_label }}</h1>
+    <p class="page-subtitle">
+      Cases held for a person. A hold is not a rejection &mdash; each one still needs a
+      decision, and an evidence-overdue hold must be decided before the applicant&rsquo;s
+      24-hour promise expires.
+    </p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="filter-row">
+    {% for key, label, count in queues %}
+      <a class="inline-chip{% if key == selected %} selected{% endif %}"
+         href="?queue={{ key }}">{{ label }}: {{ count }}</a>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card">
+  <div class="table-wrap">
+    <table class="table">
+      <tr>
+        <th>Case</th>
+        <th>Why</th>
+        <th>Held since</th>
+        {% if selected != "integration_exceptions" %}<th>Decide by</th>{% endif %}
+        <th></th>
+      </tr>
+      {% for row in rows %}
+      <tr>
+        <td>
+          <div class="cell-name">{{ row.title }}</div>
+          <div class="cell-sub">{{ row.subtitle }}</div>
+        </td>
+        <td class="cell-sub">{{ row.detail|default:"—" }}</td>
+        <td class="mono">{{ row.when|date:"d M Y H:i"|default:"—" }}</td>
+        {% if selected != "integration_exceptions" %}
+        <td>
+          {% if row.promise_passed %}
+            <span class="badge badge-critical">{{ row.promise_at|date:"d M H:i" }} — passed</span>
+          {% else %}
+            <span class="mono">{{ row.promise_at|date:"d M H:i"|default:"—" }}</span>
+          {% endif %}
+        </td>
+        {% endif %}
+        <td>
+          {% if row.url %}<a class="btn btn-sm" href="{{ row.url }}">Open</a>{% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="5" class="empty-state">
+          Nothing in this queue.
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}

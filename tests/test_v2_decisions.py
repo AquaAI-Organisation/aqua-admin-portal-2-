@@ -171,8 +171,21 @@ def main():
                     reason_text="Identity does not match.", actor_type="operator",
                     decision_path="human_review")
     decided.refresh_from_db()
-    check("an operator decision moves to decided", decided.review_state == "decided",
+    check("an operator rejection moves to decided", decided.review_state == "decided",
           decided.review_state)
+
+    # Regression: an operator recording a HOLD leaves the case open. §12.3 says
+    # a held case must reach a named person and must not auto-promote, so it
+    # stays in human_review whichever path recorded it. Marking it "decided"
+    # silently dropped it out of the named queue.
+    operator_held = new_review()
+    record_decision(operator_held, status="held", reason_code="identity_review_required",
+                    reason_text="Identity needs checking.", actor_type="operator",
+                    decision_path="human_review")
+    operator_held.refresh_from_db()
+    check("an operator-recorded HOLD stays in human_review, not decided",
+          operator_held.review_state == "human_review", operator_held.review_state)
+    check("and is still recognised as held", operator_held.is_held)
 
     section("6. INVALID COMBINATIONS ARE REFUSED, NOT WRITTEN (§13.3/§13.4)")
     target = new_review()

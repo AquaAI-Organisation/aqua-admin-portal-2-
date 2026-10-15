@@ -2374,3 +2374,57 @@ def app_analytics_entity(request, entity_type, entity_id):
         except ab.AnalyticsBackendError as exc:
             context["error"] = str(exc)
     return render(request, "admin_portal/analytics/entity_analytics.html", context)
+
+
+# ---------------------------------------------------------------------------
+# V2.3 named human queues (spec §23.3)
+# ---------------------------------------------------------------------------
+
+@admin_required
+def v2_queues(request):
+    """Evidence overdue, identity review and integration exceptions.
+
+    §12.3 requires a held case to reach a named person, and §23.3 requires a
+    named queue for each of these three. The lists are derived from review
+    state rather than copied into another table, so they cannot drift out of
+    step with the decisions themselves.
+    """
+    from .integrations import evidence_sla as sla
+
+    selected = (request.GET.get("queue") or sla.QUEUE_EVIDENCE_OVERDUE).strip()
+    if selected not in sla.QUEUE_LABELS:
+        selected = sla.QUEUE_EVIDENCE_OVERDUE
+
+    rows = []
+    if selected == sla.QUEUE_INTEGRATION_EXCEPTIONS:
+        for event in sla.queue(selected)[:100]:
+            rows.append({
+                "kind": "integration",
+                "title": event.event_type,
+                "subtitle": event.event_id,
+                "detail": event.last_error or "no error recorded",
+                "when": event.last_attempt_at,
+                "url": "",
+            })
+    else:
+        for review in sla.queue(selected)[:100]:
+            state = sla.sla_state(review)
+            rows.append({
+                "kind": "review",
+                "title": review.subject_display_name or review.subject_user_email,
+                "subtitle": f"{review.subject_type} · {review.reason_code or '—'}",
+                "detail": (review.rationale or "")[:220],
+                "when": review.decided_at,
+                "promise_at": state.promise_at,
+                "promise_passed": bool(
+                    state.promise_at and state.promise_at < timezone.now()),
+                "url": reverse("admin_portal:review_detail", args=[review.id]),
+            })
+
+    return render(request, "admin_portal/v2_queues.html", {
+        "queues": [(key, label, count) for key, label in sla.QUEUE_LABELS.items()
+                   for count in [sla.queue_counts().get(key, 0)]],
+        "selected": selected,
+        "selected_label": sla.QUEUE_LABELS[selected],
+        "rows": rows,
+    })

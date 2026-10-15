@@ -85,6 +85,9 @@ urlpatterns = [
     path("daily-reports/<int:report_id>/", views.daily_report_detail, name="daily_report_detail"),
 
     # Audit log
+    # V2.3 named human queues (spec §23.3)
+    path("queues/", views.v2_queues, name="v2_queues"),
+
     path("audit/", views.audit_log, name="audit_log"),
 
     # Admin user management (super admins only)
