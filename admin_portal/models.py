@@ -44,9 +44,24 @@ DECISION_CHOICES = [
     ("pending", "Pending"),
     ("approved", "Approved"),
     ("rejected", "Rejected"),
-    ("flagged", "Flagged"),
+    # V2.3 §13.3 names the three terminal decision states approved / rejected /
+    # held. The portal previously called the middle one "flagged", which read
+    # like a severity rather than an outcome and invited the assumption that it
+    # was a soft reject. It is neither an approval nor a rejection: it is a case
+    # that must reach a named person.
+    ("held", "Held"),
     ("error", "Error"),
 ]
+
+#: Accepted on input (old bookmarks, saved filters, the daily-report history)
+#: and normalised to the canonical value. Never written.
+LEGACY_DECISION_ALIASES = {"flagged": "held"}
+
+
+def canonical_decision(value: str | None) -> str:
+    """Normalise a decision value, mapping the legacy ``flagged`` to ``held``."""
+    value = (value or "").strip().lower()
+    return LEGACY_DECISION_ALIASES.get(value, value)
 # --- V2.3 CRM integration vocabularies -------------------------------------
 # These mirror the controlled values in the integration specification. The CRM
 # validates them on receipt, so an unlisted value is a delivery failure, not a
@@ -1122,12 +1137,28 @@ class AIAccountReview(models.Model):
     def __str__(self):
         return f"{self.subject_type}:{self.subject_id} → {self.decision}"
 
+    def unresolved_flag_reasons(self) -> list[str]:
+        """Open review flags at this moment, for the decision event (§13.3).
+
+        An automatic approval requires this to be empty — a flag nobody has
+        resolved is exactly the case the clean-case gate must not swallow.
+        """
+        return [
+            (flag.reason or "").strip()[:160]
+            for flag in self.flags.filter(resolved=False).order_by("created_at")
+            if (flag.reason or "").strip()
+        ]
+
+    @property
+    def is_held(self) -> bool:
+        return canonical_decision(self.decision) == "held"
+
     @property
     def badge_class(self):
         return {
             "approved": "ok",
             "rejected": "danger",
-            "flagged": "warn",
+            "held": "warn",
             "pending": "muted",
             "error": "danger",
         }.get(self.decision, "muted")

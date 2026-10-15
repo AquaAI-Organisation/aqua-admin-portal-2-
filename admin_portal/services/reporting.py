@@ -24,7 +24,7 @@ def build_report_for(d: date | None = None) -> DailyReport:
     by_decision = qs.aggregate(
         approved=Count("id", filter=Q(decision="approved")),
         rejected=Count("id", filter=Q(decision="rejected")),
-        flagged=Count("id", filter=Q(decision="flagged")),
+        flagged=Count("id", filter=Q(decision="held")),
         pending=Count("id", filter=Q(decision="pending")),
     )
     by_subject = qs.aggregate(
@@ -42,7 +42,7 @@ def build_report_for(d: date | None = None) -> DailyReport:
     if by_decision["rejected"]:
         summary_lines.append(f"{by_decision['rejected']} accounts auto-rejected.")
     if by_decision["flagged"]:
-        summary_lines.append(f"{by_decision['flagged']} flagged for human review.")
+        summary_lines.append(f"{by_decision['flagged']} held for human review.")
     if by_decision["pending"]:
         summary_lines.append(f"{by_decision['pending']} still pending.")
     if issue_count:

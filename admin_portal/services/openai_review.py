@@ -142,7 +142,7 @@ Return STRICT JSON ONLY, matching this schema exactly:
 
 @dataclass
 class AIReviewOutcome:
-    decision: str  # approved / rejected / flagged / error
+    decision: str  # approved / rejected / held / error
     confidence: float
     rationale: str
     evidence: dict[str, Any]
@@ -497,10 +497,10 @@ def _balanced_decision(
         decision = "approved"
         reason = "The profile is plausible, passes the core checks, and does not show strong risk signals."
     elif thin_evidence:
-        decision = "flagged"
+        decision = "held"
         reason = "Evidence is too thin for safe automatic approval."
     else:
-        decision = "flagged"
+        decision = "held"
         reason = "The account is plausible but needs manual review under the balanced policy."
 
     return decision, {

@@ -138,7 +138,7 @@ def dashboard(request):
         total=Count("id"),
         approved=Count("id", filter=Q(decision="approved")),
         rejected=Count("id", filter=Q(decision="rejected")),
-        flagged=Count("id", filter=Q(decision="flagged")),
+        flagged=Count("id", filter=Q(decision="held")),
         pending=Count("id", filter=Q(decision="pending")),
         overrides=Count("id", filter=Q(manually_overridden=True)),
     )
@@ -152,7 +152,7 @@ def dashboard(request):
         total=Count("id"),
         approved=Count("id", filter=Q(decision="approved")),
         rejected=Count("id", filter=Q(decision="rejected")),
-        flagged=Count("id", filter=Q(decision="flagged")),
+        flagged=Count("id", filter=Q(decision="held")),
         pending=Count("id", filter=Q(decision="pending")),
     )
 
@@ -164,7 +164,7 @@ def dashboard(request):
         day_counts = day_reviews.aggregate(
             approved=Count("id", filter=Q(decision="approved")),
             rejected=Count("id", filter=Q(decision="rejected")),
-            flagged=Count("id", filter=Q(decision="flagged")),
+            flagged=Count("id", filter=Q(decision="held")),
         )
         week_data.append(
             {
@@ -448,7 +448,7 @@ def intake_list(request):
                     "pending": "pending",
                     "approved": "ok",
                     "rejected": "danger",
-                    "flagged": "warn",
+                    "held": "warn",
                     "error": "danger",
                 }.get(review_state, "muted"),
                 "failure_reason": review.error_summary if review and review.error else "",
@@ -478,14 +478,14 @@ def intake_list(request):
                     "pending": "pending",
                     "approved": "ok",
                     "rejected": "danger",
-                    "flagged": "warn",
+                    "held": "warn",
                     "error": "danger",
                 }.get(review_state, "muted"),
                 "failure_reason": review.error_summary if review and review.error else "",
             }
         )
 
-    if ai_state in {"not_scanned", "pending", "approved", "rejected", "flagged", "error"}:
+    if ai_state in {"not_scanned", "pending", "approved", "rejected", "held", "error"}:
         rows = [row for row in rows if row["ai_state"] == ai_state]
 
     oldest_fallback = timezone.now() - timedelta(days=36500)
@@ -586,7 +586,7 @@ def review_list(request):
     decision = request.GET.get("decision", "").strip()
     subject = request.GET.get("subject", "").strip()
     q = (request.GET.get("q") or "").strip()
-    if decision in {"approved", "rejected", "flagged", "pending", "error"}:
+    if decision in {"approved", "rejected", "held", "pending", "error"}:
         qs = qs.filter(decision=decision)
     if subject in {"breeder", "consultant"}:
         qs = qs.filter(subject_type=subject)
@@ -600,7 +600,7 @@ def review_list(request):
         pending=Count("id", filter=Q(decision="pending")),
         approved=Count("id", filter=Q(decision="approved")),
         rejected=Count("id", filter=Q(decision="rejected")),
-        flagged=Count("id", filter=Q(decision="flagged")),
+        flagged=Count("id", filter=Q(decision="held")),
     )
     return render(
         request,
@@ -665,7 +665,13 @@ def review_override(request, review_id):
 
     new_decision = form.cleaned_data["new_decision"]
     reason = form.cleaned_data["resolved_reason"]
-    manual_override(review, new_decision, reason, request.user)
+    # Carry the operator's selected reason through to the contract's controlled
+    # vocabulary rather than letting it default (spec §13.4).
+    from .services.review_runner import override_reason_code
+    manual_override(
+        review, new_decision, reason, request.user,
+        reason_code=override_reason_code(new_decision, request.POST.get("reason_code")),
+    )
     audit.record_write(
         request.user,
         "review.manual_override",
@@ -1928,7 +1934,7 @@ def api_review_stats(request):
         day_counts = day_reviews.aggregate(
             approved=Count("id", filter=Q(decision="approved")),
             rejected=Count("id", filter=Q(decision="rejected")),
-            flagged=Count("id", filter=Q(decision="flagged")),
+            flagged=Count("id", filter=Q(decision="held")),
         )
         data.append(
             {

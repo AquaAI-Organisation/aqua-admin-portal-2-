@@ -10,7 +10,7 @@
   <div class="page-actions">
     <span class="inline-chip">Total: {{ summary.total }}</span>
     <span class="inline-chip">Pending: {{ summary.pending }}</span>
-    <span class="inline-chip">Flagged: {{ summary.flagged }}</span>
+    <span class="inline-chip">Held: {{ summary.flagged }}</span>
   </div>
 </div>
 
@@ -27,7 +27,7 @@
         <option value="pending" {% if decision == "pending" %}selected{% endif %}>Pending</option>
         <option value="approved" {% if decision == "approved" %}selected{% endif %}>Approved</option>
         <option value="rejected" {% if decision == "rejected" %}selected{% endif %}>Rejected</option>
-        <option value="flagged" {% if decision == "flagged" %}selected{% endif %}>Flagged</option>
+        <option value="held" {% if decision == "held" %}selected{% endif %}>Held</option>
         <option value="error" {% if decision == "error" %}selected{% endif %}>Error</option>
       </select>
     </div>

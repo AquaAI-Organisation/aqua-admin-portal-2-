@@ -19,6 +19,7 @@ from django.utils.html import strip_tags
 from ..models import (
     AIAccountReview, AIFlag, OperationalSettings,
     ExternalBreederProfile, ExternalConsultantProfile, ExternalUser,
+    canonical_decision,
 )
 from .notifier import notify_flag
 from .openai_review import (
@@ -126,7 +127,7 @@ def _operationalise_outcome(outcome: AIReviewOutcome) -> AIReviewOutcome:
 
     hard_blocks = list(decision_basis.get("hard_blocks", []))
     should_auto_admit = (
-        outcome.decision in {"flagged", "rejected"}
+        outcome.decision in {"held", "rejected"}
         and risk_bucket != "critical"
         and not hard_blocks
         and outcome.confidence >= auto_admit_floor
@@ -391,20 +392,82 @@ def _persist_scheduled_pending(subject_type: str, profile, user, idx: int, delay
 # Manual override — super admin can force approve/reject
 # ---------------------------------------------------------------------------
 
-def manual_override(review: AIAccountReview, new_decision: str, reason: str, admin_user) -> AIAccountReview:
-    """Allow a super-admin to override an AI decision."""
+#: Portal override reasons (ManualOverrideForm) -> the controlled reason codes
+#: the contract permits for each status (spec §13.4). The portal's vocabulary is
+#: about why the reviewer disagreed; the contract's is about what the decision
+#: means, so the two do not map one-to-one and the default is deliberately the
+#: least-claiming code in each direction.
+_OVERRIDE_REASON_CODES = {
+    "approved": {
+        "compliance_verified": "evidence_verified",
+        "business_confirmed": "evidence_verified",
+        "false_positive": "manual_exception_approved",
+        "insufficient_context": "manual_exception_approved",
+        "other": "manual_exception_approved",
+    },
+    "rejected": {
+        "policy_violation": "policy_ineligible",
+        "duplicate_or_test": "manual_rejection",
+        "compliance_verified": "manual_rejection",
+        "business_confirmed": "manual_rejection",
+        "false_positive": "manual_rejection",
+        "insufficient_context": "manual_rejection",
+        "other": "manual_rejection",
+    },
+}
+_DEFAULT_OVERRIDE_REASON_CODE = {
+    "approved": "manual_exception_approved",
+    "rejected": "manual_rejection",
+    "held": "manual_review_required",
+}
+
+
+def override_reason_code(status: str, ui_reason: str | None) -> str:
+    """Translate a portal override reason into a permitted contract code."""
+    status = canonical_decision(status)
+    table = _OVERRIDE_REASON_CODES.get(status, {})
+    return table.get((ui_reason or "").strip(), _DEFAULT_OVERRIDE_REASON_CODE.get(status, ""))
+
+
+def manual_override(review: AIAccountReview, new_decision: str, reason: str, admin_user,
+                    *, reason_code: str | None = None) -> AIAccountReview:
+    """Allow a super-admin to override an AI decision.
+
+    The decision itself is recorded through the one canonical path so that
+    ``decision_version``, ``decision_id`` and the contract's reason and actor
+    vocabularies are populated, and so a rejection can only ever be attributed
+    to an operator (spec §13.3).
+    """
+    from ..integrations.decisions import record_decision
     from .notifier import notify_manual_override
 
-    review.original_decision = review.decision
-    review.decision = new_decision
+    new_decision = canonical_decision(new_decision)
+    original_decision = review.decision
+
+    record_decision(
+        review,
+        status=new_decision,
+        reason_code=reason_code or override_reason_code(new_decision, None),
+        reason_text=reason or f"Manual {new_decision} recorded by an operator.",
+        actor_type="operator",
+        decision_path="human_review",
+        actor=admin_user,
+        score=review.confidence,
+        flags=review.unresolved_flag_reasons(),
+    )
+    review.refresh_from_db()
+
+    review.original_decision = original_decision
     review.manually_overridden = True
     review.overridden_by = admin_user
     review.override_reason = reason
-    review.decided_at = timezone.now()
     # Clear stale AI failures once a super admin has made the authoritative
     # decision so approved/rejected reviews do not keep surfacing old auth errors.
     review.error = ""
-    review.save()
+    review.save(update_fields=[
+        "original_decision", "manually_overridden", "overridden_by",
+        "override_reason", "error",
+    ])
 
     # Apply the override to the external profile
     try:
