@@ -47,6 +47,42 @@ DECISION_CHOICES = [
     ("flagged", "Flagged"),
     ("error", "Error"),
 ]
+# --- V2.3 CRM integration vocabularies -------------------------------------
+# These mirror the controlled values in the integration specification. The CRM
+# validates them on receipt, so an unlisted value is a delivery failure, not a
+# cosmetic difference.
+V2_REVIEW_STATE_CHOICES = [                       # spec §21.1
+    ("submitted_to_crm", "Submitted to CRM"),
+    ("awaiting_crm_evidence", "Awaiting CRM evidence"),
+    ("evidence_received", "Evidence received"),
+    ("clean_case_gate", "At clean-case gate"),
+    ("automatic_approved", "Automatically approved"),
+    ("human_review", "In human review"),
+    ("decided", "Decided"),
+]
+V2_ACTOR_TYPE_CHOICES = [                         # spec §13.3
+    ("operator", "Operator"),
+    ("approved_rules_engine", "Approved rules engine"),
+    ("system_timeout", "System timeout"),
+]
+V2_DECISION_PATH_CHOICES = [                      # spec §13.3
+    ("automatic_clean_case", "Automatic clean case"),
+    ("human_review", "Human review"),
+    ("system_safety_hold", "System safety hold"),
+]
+#: spec §13.4. ``evidence_insufficient`` is deliberately absent: sparse public
+#: evidence is neutral and is handled by a hold, never a rejection.
+V2_REASON_CODES_BY_STATUS = {
+    "approved": ["evidence_verified", "manual_exception_approved"],
+    "rejected": ["identity_conflict", "company_inactive", "policy_ineligible", "manual_rejection"],
+    "held": ["evidence_overdue", "evidence_conflict", "identity_review_required",
+             "manual_review_required", "awaiting_additional_evidence"],
+}
+V2_REASON_CODE_CHOICES = [
+    (code, code.replace("_", " ").capitalize())
+    for codes in V2_REASON_CODES_BY_STATUS.values() for code in codes
+]
+
 SEVERITY_CHOICES = [("info", "Info"), ("warning", "Warning"), ("critical", "Critical")]
 ISSUE_SOURCE_CHOICES = [
     ("incident", "Incident"),
@@ -1042,11 +1078,40 @@ class AIAccountReview(models.Model):
     created_at = models.DateTimeField(default=timezone.now)
     decided_at = models.DateTimeField(null=True, blank=True)
 
+    # --- V2.3 integration state (spec §9.1, §13.3, §21.1) ------------------
+    # The legacy ``flagged`` decision maps to ``held``; it is neither an
+    # approval nor a rejection, and it must reach a named person.
+    review_state = models.CharField(
+        max_length=32, choices=V2_REVIEW_STATE_CHOICES, default="submitted_to_crm",
+        help_text="Section 21.1 Admin state machine.",
+    )
+    decision_id = models.CharField(max_length=160, blank=True)
+    #: Monotonically increasing per profile. Every durable decision or
+    #: replacement increments it, and the CRM rejects a lower one.
+    decision_version = models.PositiveIntegerField(default=0)
+    reason_code = models.CharField(max_length=64, blank=True, choices=V2_REASON_CODE_CHOICES)
+    decision_actor_type = models.CharField(
+        max_length=24, blank=True, choices=V2_ACTOR_TYPE_CHOICES)
+    decision_path = models.CharField(
+        max_length=24, blank=True, choices=V2_DECISION_PATH_CHOICES)
+    #: The terminal CRM dossier this decision rests on. Production approval and
+    #: rejection are both blocked without one (§12.3).
+    dossier_id = models.CharField(max_length=160, blank=True)
+    dossier_revision = models.PositiveIntegerField(null=True, blank=True)
+    dossier_status = models.CharField(max_length=24, blank=True)
+    dossier_received_at = models.DateTimeField(null=True, blank=True)
+    dossier_payload = models.JSONField(default=dict, blank=True)
+    #: When the submitted event was queued — the 2h target and 12h evidence
+    #: deadline in §12.1 are both measured from this, not from profile creation.
+    submitted_event_at = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         ordering = ["-created_at"]
         indexes = [
             models.Index(fields=["subject_type", "subject_id"], name="admin_porta_subject_type_idx"),
             models.Index(fields=["decision", "-created_at"], name="admin_porta_decision_idx"),
+            models.Index(fields=["review_state", "submitted_event_at"],
+                         name="admin_porta_v2_state_idx"),
         ]
         constraints = [
             models.UniqueConstraint(
@@ -1272,3 +1337,97 @@ class AutomationLease(models.Model):
 
     def __str__(self):
         return f"AutomationLease(until={self.locked_until}, holder={self.holder})"
+
+
+# ===========================================================================
+# V2.3 CRM integration transport (spec §17 inbox, §17.3 outbox, §18 retries)
+# ===========================================================================
+
+class V2InboxEvent(models.Model):
+    """Immutable ledger of every event this portal has received from the CRM.
+
+    Uniqueness is on ``producer_system + event_id`` (spec §17.1). The body hash
+    is what distinguishes an honest replay (same hash -> 200 already_recorded)
+    from a contract violation (same id, different hash -> 409).
+    """
+    STATUS_CHOICES = [
+        ("recorded", "Recorded"),
+        ("processed", "Processed"),
+        ("failed", "Failed"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    producer_system = models.CharField(max_length=40)
+    event_id = models.CharField(max_length=64)
+    event_type = models.CharField(max_length=80)
+    schema_version = models.CharField(max_length=8)
+    correlation_id = models.CharField(max_length=64, blank=True)
+    body_sha256 = models.CharField(max_length=64)
+    #: Retained for 12 months (spec §20.2), then redacted by the retention job.
+    raw_payload = models.TextField(blank=True)
+    signature_key_id = models.CharField(max_length=64, blank=True)
+    processing_state = models.CharField(max_length=16, choices=STATUS_CHOICES, default="recorded")
+    response_code = models.PositiveSmallIntegerField(default=200)
+    error = models.TextField(blank=True)
+    received_at = models.DateTimeField(default=timezone.now)
+    redacted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-received_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["producer_system", "event_id"], name="v2_inbox_producer_event_unique"
+            )
+        ]
+        indexes = [
+            models.Index(fields=["correlation_id"], name="v2_inbox_correlation_idx"),
+            models.Index(fields=["-received_at"], name="v2_inbox_received_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.producer_system}:{self.event_id} ({self.event_type})"
+
+
+class V2OutboxEvent(models.Model):
+    """Transactional outbox for Admin -> CRM events (spec §17.3).
+
+    A row is written in the SAME database transaction as the business change it
+    describes. Nothing is ever sent inline from a web request; the dispatcher
+    command drains this table, so a failed send can never roll back a committed
+    decision and a committed decision can never be silently undelivered.
+    """
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("delivered", "Delivered"),
+        ("failed", "Failed"),
+        ("dead_letter", "Dead letter"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    event_id = models.CharField(max_length=64, unique=True)
+    event_type = models.CharField(max_length=80)
+    schema_version = models.CharField(max_length=8, default="2.2")
+    correlation_id = models.CharField(max_length=64)
+    #: Signed verbatim. Never re-serialise this before signing or sending: the
+    #: receiver verifies against the exact bytes (spec §6.2).
+    raw_body = models.TextField()
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="pending")
+    attempt_count = models.PositiveIntegerField(default=0)
+    first_attempt_at = models.DateTimeField(null=True, blank=True)
+    last_attempt_at = models.DateTimeField(null=True, blank=True)
+    next_attempt_at = models.DateTimeField(default=timezone.now)
+    last_status_code = models.PositiveSmallIntegerField(null=True, blank=True)
+    last_error = models.TextField(blank=True)
+    delivered_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    redacted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["created_at"]
+        indexes = [
+            models.Index(fields=["status", "next_attempt_at"], name="v2_outbox_due_idx"),
+            models.Index(fields=["correlation_id"], name="v2_outbox_correlation_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.event_type}:{self.event_id} [{self.status}]"

@@ -195,15 +195,29 @@ def _identity_signal(profile, user: ExternalUser) -> dict[str, Any]:
 
 
 def _role_fit_signal(subject_type: str, profile) -> dict[str, Any]:
+    """Whether the applicant actually supplied their role-defining details.
+
+    Spec §12.3: these MUST be read from ``metadata.application_data`` first,
+    falling back to a profile column only where that column is populated. The
+    backend's signup path never writes ``credentials``, ``services_list``,
+    ``service_area`` or ``specializations`` — on production all four are empty
+    for every provider — so judging them by column alone reported a complete
+    application as missing both role fields, which put every case below the
+    clean-case gate and into the human queue.
+    """
+    from ..integrations.payload import (
+        credentials_for, service_area_for, services_for, specializations_for,
+    )
+
     if subject_type == "breeder":
         required = [
-            ("service_area", bool(getattr(profile, "service_area", ""))),
-            ("specializations", bool(getattr(profile, "specializations", []))),
+            ("service_area", bool(service_area_for(profile, subject_type=subject_type))),
+            ("specializations", bool(specializations_for(profile, subject_type=subject_type))),
         ]
     else:
         required = [
-            ("services_list", bool(getattr(profile, "services_list", []))),
-            ("credentials", bool(getattr(profile, "credentials", []))),
+            ("services_list", bool(services_for(profile, subject_type=subject_type))),
+            ("credentials", bool(credentials_for(profile, subject_type=subject_type))),
         ]
     return {
         "required_present": [name for name, present in required if present],

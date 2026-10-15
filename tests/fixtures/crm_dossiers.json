@@ -1,0 +1,36 @@
+{
+ "key_ring": {
+  "current": {
+   "key_id": "crm-2026-10",
+   "secret": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  }
+ },
+ "cases": [
+  {
+   "name": "rev1",
+   "body": "{\"schema_version\":\"2.2\",\"event_id\":\"01M50DG3QR70T17NTMDVRV9W77\",\"event_type\":\"crm.provider.evidence_dossier.ready\",\"occurred_at\":\"2026-10-15T15:11:42.600Z\",\"correlation_id\":\"3ebe41bf-5c83-4ad4-bf29-cc51f6f282c3\",\"producer\":{\"system\":\"aqua-provider-crm\",\"environment\":\"staging\"},\"data\":{\"application_id\":\"3ebe41bf-5c83-4ad4-bf29-cc51f6f282c3\",\"aqua_provider_id\":\"f091f448-d6aa-45b0-af95-42d3e5952dc7\",\"dossier\":{\"dossier_id\":\"dos_01JQA1KBGZQYTC4X2MXAERWKFM\",\"revision\":1,\"status\":\"complete\",\"assembled_at\":\"2026-10-15T15:11:42.600Z\",\"match_status\":\"matched_email_and_declared_name\",\"match_confidence\":\"high\",\"company_identity\":{\"declared_name\":\"Aquatic Elements Ltd\",\"company_registration_number\":null,\"business_structure\":\"sole_trader\"},\"companies_house\":{\"status\":\"not_applicable\",\"basis\":\"Confirmed sole trader.\",\"company_number\":null,\"company_name\":null,\"directors_matched\":null,\"directors_observed\":[],\"source_url\":null,\"checked_at\":\"2026-10-15T15:11:42.600Z\"},\"website_and_domain\":{\"website_declared\":\"www.aquaticelements.co.uk\",\"normalised_domain\":\"aquaticelements.co.uk\",\"domain_matches_declared_website\":true,\"source_url\":\"https://aquaticelements.co.uk\",\"checked_at\":\"2026-10-15T15:11:42.600Z\"},\"licences\":[],\"sources\":[{\"source_type\":\"website\",\"source_name\":\"Declared business website\",\"source_url\":\"https://aquaticelements.co.uk\",\"checked_at\":\"2026-10-15T15:11:42.600Z\",\"finding\":\"Declared name and contact align.\",\"match_result\":\"confirmed\"}],\"conflicts\":[],\"summary\":\"Sole-trader status makes Companies House non-applicable. Website aligns.\"}}}",
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "x-aqua-event": "crm.provider.evidence_dossier.ready",
+    "x-aqua-schema-version": "2.2",
+    "x-aqua-event-id": "01M50DG3QR70T17NTMDVRV9W77",
+    "x-aqua-timestamp-ms": "1792089263875",
+    "x-aqua-key-id": "crm-2026-10",
+    "x-aqua-signature": "v1=8bb537a6be95a50c737168a3ca303fe3de13a117832a83f78d15f5b52897c4fe"
+   }
+  },
+  {
+   "name": "rev2",
+   "body": "{\"schema_version\":\"2.2\",\"event_id\":\"01M50DG3QR7335CY8TNRJKXZP3\",\"event_type\":\"crm.provider.evidence_dossier.ready\",\"occurred_at\":\"2026-10-15T15:11:42.600Z\",\"correlation_id\":\"3ebe41bf-5c83-4ad4-bf29-cc51f6f282c3\",\"producer\":{\"system\":\"aqua-provider-crm\",\"environment\":\"staging\"},\"data\":{\"application_id\":\"3ebe41bf-5c83-4ad4-bf29-cc51f6f282c3\",\"aqua_provider_id\":\"f091f448-d6aa-45b0-af95-42d3e5952dc7\",\"dossier\":{\"dossier_id\":\"dos_01JQA1KBGZQYTC4X2MXAERWKFM\",\"revision\":2,\"status\":\"partial\",\"assembled_at\":\"2026-10-15T15:11:42.600Z\",\"match_status\":\"matched_email_and_declared_name\",\"match_confidence\":\"high\",\"company_identity\":{\"declared_name\":\"Aquatic Elements Ltd\",\"company_registration_number\":null,\"business_structure\":\"sole_trader\"},\"companies_house\":{\"status\":\"not_applicable\",\"basis\":\"Confirmed sole trader.\",\"company_number\":null,\"company_name\":null,\"directors_matched\":null,\"directors_observed\":[],\"source_url\":null,\"checked_at\":\"2026-10-15T15:11:42.600Z\"},\"website_and_domain\":{\"website_declared\":\"www.aquaticelements.co.uk\",\"normalised_domain\":\"aquaticelements.co.uk\",\"domain_matches_declared_website\":true,\"source_url\":\"https://aquaticelements.co.uk\",\"checked_at\":\"2026-10-15T15:11:42.600Z\"},\"licences\":[],\"sources\":[{\"source_type\":\"website\",\"source_name\":\"Declared business website\",\"source_url\":\"https://aquaticelements.co.uk\",\"checked_at\":\"2026-10-15T15:11:42.600Z\",\"finding\":\"Declared name and contact align.\",\"match_result\":\"confirmed\"}],\"conflicts\":[],\"summary\":\"Sole-trader status makes Companies House non-applicable. Website aligns.\"}}}",
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "x-aqua-event": "crm.provider.evidence_dossier.ready",
+    "x-aqua-schema-version": "2.2",
+    "x-aqua-event-id": "01M50DG3QR7335CY8TNRJKXZP3",
+    "x-aqua-timestamp-ms": "1792089263876",
+    "x-aqua-key-id": "crm-2026-10",
+    "x-aqua-signature": "v1=6fe4e48e7bf9d7d10c4ad070b12741ff3107d064c8abed009f4cdf78c8c79bb0"
+   }
+  }
+ ]
+}

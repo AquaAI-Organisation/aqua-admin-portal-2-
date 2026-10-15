@@ -10,6 +10,7 @@ from datetime import timedelta
 from typing import Iterable
 
 from django.conf import settings
+from django.db import transaction
 from django.template.loader import render_to_string
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -218,29 +219,66 @@ def run_review(subject_type: str, profile, user) -> AIAccountReview:
     return _persist_review(subject_type, profile, user, outcome)
 
 
+def _enqueue_submitted_event(review, subject_type: str, profile, user) -> None:
+    """Queue ``admin.provider.application.submitted`` beside the review row.
+
+    Best-effort by design: a CRM integration that is not configured yet must
+    not stop the Admin portal reviewing accounts. When it IS configured, the
+    enqueue shares the caller's transaction, so the event and the review row
+    commit or roll back together.
+    """
+    from ..integrations import contract as v2
+    from ..integrations.outbox import enqueue
+    from ..integrations.payload import build_submitted_event
+
+    environment = v2.key_ring_environment()
+    if not environment:
+        return                      # not wired to a CRM environment yet
+    try:
+        event = build_submitted_event(
+            review=review, profile=profile, user=user, environment=environment)
+        enqueue(event)
+        review.submitted_event_at = timezone.now()
+        review.review_state = "awaiting_crm_evidence"
+        review.save(update_fields=["submitted_event_at", "review_state"])
+    except Exception:
+        logger.exception("could not queue the CRM submitted event for %s", review.subject_id)
+        raise
+
+
 def _persist_review(subject_type: str, profile, user, outcome: AIReviewOutcome) -> AIAccountReview:
     display = (profile.company_name or user.name or f"{user.first_name} {user.last_name}").strip()
-    review, _ = AIAccountReview.objects.update_or_create(
-        subject_type=subject_type,
-        subject_id=profile.id,
-        defaults=dict(
-            subject_user_email=user.email,
-            subject_display_name=display[:255],
-            decision=outcome.decision,
-            confidence=outcome.confidence,
-            rationale=outcome.rationale,
-            evidence=outcome.evidence,
-            recommended_actions=outcome.recommended_actions,
-            openai_raw=outcome.raw,
-            ai_model=outcome.model,
-            error=outcome.error,
-            decided_at=timezone.now() if outcome.decision != "pending" else None,
-            manually_overridden=False,
-            overridden_by=None,
-            override_reason="",
-            original_decision="",
-        ),
-    )
+
+    # Spec §9.1: the first time the review runner observes a pending profile it
+    # MUST write the Admin review row and the submitted-event outbox row in ONE
+    # Admin transaction. The main backend commits the profile on its own
+    # connection, so the outbox cannot ride that transaction — this one is the
+    # durable boundary we actually control, and anchoring to it is what stops a
+    # review existing with no corresponding CRM event, or the reverse.
+    with transaction.atomic():
+        review, created = AIAccountReview.objects.update_or_create(
+            subject_type=subject_type,
+            subject_id=profile.id,
+            defaults=dict(
+                subject_user_email=user.email,
+                subject_display_name=display[:255],
+                decision=outcome.decision,
+                confidence=outcome.confidence,
+                rationale=outcome.rationale,
+                evidence=outcome.evidence,
+                recommended_actions=outcome.recommended_actions,
+                openai_raw=outcome.raw,
+                ai_model=outcome.model,
+                error=outcome.error,
+                decided_at=timezone.now() if outcome.decision != "pending" else None,
+                manually_overridden=False,
+                overridden_by=None,
+                override_reason="",
+                original_decision="",
+            ),
+        )
+        if created:
+            _enqueue_submitted_event(review, subject_type, profile, user)
 
     # Persist flags + notify super-admins
     for f in outcome.flags:

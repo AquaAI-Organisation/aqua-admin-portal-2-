@@ -212,6 +212,18 @@ TERMS_URL = os.getenv("TERMS_URL", "https://aquaai.uk/terms")
 # email body, so Reply and the written address agree.
 PROVIDER_EMAIL_REPLY_TO = os.getenv("PROVIDER_EMAIL_REPLY_TO", "")
 
+# --- V2.3 CRM <-> Admin signed integration -------------------------------
+# Declared environment; a dossier whose producer.environment differs is
+# refused, so staging evidence can never land on a production case.
+AQUA_V2_ENVIRONMENT = os.getenv("AQUA_V2_ENVIRONMENT", "")
+# Directional key rings, as JSON: {"current":{"key_id":...,"secret":<64 hex>},
+# "previous":{...,"expires_at":"...Z"}}. Separate secret per direction; never
+# reuse one for both.
+AQUA_CRM_TO_ADMIN_WEBHOOK_KEYS = os.getenv("AQUA_CRM_TO_ADMIN_WEBHOOK_KEYS", "")
+AQUA_ADMIN_TO_CRM_WEBHOOK_KEYS = os.getenv("AQUA_ADMIN_TO_CRM_WEBHOOK_KEYS", "")
+# Where we send Admin -> CRM events. Must end in /api/integrations/v2/admin-events.
+AQUA_CRM_V2_EVENTS_URL = os.getenv("AQUA_CRM_V2_EVENTS_URL", "")
+
 GMAIL_SENDER = os.getenv("GMAIL_SENDER", "support@aquaai.uk")
 SUPPORT_ALIAS_EMAIL = os.getenv("SUPPORT_ALIAS_EMAIL", "support@aquaai.uk")
 PRIVACY_ALIAS_EMAIL = os.getenv("PRIVACY_ALIAS_EMAIL", "privacy@aquaai.uk")
