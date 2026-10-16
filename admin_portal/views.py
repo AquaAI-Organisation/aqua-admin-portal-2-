@@ -14,6 +14,7 @@ from django.contrib.auth import authenticate, login, logout, update_session_auth
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Count, Q
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -641,6 +642,14 @@ def review_rerun(request, review_id):
         return redirect("admin_portal:review_detail", review_id=review.id)
     if request.method == "POST":
         run_review(review.subject_type, profile, user)
+        # §14.1: a re-run is also a request to the CRM to re-check its own
+        # sources, otherwise we re-score the same stale evidence and call it new.
+        from .integrations.events import enqueue_evidence_request
+
+        try:
+            enqueue_evidence_request(review, reason_code="assessment_rerun")
+        except ValueError:
+            logger.exception("could not queue evidence request for review %s", review.id)
         audit.record_write(
             request.user,
             "review.rerun",
@@ -2014,7 +2023,46 @@ def _issue_count_summary(counts: dict[str, int]) -> str:
     return ", ".join(parts)
 
 
-def _set_entity_active_state(entity_type: str, entity_id: str, *, activate: bool, actor) -> str:
+def _review_for_subject(entity_type: str, subject_id):
+    """The V2 review row for a provider profile, if one exists."""
+    from .models import AIAccountReview
+
+    return AIAccountReview.objects.filter(
+        subject_type=entity_type, subject_id=subject_id).first()
+
+
+def _emit_account_status(entity_type: str, subject_id, *, activate: bool,
+                         reason_code: str | None = None) -> None:
+    """Tell the CRM a provider was suspended or reactivated (spec §15).
+
+    Called from inside :func:`_set_entity_active_state`'s transaction, so the
+    event is queued if and only if the suspension itself commits. A profile with
+    no review row was never sent to the CRM, so there is nothing to tell it.
+    """
+    from .integrations.events import enqueue_account_status
+
+    review = _review_for_subject(entity_type, subject_id)
+    if review is None:
+        return
+    status = "reactivated" if activate else "suspended"
+    if reason_code is None:
+        # An operator using the suspend control is acting on conduct they have
+        # reviewed; reactivating is a manual decision to let the account back
+        # in. Callers that know better (a provider asking to be paused, a
+        # resolved hold) pass their own reason.
+        reason_code = "manual_reactivation" if activate else "conduct_review"
+    try:
+        enqueue_account_status(review, status=status, reason_code=reason_code,
+                               actor_type="operator")
+    except ValueError:
+        # A bad reason code is a programming error, not an operator error, and
+        # must not stop the suspension itself from being applied.
+        logger.exception("could not queue account status for %s %s", entity_type, subject_id)
+
+
+@transaction.atomic
+def _set_entity_active_state(entity_type: str, entity_id: str, *, activate: bool, actor,
+                             reason_code: str | None = None) -> str:
     note = f"[Control plane:{timezone.now():%Y-%m-%d %H:%M UTC}] {'Reactivated' if activate else 'Suspended'} by {actor.email}."
     if entity_type == "breeder":
         profile = get_object_or_404(ExternalBreederProfile, pk=entity_id)
@@ -2027,6 +2075,7 @@ def _set_entity_active_state(entity_type: str, entity_id: str, *, activate: bool
         profile.save(update_fields=["is_active", "metadata"])
         user.is_active = activate
         user.save(update_fields=["is_active"])
+        _emit_account_status("breeder", profile.pk, activate=activate, reason_code=reason_code)
         return f"{profile.company_name or user.email} was {'re-activated' if activate else 'suspended'}."
     if entity_type == "consultant":
         profile = get_object_or_404(ExternalConsultantProfile, pk=entity_id)
@@ -2040,11 +2089,19 @@ def _set_entity_active_state(entity_type: str, entity_id: str, *, activate: bool
         profile.save(update_fields=["is_active", "admin_status", "admin_notes", "metadata"])
         user.is_active = activate
         user.save(update_fields=["is_active"])
+        _emit_account_status("consultant", profile.pk, activate=activate, reason_code=reason_code)
         return f"{profile.company_name or user.email} was {'re-activated' if activate else 'suspended'}."
     if entity_type == "user":
         user = get_object_or_404(ExternalUser, pk=entity_id)
         user.is_active = activate
         user.save(update_fields=["is_active"])
+        # Suspending the login suspends the provider with it, so the CRM needs
+        # to hear about it on whichever provider profile this user owns.
+        for subject_type, model in (("breeder", ExternalBreederProfile),
+                                    ("consultant", ExternalConsultantProfile)):
+            for profile in model.objects.filter(user_id=user.pk):
+                _emit_account_status(subject_type, profile.pk, activate=activate,
+                                     reason_code=reason_code)
         return f"{user.email} was {'re-activated' if activate else 'suspended'}."
     raise ValueError("Unknown entity type.")
 

@@ -441,22 +441,29 @@ def manual_override(review: AIAccountReview, new_decision: str, reason: str, adm
     to an operator (spec §13.3).
     """
     from ..integrations.decisions import record_decision
+    from ..integrations.events import enqueue_decision_event
     from .notifier import notify_manual_override
 
     new_decision = canonical_decision(new_decision)
     original_decision = review.decision
 
-    record_decision(
-        review,
-        status=new_decision,
-        reason_code=reason_code or override_reason_code(new_decision, None),
-        reason_text=reason or f"Manual {new_decision} recorded by an operator.",
-        actor_type="operator",
-        decision_path="human_review",
-        actor=admin_user,
-        score=review.confidence,
-        flags=review.unresolved_flag_reasons(),
-    )
+    # The decision and the event that announces it commit together (§17.3). A
+    # decision the CRM never hears about leaves it chasing evidence for a
+    # provider we have already dealt with.
+    with transaction.atomic():
+        record_decision(
+            review,
+            status=new_decision,
+            reason_code=reason_code or override_reason_code(new_decision, None),
+            reason_text=reason or f"Manual {new_decision} recorded by an operator.",
+            actor_type="operator",
+            decision_path="human_review",
+            actor=admin_user,
+            score=review.confidence,
+            flags=review.unresolved_flag_reasons(),
+        )
+        review.refresh_from_db()
+        enqueue_decision_event(review)
     review.refresh_from_db()
 
     review.original_decision = original_decision

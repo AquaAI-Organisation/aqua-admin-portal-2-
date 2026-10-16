@@ -1123,6 +1123,14 @@ class AIAccountReview(models.Model):
     #: event is built so a later decision event can still identify the provider
     #: after the profile itself has been erased.
     aqua_provider_id = models.UUIDField(null=True, blank=True)
+    #: Section 15 account status. Counted separately from ``decision_version``
+    #: because a suspension is not a decision on the application: a provider can
+    #: be suspended and reactivated repeatedly without the approval that let them
+    #: in ever being revisited, and the CRM orders the two streams independently.
+    account_status_version = models.PositiveIntegerField(default=0)
+    #: Set once an erasure event has been queued, so a repeated DSAR
+    #: fulfilment cannot tell the CRM to erase the same profile twice.
+    erasure_requested_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["-created_at"]

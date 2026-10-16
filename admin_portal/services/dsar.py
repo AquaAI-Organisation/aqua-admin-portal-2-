@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import secrets
 from datetime import timedelta
 from pathlib import Path
@@ -39,6 +40,8 @@ from .platform_sessions import (
 from .runtime_config import get_operational_settings
 from .json_utils import sanitize_json
 from .notifier import send_custom_email
+
+logger = logging.getLogger(__name__)
 
 DSAR_KEYWORDS = {
     "access": ["dsar", "data subject access", "subject access", "access request", "my data", "personal data"],
@@ -361,7 +364,36 @@ def approve_and_send_dsar(dsar_request: DSARRequest, actor) -> dict[str, str | b
         dsar_request.dpo_actioned_at = timezone.now()
         dsar_request.dpo_actor = actor
         dsar_request.save(update_fields=["status", "fulfilled_at", "dpo_actioned_at", "dpo_actor", "updated_at"])
+        _notify_crm_of_erasure(dsar_request)
     return result
+
+
+def _notify_crm_of_erasure(dsar_request: DSARRequest) -> None:
+    """Tell the CRM to erase a provider once an erasure DSAR is fulfilled (§16).
+
+    Only erasure requests qualify — an access or portability request is
+    fulfilled by sending the subject their data, and erases nothing. Sent after
+    the package has gone out, because the CRM's receipt is what stops its own
+    outreach, and it must not be told to delete evidence we still owe the
+    subject a copy of.
+    """
+    if dsar_request.request_type != "erasure":
+        return
+    from ..integrations.events import enqueue_erasure, reviews_for_user
+
+    reviews = reviews_for_user(dsar_request.subject_user_id)
+    if not reviews:
+        return
+    for review in reviews:
+        try:
+            enqueue_erasure(
+                review,
+                request_id=str(dsar_request.id),
+                legal_basis="UK GDPR Article 17 erasure request",
+                requested_at=dsar_request.received_at,
+            )
+        except ValueError:
+            logger.exception("could not queue CRM erasure for DSAR %s", dsar_request.id)
 
 
 def reject_dsar_request(dsar_request: DSARRequest, actor, reason: str) -> None:
