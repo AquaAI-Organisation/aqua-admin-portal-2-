@@ -215,11 +215,19 @@ def _notify_overdue(reviews) -> None:
 #: A held case sits in ``human_review`` until a person records a decision,
 #: which moves it to ``decided``. So the queue is derived from state rather
 #: than duplicated into another table that could drift out of step.
+#: §12.3: an application the clean-case gate did not clear is undecided and
+#: waiting for a person. It carries no decision, so it is invisible to the
+#: queues that key on one — and an application nobody can see is the failure
+#: mode this queue exists to prevent.
+QUEUE_AWAITING_DECISION = "awaiting_decision"
+
+
 QUEUE_EVIDENCE_OVERDUE = "evidence_overdue"
 QUEUE_IDENTITY_REVIEW = "identity_review"
 QUEUE_INTEGRATION_EXCEPTIONS = "integration_exceptions"
 
 QUEUE_LABELS = {
+    QUEUE_AWAITING_DECISION: "Awaiting a decision",
     QUEUE_EVIDENCE_OVERDUE: "Evidence overdue",
     QUEUE_IDENTITY_REVIEW: "Identity review",
     QUEUE_INTEGRATION_EXCEPTIONS: "Integration exceptions",
@@ -231,6 +239,10 @@ _IDENTITY_REASONS = ("identity_review_required", "evidence_conflict",
 
 def queue(name: str):
     """The open items in one named queue."""
+    if name == QUEUE_AWAITING_DECISION:
+        return (AIAccountReview.objects
+                .filter(review_state="human_review", decision__in=("pending", "error"))
+                .order_by("submitted_event_at", "created_at"))
     if name == QUEUE_EVIDENCE_OVERDUE:
         return (AIAccountReview.objects
                 .filter(decision="held", reason_code="evidence_overdue",
@@ -251,6 +263,7 @@ def queue(name: str):
 def queue_counts() -> dict:
     """Open item counts for every named queue, plus the failed inbox."""
     return {
+        QUEUE_AWAITING_DECISION: queue(QUEUE_AWAITING_DECISION).count(),
         QUEUE_EVIDENCE_OVERDUE: queue(QUEUE_EVIDENCE_OVERDUE).count(),
         QUEUE_IDENTITY_REVIEW: queue(QUEUE_IDENTITY_REVIEW).count(),
         QUEUE_INTEGRATION_EXCEPTIONS: (

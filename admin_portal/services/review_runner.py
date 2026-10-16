@@ -258,30 +258,40 @@ def _persist_review(subject_type: str, profile, user, outcome: AIReviewOutcome) 
     # connection, so the outbox cannot ride that transaction — this one is the
     # durable boundary we actually control, and anchoring to it is what stops a
     # review existing with no corresponding CRM event, or the reverse.
+    # What the model produced. None of these fields is a decision: re-scoring a
+    # profile refreshes the evidence an operator reads, and must never disturb
+    # a decision already recorded against it.
+    scoring_fields = dict(
+        subject_user_email=user.email,
+        subject_display_name=display[:255],
+        confidence=outcome.confidence,
+        rationale=outcome.rationale,
+        evidence=outcome.evidence,
+        recommended_actions=outcome.recommended_actions,
+        openai_raw=outcome.raw,
+        ai_model=outcome.model,
+        error=outcome.error,
+    )
     with transaction.atomic():
-        review, created = AIAccountReview.objects.update_or_create(
-            subject_type=subject_type,
-            subject_id=profile.id,
-            defaults=dict(
-                subject_user_email=user.email,
-                subject_display_name=display[:255],
-                decision=outcome.decision,
-                confidence=outcome.confidence,
-                rationale=outcome.rationale,
-                evidence=outcome.evidence,
-                recommended_actions=outcome.recommended_actions,
-                openai_raw=outcome.raw,
-                ai_model=outcome.model,
-                error=outcome.error,
-                decided_at=timezone.now() if outcome.decision != "pending" else None,
-                manually_overridden=False,
-                overridden_by=None,
-                override_reason="",
-                original_decision="",
-            ),
-        )
+        review = (AIAccountReview.objects
+                  .select_for_update()
+                  .filter(subject_type=subject_type, subject_id=profile.id)
+                  .first())
+        created = review is None
         if created:
+            # The model's verdict is advice, not a decision. §12.3 allows
+            # exactly one automatic decision — a clean-case approval — and that
+            # is recorded below through the canonical path, once the gate has
+            # been evaluated. Writing it here would be the approval engine
+            # deciding for itself.
+            review = AIAccountReview.objects.create(
+                subject_type=subject_type, subject_id=profile.id,
+                decision="pending", decided_at=None, **scoring_fields)
             _enqueue_submitted_event(review, subject_type, profile, user)
+        else:
+            for field, value in scoring_fields.items():
+                setattr(review, field, value)
+            review.save(update_fields=list(scoring_fields))
 
     # Persist flags + notify super-admins
     for f in outcome.flags:
@@ -296,6 +306,10 @@ def _persist_review(subject_type: str, profile, user, outcome: AIReviewOutcome) 
         flag.notified_slack = delivery.get("slack", False)
         flag.save(update_fields=["notified_emails", "notified_slack"])
 
+    # Now that the flags exist, the gate can be evaluated against them.
+    _settle_automatic_outcome(review, outcome)
+    review.refresh_from_db()
+
     # Apply safe automatic actions back onto the source-of-truth tables
     applied = _apply_actions(subject_type, profile, user, review)
     if applied:
@@ -303,6 +317,85 @@ def _persist_review(subject_type: str, profile, user, outcome: AIReviewOutcome) 
         review.save(update_fields=["applied_actions"])
 
     return review
+
+
+def _settle_automatic_outcome(review: AIAccountReview, outcome: AIReviewOutcome) -> None:
+    """Turn the model's verdict into a decision, or into a case for a person.
+
+    §12.3 permits exactly one automatic decision: a clean-case approval. There
+    is no automatic rejection path at all — "If any condition is missing,
+    false, ambiguous, stale, below threshold or flagged, the profile enters the
+    named human-review queue."
+
+    So a verdict the gate does not clear is not written as a decision. It has
+    no permitted actor type: ``approved_rules_engine`` may only record a
+    clean-case approval and ``system_timeout`` only a safety hold, which leaves
+    nobody who could sign it. The review stays undecided and moves into the
+    human-review queue, where a person decides and their decision is recorded
+    against them.
+    """
+    from ..integrations import clean_case
+    from ..integrations.decisions import DecisionRefused, record_decision
+    from ..integrations.events import enqueue_decision_event
+
+    if outcome.decision in ("pending", "error"):
+        return
+    # A case a person has already touched is theirs; the runner re-scoring a
+    # profile must not reopen or overwrite it.
+    if review.decision not in ("pending", "error") or review.manually_overridden:
+        return
+
+    flags = list(review.unresolved_flag_reasons())
+    assessment = clean_case.assess(review, score=outcome.confidence, flags=flags)
+
+    if outcome.decision == "approved" and assessment.passed:
+        try:
+            with transaction.atomic():
+                record_decision(
+                    review,
+                    status="approved",
+                    reason_code="evidence_verified",
+                    reason_text=(outcome.rationale
+                                 or "Clean case: every §12.3 condition satisfied.")[:1000],
+                    actor_type="approved_rules_engine",
+                    decision_path="automatic_clean_case",
+                    score=outcome.confidence,
+                    flags=flags,
+                )
+                review.refresh_from_db()
+                enqueue_decision_event(review)
+            logger.info("clean-case auto-approval for %s", review.subject_id)
+            return
+        except DecisionRefused:
+            # The gate said yes and the recorder said no. That is a defect, not
+            # a borderline case, so the application goes to a person rather
+            # than being approved on a disagreement.
+            logger.exception("clean-case approval refused for %s", review.subject_id)
+
+    _send_to_human_review(review, outcome, assessment)
+
+
+def _send_to_human_review(review: AIAccountReview, outcome: AIReviewOutcome,
+                          assessment) -> None:
+    """Park an application in the named human-review queue, undecided."""
+    from ..services.audit import record_system
+
+    review.review_state = "human_review"
+    review.evidence = dict(review.evidence or {})
+    review.evidence["clean_case_gate"] = assessment.as_dict()
+    review.evidence["model_verdict"] = outcome.decision
+    review.save(update_fields=["review_state", "evidence"])
+    record_system(
+        "review.sent_to_human",
+        target_type="review", target_id=review.subject_id,
+        model_verdict=outcome.decision,
+        score=float(outcome.confidence or 0.0),
+        flags=list(review.unresolved_flag_reasons()),
+        blocked_by=[c.name for c in assessment.failures],
+        reason=assessment.reason()[:500],
+    )
+    logger.info("application %s needs a person: %s",
+                review.subject_id, assessment.reason())
 
 
 def _process_staggered_auto_activate(subject_type: str, profile, user, config) -> AIAccountReview:

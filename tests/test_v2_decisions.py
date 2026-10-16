@@ -33,6 +33,29 @@ from django.test import override_settings  # noqa: E402
 PASS, FAIL = [], []
 
 
+def clean_dossier(dossier_id="dos_FIXTURE", revision=1):
+    """A terminal, conflict-free dossier.
+
+    Fixtures need one because §12.3 refuses an approval or rejection without
+    terminal CRM evidence. A bare dossier_id with no dossier behind it is not
+    evidence, and the gate is right to say so.
+    """
+    import datetime as _dt
+    stamp = _dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    return {
+        "dossier_id": dossier_id, "revision": revision, "status": "complete",
+        "assembled_at": stamp, "match_status": "confirmed",
+        "match_confidence": "high",
+        "company_identity": {"declared_name": "Test Co",
+                             "business_structure": "limited_company"},
+        "companies_house": {"status": "verified_active", "checked_at": stamp,
+                            "directors_observed": []},
+        "website_and_domain": {"checked_at": stamp},
+        "licences": [], "sources": [], "conflicts": [],
+        "summary": "Company confirmed active.",
+    }
+
+
 def check(name, cond, extra=""):
     (PASS if cond else FAIL).append(name)
     print(("  PASS  " if cond else "  FAIL  ") + name + (f"   [{extra}]" if extra else ""))
@@ -65,12 +88,23 @@ def main():
     )
 
     def new_review(**kwargs):
+        # Every decidable review has terminal CRM evidence behind it in
+        # production, so that is the default here. A case testing its absence
+        # passes dossier_id="" explicitly.
         defaults = dict(
             subject_type="consultant", subject_id=uuid.uuid4(),
             subject_user_email="x@aqua.test", subject_display_name="Test Co",
             decision="pending", confidence=0.80,
+            dossier_id="dos_FIXTURE", dossier_revision=1,
         )
         defaults.update(kwargs)
+        # A dossier reference has to come with the dossier it refers to, or
+        # the §12.3 gate refuses the decision — correctly.
+        if defaults.get("dossier_id") and not defaults.get("dossier_payload"):
+            payload = clean_dossier(defaults["dossier_id"],
+                                    defaults.get("dossier_revision") or 1)
+            defaults["dossier_payload"] = payload
+            defaults.setdefault("dossier_status", "complete")
         return AIAccountReview.objects.create(**defaults)
 
     section("1. 'held' IS THE CANONICAL STATE, 'flagged' IS GONE")
@@ -114,7 +148,7 @@ def main():
               'value="held"' in body and 'value="flagged"' not in body)
 
     section("4. decision_version IS MONOTONIC PER PROFILE")
-    review = new_review()
+    review = new_review(dossier_id="dos_V", dossier_revision=1)
     check("a fresh review starts at version 0", review.decision_version == 0)
     record_decision(review, status="held", reason_code="manual_review_required",
                     reason_text="Needs a person.", actor_type="operator",
@@ -214,7 +248,9 @@ def main():
           "only permitted for a safety hold" in msg, msg[:70])
 
     target.dossier_id = "dos_Y"
-    target.save(update_fields=["dossier_id"])
+    target.dossier_status = "complete"
+    target.dossier_payload = clean_dossier("dos_Y")
+    target.save(update_fields=["dossier_id", "dossier_status", "dossier_payload"])
     msg = refused(record_decision, target, status="approved",
                   reason_code="evidence_verified", reason_text="x",
                   actor_type="approved_rules_engine", decision_path="automatic_clean_case",
@@ -229,13 +265,16 @@ def main():
     check("an automatic approval with an open flag is refused",
           "zero unresolved flags" in msg, msg[:70])
 
-    no_dossier = new_review(confidence=0.9)
+    no_dossier = new_review(confidence=0.9, dossier_id="", dossier_revision=None)
     msg = refused(record_decision, no_dossier, status="approved",
                   reason_code="evidence_verified", reason_text="x",
                   actor_type="approved_rules_engine", decision_path="automatic_clean_case",
                   score=0.9, flags=[])
+    # §12.3 now refuses this twice over — no decision at all may rest on
+    # absent evidence (item 9), and a clean-case approval needs the dossier
+    # reference specifically. Either refusal is the right answer.
     check("an automatic approval without a terminal dossier is refused",
-          "terminal dossier" in msg, msg[:70])
+          "terminal" in msg and "dossier" in msg, msg[:90])
 
     msg = refused(record_decision, target, status="approved",
                   reason_code="evidence_verified", reason_text="x",
@@ -290,7 +329,8 @@ def main():
           __import__("admin_portal.integrations.contract", fromlist=["x"]).is_rfc3339_ms(
               body["decided_at"]), body["decided_at"])
 
-    timeout_review = new_review()
+    # A timeout hold exists precisely because no dossier arrived.
+    timeout_review = new_review(dossier_id="", dossier_revision=None)
     record_decision(timeout_review, status="held", reason_code="evidence_overdue",
                     reason_text="No dossier within 12 hours.",
                     actor_type="system_timeout", decision_path="system_safety_hold",

@@ -26,7 +26,7 @@ from ..models import (
     AIAccountReview,
     canonical_decision,
 )
-from . import contract as c
+from . import clean_case, contract as c
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,24 @@ DECISION_PATHS = tuple(value for value, _label in V2_DECISION_PATH_CHOICES)
 
 #: §12.3 — the clean-case score floor. An automatic approval below this, or
 #: with any unresolved flag, is not a clean case.
-CLEAN_CASE_MIN_SCORE = 0.75
+CLEAN_CASE_MIN_SCORE = clean_case.MIN_SCORE
+
+#: §12.3: "In production, no application may be approved or rejected without a
+#: terminal CRM dossier, whatever an operational setting says." Held is exempt,
+#: because a timeout hold exists precisely when no dossier arrived (§13.3).
+TERMINAL_REQUIRED_STATUSES = ("approved", "rejected")
+
+
+def dossier_required() -> bool:
+    """Whether a terminal dossier is a hard precondition for a decision.
+
+    Always, in production: §12.3 puts this above any operational setting, so
+    there is deliberately no toggle for it. Sandbox and staging may decide
+    without one, because test fixtures there have no CRM behind them — and
+    because a rule that cannot be exercised in a lower environment is a rule
+    nobody finds out about until production.
+    """
+    return c.key_ring_environment() not in ("sandbox", "staging")
 
 def _state_after(status: str, decision_path: str) -> str:
     """Where a decision leaves the review in the §21.1 state machine.
@@ -62,7 +79,8 @@ class DecisionRefused(ValueError):
 
 
 def _validate(*, status: str, reason_code: str, actor_type: str, decision_path: str,
-              score: float | None, flags: list, dossier_id: str) -> None:
+              score: float | None, flags: list, dossier_id: str,
+              review: AIAccountReview | None = None) -> None:
     if status not in DECISION_STATUSES:
         raise DecisionRefused(
             f"status must be one of {', '.join(DECISION_STATUSES)}; got {status!r}")
@@ -87,6 +105,29 @@ def _validate(*, status: str, reason_code: str, actor_type: str, decision_path: 
             status == "held" and decision_path == "system_safety_hold"):
         raise DecisionRefused("system_timeout is only permitted for a safety hold")
 
+    # §12.3, item 9: an approval or a rejection needs terminal CRM evidence. A
+    # safety hold is the one decision allowed without one, because it exists
+    # precisely when no dossier arrived (§13.3).
+    if status in TERMINAL_REQUIRED_STATUSES and dossier_required():
+        if not dossier_id:
+            raise DecisionRefused(
+                f"a {status} decision requires a terminal CRM evidence dossier; "
+                "none has been received for this application")
+        dossier_status = (getattr(review, "dossier_status", "") or "").strip().lower()
+        if dossier_status not in clean_case.TERMINAL_DOSSIER_STATUSES:
+            raise DecisionRefused(
+                f"a {status} decision requires a TERMINAL dossier; "
+                f"{dossier_id} is in state {dossier_status or 'unknown'!r}")
+
+    # §12.3, item 11: "Rejection is always a human decision", and approval may
+    # be automatic only through the clean-case gate. Everything else needs a
+    # person, so any approval that is not a gated clean case needs one too.
+    if status == "approved" and actor_type != "operator" \
+            and decision_path != "automatic_clean_case":
+        raise DecisionRefused(
+            "an approval that is not a clean-case approval must be recorded by "
+            "an operator")
+
     # §13.3 + §12.3: an automatic approval must be a clean case, and must carry
     # the evidence that made it one.
     if actor_type == "approved_rules_engine":
@@ -105,12 +146,29 @@ def _validate(*, status: str, reason_code: str, actor_type: str, decision_path: 
                 f"a clean-case approval requires zero unresolved flags; got {len(flags)}")
         if not dossier_id:
             raise DecisionRefused("a clean-case approval requires a terminal dossier reference")
+        # Item 10: the gate itself, not just the two conditions the event
+        # payload happens to carry. An engine "MUST NOT infer, downgrade or
+        # waive any condition", so every one is checked against the dossier.
+        if review is not None:
+            assessment = clean_case.assess(review, score=score, flags=flags)
+            if not assessment.passed:
+                raise DecisionRefused(
+                    "the clean-case gate is not satisfied, so this cannot be an "
+                    f"automatic approval — {assessment.reason()}")
 
     # A safety hold is the one decision allowed to exist without a dossier
     # (§13.3, "a timeout hold may have no dossier reference").
     if decision_path == "automatic_clean_case" and actor_type != "approved_rules_engine":
         raise DecisionRefused(
             "decision_path 'automatic_clean_case' belongs to approved_rules_engine only")
+
+    # §12.3: "A held case MUST reach a named person. It MUST NOT auto-promote
+    # later." Only a person may move a case out of a hold.
+    if review is not None and getattr(review, "decision", "") == "held" \
+            and actor_type != "operator":
+        raise DecisionRefused(
+            "this application is held and must be resolved by a named person; "
+            "a held case must not auto-promote")
 
 
 def record_decision(
@@ -146,7 +204,7 @@ def record_decision(
         dossier_id = locked.dossier_id if use_dossier else ""
         _validate(status=status, reason_code=reason_code, actor_type=actor_type,
                   decision_path=decision_path, score=score, flags=flags,
-                  dossier_id=dossier_id)
+                  dossier_id=dossier_id, review=locked)
 
         locked.decision = status
         locked.decision_version = (locked.decision_version or 0) + 1

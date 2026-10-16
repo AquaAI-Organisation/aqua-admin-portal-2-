@@ -55,6 +55,7 @@ SYSTEM_ACTIONS = {
     "v2.dossier.refused": "A CRM evidence dossier was refused and not attached.",
     "v2.outbox.dead_letter": "An outbound event was abandoned and needs a person.",
     "v2.erasure.queued": "An erasure instruction was queued to the CRM.",
+    "review.sent_to_human": "An application was parked for a person because the clean-case gate was not satisfied.",
     "review.auto_approved": "An account was activated without an operator.",
     "review.auto_deactivated": "An account was deactivated without an operator.",
 }

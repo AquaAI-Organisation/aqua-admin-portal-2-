@@ -50,6 +50,30 @@ def section(title):
     print(f"\n{'=' * 74}\n{title}\n{'=' * 74}")
 
 
+def clean_dossier(dossier_id="dos_01HZZZ", revision=3):
+    """A terminal, conflict-free dossier.
+
+    Fixtures need one because §12.3 refuses an approval or rejection without
+    terminal CRM evidence, and refuses an AUTOMATIC approval unless every
+    clean-case condition holds. A bare dossier_id with no dossier behind it is
+    not evidence, and the gate is right to say so.
+    """
+    import datetime as _dt
+    stamp = _dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    return {
+        "dossier_id": dossier_id, "revision": revision, "status": "complete",
+        "assembled_at": stamp, "match_status": "confirmed",
+        "match_confidence": "high",
+        "company_identity": {"declared_name": "Co",
+                             "business_structure": "limited_company"},
+        "companies_house": {"status": "verified_active", "checked_at": stamp,
+                            "directors_observed": []},
+        "website_and_domain": {"checked_at": stamp},
+        "licences": [], "sources": [], "conflicts": [],
+        "summary": "Company confirmed active.",
+    }
+
+
 def build_mirror_schema():
     from django.apps import apps
     from django.db import connection
@@ -102,6 +126,7 @@ def main():
             subject_user_email="c@aqua.test", subject_display_name="Co",
             decision="pending", review_state="awaiting_crm_evidence",
             dossier_id="dos_01HZZZ", dossier_revision=3,
+            dossier_status="complete", dossier_payload=clean_dossier(),
             submitted_event_at=now - timedelta(hours=1),
         )
         defaults.update(kw)

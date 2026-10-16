@@ -2464,9 +2464,9 @@ def v2_queues(request):
     """
     from .integrations import evidence_sla as sla
 
-    selected = (request.GET.get("queue") or sla.QUEUE_EVIDENCE_OVERDUE).strip()
+    selected = (request.GET.get("queue") or sla.QUEUE_AWAITING_DECISION).strip()
     if selected not in sla.QUEUE_LABELS:
-        selected = sla.QUEUE_EVIDENCE_OVERDUE
+        selected = sla.QUEUE_AWAITING_DECISION
 
     rows = []
     if selected == sla.QUEUE_INTEGRATION_EXCEPTIONS:
@@ -2482,12 +2482,20 @@ def v2_queues(request):
     else:
         for review in sla.queue(selected)[:100]:
             state = sla.sla_state(review)
+            # An undecided case has no reason code and no decided_at; what it
+            # has is the gate conditions that stopped it, which is the thing an
+            # operator needs in order to pick it up.
+            gate = (review.evidence or {}).get("clean_case_gate") or {}
+            blocked = [c["name"] for c in gate.get("conditions", []) if not c["passed"]]
+            detail = (review.rationale or "")[:220]
+            if blocked:
+                detail = "Needs a person: " + ", ".join(blocked)
             rows.append({
                 "kind": "review",
                 "title": review.subject_display_name or review.subject_user_email,
-                "subtitle": f"{review.subject_type} · {review.reason_code or '—'}",
-                "detail": (review.rationale or "")[:220],
-                "when": review.decided_at,
+                "subtitle": f"{review.subject_type} · {review.reason_code or 'undecided'}",
+                "detail": detail,
+                "when": review.decided_at or review.submitted_event_at or review.created_at,
                 "promise_at": state.promise_at,
                 "promise_passed": bool(
                     state.promise_at and state.promise_at < timezone.now()),
