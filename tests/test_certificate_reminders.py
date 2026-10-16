@@ -277,6 +277,62 @@ def main():
     check("a deactivated breeder profile is skipped",
           not SENT and counts.get("no_certificate_scanned") == 0, str(counts))
 
+    section("14. THE COPY ONLY THREATENS DELIVERY WHERE DELIVERY IS AT RISK")
+    # A certificate with no printed expiry never lapses: effective_status only
+    # downgrades to expired when expiry_date is set and past. Telling its holder
+    # they cannot dispatch would be false, so the undated stages must not.
+    ExternalBreederVerification.objects.all().delete()
+    ExternalBreederProfile.objects.all().delete()
+    ExternalUser.objects.all().delete()
+
+    def render(label, **cert_kw):
+        ExternalBreederVerification.objects.all().delete()
+        ExternalBreederProfile.objects.all().delete()
+        ExternalUser.objects.all().delete()
+        u, _profile, _rows = make_breeder(label, certs_count=0)
+        ExternalBreederVerification.objects.create(
+            seller_id=u.id, licence_number=f"{label}-x", issuing_authority="DEFRA",
+            status="approved", **cert_kw)
+        SENT.clear()
+        certs.run_certificate_checks()
+        return (SENT[0] if SENT else {"subject": "", "body": ""})
+
+    at_risk = render("soon", expiry_date=today + timedelta(days=21))
+    check("an expiring certificate warns about losing delivery",
+          "not be able to dispatch" in at_risk["body"])
+
+    already = render("gone", expiry_date=today - timedelta(days=3))
+    check("an expired certificate says delivery is already off",
+          "cannot dispatch orders" in already["body"], already["subject"])
+    check("and its subject says so too", "delivery is paused" in already["subject"],
+          already["subject"])
+    check("and it promises restoration on approval",
+          "restored as soon as" in already["body"])
+
+    for label, kw in [
+        ("undated1", dict(expiry_date=None, awarded_date=today - timedelta(days=400))),
+        ("undated2", dict(expiry_date=None, awarded_date=today - timedelta(days=760))),
+    ]:
+        mail = render(label, **kw)
+        check(f"an undated certificate ({label}) does not claim dispatch stops",
+              "dispatch" not in mail["body"], mail["subject"])
+        check(f"and tells them delivery is unaffected ({label})",
+              "delivery are unaffected" in mail["body"])
+
+    section("15. EVERY STAGE HAS COPY AND A SUBJECT OF ITS OWN")
+    families = sorted(certs._STAGE_CONSEQUENCE)
+    check("consequence copy exists for every stage family",
+          all(certs._STAGE_CONSEQUENCE.get(f) for f in families), str(families))
+    check("a subject exists for every stage family",
+          all(certs._STAGE_SUBJECT.get(f) for f in families), str(families))
+    check("the year-suffixed recurring keys resolve to their family",
+          certs._stage_family(f"expired_{today.year}") == "expired"
+          and certs._stage_family(f"age_2yr_{today.year}") == "age_2yr"
+          and certs._stage_family(f"reverify_{today.year}") == "reverify"
+          and certs._stage_family("expiry_7d") == "expiry_7d")
+    check("an unrecognised key falls back rather than raising",
+          certs._stage_family("something_new") == "reverify")
+
     print(f"\n{'=' * 74}\nRESULT: {len(PASS)} passed, {len(FAIL)} failed\n{'=' * 74}")
     for name in FAIL:
         print("  FAILED:", name)

@@ -203,8 +203,8 @@ def _remind_breeder_certificate(verification, today) -> bool:
         return False  # already reminded for this stage of this certificate
 
     result = send_custom_email(
-        subject="Your Aqua AI breeder certificate needs renewing to keep delivery on",
-        body=_renewal_body(user, detail),
+        subject=_STAGE_SUBJECT[_stage_family(stage_key)],
+        body=_renewal_body(user, detail, stage_key),
         recipients=[user.email.strip()],
         from_email=pick_alias_for_mailbox("providers"),
     )
@@ -221,14 +221,61 @@ def _remind_breeder_certificate(verification, today) -> bool:
     return True
 
 
-def _renewal_body(user, detail: str) -> str:
+#: What each stage actually costs the breeder. Only a certificate with a
+#: printed expiry date ever lapses, so only those stages may warn about losing
+#: delivery; an undated certificate stays current indefinitely and warning its
+#: holder that they cannot dispatch would simply be untrue.
+_DELIVERY_AT_RISK = (
+    "Please upload a current or renewed certificate in your account settings. A valid "
+    "certificate is what lets you offer delivery \u2014 once it expires you can still "
+    "list your stock and sell for collection, but you will not be able to dispatch orders."
+)
+_DELIVERY_ALREADY_OFF = (
+    "Please upload a renewed certificate in your account settings. Until we have one you "
+    "cannot dispatch orders \u2014 your listings stay up and you can still sell for "
+    "collection in person, and delivery is restored as soon as the new certificate is "
+    "approved."
+)
+_RECORDS_ONLY = (
+    "Please upload your most recent certificate in your account settings so your "
+    "verification stays up to date. Your listings, collection sales and delivery are "
+    "unaffected in the meantime."
+)
+
+_STAGE_CONSEQUENCE = {
+    "expiry_30d": _DELIVERY_AT_RISK,
+    "expiry_7d": _DELIVERY_AT_RISK,
+    "expired": _DELIVERY_ALREADY_OFF,
+    "age_1yr": _RECORDS_ONLY,
+    "age_2yr": _RECORDS_ONLY,
+    "reverify": _RECORDS_ONLY,
+}
+
+_STAGE_SUBJECT = {
+    "expiry_30d": "Your Aqua AI breeder certificate needs renewing to keep delivery on",
+    "expiry_7d": "Your Aqua AI breeder certificate expires soon \u2014 renew it to keep delivery on",
+    "expired": "Your Aqua AI breeder certificate has expired \u2014 delivery is paused",
+    "age_1yr": "Keep your Aqua AI breeder certificate up to date",
+    "age_2yr": "Your Aqua AI breeder certificate is due for renewal",
+    "reverify": "Please re-confirm your Aqua AI breeder certificate",
+}
+
+
+def _stage_family(stage_key: str) -> str:
+    """The stage without its year suffix, since recurring stages carry one."""
+    for family in _STAGE_CONSEQUENCE:
+        if stage_key == family or stage_key.startswith(family + "_"):
+            return family
+    return "reverify"
+
+
+def _renewal_body(user, detail: str, stage_key: str = "reverify") -> str:
     name = (getattr(user, "name", "") or getattr(user, "first_name", "") or "there").strip()
+    consequence = _STAGE_CONSEQUENCE[_stage_family(stage_key)]
     return (
         f"Hi {name},\n\n"
         f"This is a friendly reminder from Aqua AI: your verification certificate {detail}.\n\n"
-        "Please upload a current or renewed certificate in your account settings. A valid "
-        "certificate is what lets you offer delivery \u2014 without one you can still list "
-        "your stock and sell for collection, but you will not be able to dispatch orders.\n\n"
+        f"{consequence}\n\n"
         "If you have already renewed it, please ignore this message.\n\n"
         "Thank you,\nThe Aqua AI Team"
     )
