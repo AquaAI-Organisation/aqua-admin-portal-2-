@@ -16,7 +16,7 @@ row starts a fresh set of stages).
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
+from datetime import date, timedelta
 
 from django.utils import timezone
 
@@ -33,6 +33,13 @@ logger = logging.getLogger(__name__)
 FIRST_AGE_REMINDER_DAYS = 365          # over a year old -> first renewal reminder
 RENEWAL_DUE_DAYS = 2 * 365             # 2 years since issue -> renewal due
 EXPIRY_REMINDER_DAYS = (30, 7)         # days before an expiry date to remind
+
+#: A breeder who has never uploaded anything is given this long to finish
+#: setting up before being chased, so a signup is not nagged on day one.
+NO_CERTIFICATE_GRACE_DAYS = 7
+#: ...and is then reminded at most once a month, since there is no expiry date
+#: to pace it and the reminder has no natural end until they upload.
+NO_CERTIFICATE_REMINDER_INTERVAL_DAYS = 30
 
 
 def run_certificate_checks(limit: int = 500) -> dict:
@@ -64,7 +71,84 @@ def run_certificate_checks(limit: int = 500) -> dict:
                 counts["sent"] += 1
         except Exception:
             logger.exception("Certificate reminder failed for verification %s", verification.id)
+
+    # Breeders who have never uploaded anything have no certificate row, so the
+    # scan above cannot see them at all. They are the ones who most need
+    # telling: nothing in their account explains why delivery is unavailable.
+    counts.update(_remind_breeders_without_certificates(today, limit=limit))
     return counts
+
+
+def _remind_breeders_without_certificates(today, *, limit: int) -> dict:
+    """Chase active breeders with no certificate on record at all."""
+    counts = {"no_certificate_scanned": 0, "no_certificate_sent": 0}
+    sellers_with_certificates = set(
+        ExternalBreederVerification.objects
+        .exclude(status__iexact="rejected")
+        .values_list("seller_id", flat=True)
+    )
+    cutoff = timezone.now() - timedelta(days=NO_CERTIFICATE_GRACE_DAYS)
+    candidates = (
+        ExternalBreederProfile.objects
+        .filter(is_active=True)
+        .exclude(user_id__in=sellers_with_certificates)
+        .order_by("created_at", "id")
+    )
+    for profile in candidates.iterator():
+        if counts["no_certificate_scanned"] >= limit:
+            break
+        # A profile with no created_at cannot be aged, so it is left alone
+        # rather than chased on a guess.
+        if not profile.created_at or profile.created_at > cutoff:
+            continue
+        counts["no_certificate_scanned"] += 1
+        try:
+            if _remind_missing_certificate(profile, today):
+                counts["no_certificate_sent"] += 1
+        except Exception:
+            logger.exception("Missing-certificate reminder failed for profile %s", profile.id)
+    return counts
+
+
+def _remind_missing_certificate(profile, today) -> bool:
+    user = ExternalUser.objects.filter(id=profile.user_id).first()
+    if not user or not (getattr(user, "email", "") or "").strip():
+        return False
+
+    metadata = dict(profile.metadata or {})
+    last_sent = metadata.get("no_cert_reminder_sent_on")
+    if last_sent:
+        try:
+            previous = date.fromisoformat(str(last_sent))
+        except ValueError:
+            previous = None
+        if previous and (today - previous).days < NO_CERTIFICATE_REMINDER_INTERVAL_DAYS:
+            return False
+
+    name = (getattr(user, "name", "") or getattr(user, "first_name", "") or "there").strip()
+    result = send_custom_email(
+        subject="Upload your breeder certificate to offer delivery",
+        body=(
+            f"Hi {name},\n\n"
+            "We do not have a breeder certificate on file for your Aqua AI account.\n\n"
+            "You can list your stock and sell for collection without one. A valid "
+            "certificate is what lets you offer delivery — until we have one you "
+            "will not be able to dispatch orders.\n\n"
+            "To add it, upload your certificate in your account settings. We will "
+            "review it and enable delivery once it is approved.\n\n"
+            "If you only ever sell for collection in person, you can ignore this.\n\n"
+            "Thank you,\nThe Aqua AI Team"
+        ),
+        recipients=[user.email.strip()],
+        from_email=pick_alias_for_mailbox("providers"),
+    )
+
+    metadata["no_cert_reminder_sent_on"] = today.isoformat()
+    profile.metadata = metadata
+    profile.save(update_fields=["metadata"])
+    logger.info("Missing-certificate reminder sent to %s (ok=%s)",
+                user.email, bool(result.get("ok")))
+    return True
 
 
 def _due_stage(verification, today):

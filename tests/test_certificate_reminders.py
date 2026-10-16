@@ -202,6 +202,81 @@ def main():
     check("a rejected certificate is not treated as one to renew",
           counts["scanned"] == 0 and not SENT, str(counts))
 
+    section("10. A BREEDER WHO NEVER UPLOADED IS CHASED, AFTER A GRACE PERIOD")
+    SENT.clear()
+    ExternalBreederVerification.objects.all().delete()
+    ExternalBreederProfile.objects.all().delete()
+    ExternalUser.objects.all().delete()
+
+    def bare_breeder(label, *, age_days):
+        user = ExternalUser.objects.create(
+            id=uuid.uuid4(), email=f"{label}@aqua.test", is_active=True)
+        return user, ExternalBreederProfile.objects.create(
+            id=uuid.uuid4(), user_id=user.id, company_name=label, is_active=True,
+            metadata={}, created_at=timezone.now() - timedelta(days=age_days))
+
+    _, brand_new = bare_breeder("brandnew", age_days=1)
+    _, settled = bare_breeder("settled", age_days=30)
+    counts = certs.run_certificate_checks()
+    recipients = sorted(r for s in SENT for r in s["recipients"])
+    check("a breeder past the grace period is chased",
+          "settled@aqua.test" in recipients, str(recipients))
+    check("a breeder who signed up yesterday is left alone",
+          "brandnew@aqua.test" not in recipients, str(recipients))
+    check("the counts report it separately",
+          counts.get("no_certificate_sent") == 1, str(counts))
+
+    body = next((s["body"] for s in SENT if "settled" in s["recipients"][0]), "").lower()
+    subject = next((s["subject"] for s in SENT if "settled" in s["recipients"][0]), "").lower()
+    check("the email says delivery is what needs the certificate",
+          "delivery" in body and "delivery" in subject)
+    check("and that collection still works without one", "collection" in body)
+    check("and that they can still list", "list your stock" in body)
+
+    section("11. THE MISSING-CERTIFICATE CHASE IS MONTHLY, NOT EVERY SWEEP")
+    SENT.clear()
+    for _ in range(3):
+        certs.run_certificate_checks()
+    check("repeated sweeps send nothing more", not SENT, str(len(SENT)))
+
+    SENT.clear()
+    stale = (timezone.now().date() - timedelta(
+        days=certs.NO_CERTIFICATE_REMINDER_INTERVAL_DAYS + 1)).isoformat()
+    meta = dict(settled.metadata or {})
+    meta["no_cert_reminder_sent_on"] = stale
+    ExternalBreederProfile.objects.filter(pk=settled.pk).update(metadata=meta)
+    certs.run_certificate_checks()
+    check("but it returns after the interval",
+          any("settled" in s["recipients"][0] for s in SENT), str(len(SENT)))
+
+    section("12. UPLOADING A CERTIFICATE STOPS THE CHASE")
+    SENT.clear()
+    ExternalBreederProfile.objects.filter(pk=settled.pk).update(metadata={})
+    ExternalBreederVerification.objects.create(
+        seller_id=settled.user_id, licence_number="settled-now",
+        issuing_authority="DEFRA", status="pending",
+        expiry_date=timezone.now().date() + timedelta(days=400))
+    counts = certs.run_certificate_checks()
+    recipients = sorted(r for s in SENT for r in s["recipients"])
+    check("a breeder with a certificate on file is no longer chased for missing one",
+          "settled@aqua.test" not in recipients, str(recipients))
+    check("and is not counted as missing",
+          counts.get("no_certificate_sent") == 0, str(counts))
+
+    section("13. AN INACTIVE BREEDER IS NOT CHASED")
+    SENT.clear()
+    ExternalBreederVerification.objects.all().delete()
+    ExternalBreederProfile.objects.all().delete()
+    ExternalUser.objects.all().delete()
+    gone = ExternalUser.objects.create(
+        id=uuid.uuid4(), email="gone@aqua.test", is_active=True)
+    ExternalBreederProfile.objects.create(
+        id=uuid.uuid4(), user_id=gone.id, company_name="Closed", is_active=False,
+        metadata={}, created_at=timezone.now() - timedelta(days=60))
+    counts = certs.run_certificate_checks()
+    check("a deactivated breeder profile is skipped",
+          not SENT and counts.get("no_certificate_scanned") == 0, str(counts))
+
     print(f"\n{'=' * 74}\nRESULT: {len(PASS)} passed, {len(FAIL)} failed\n{'=' * 74}")
     for name in FAIL:
         print("  FAILED:", name)
