@@ -16,3 +16,6 @@ staticfiles/
 .DS_Store
 *.log
 logs/
+
+# Rendered email previews — generated for review, not source.
+email_previews/

@@ -126,8 +126,23 @@ def _remind_missing_certificate(profile, today) -> bool:
             return False
 
     name = (getattr(user, "name", "") or getattr(user, "first_name", "") or "there").strip()
+    missing_consequence = (
+        "You can list your stock and sell for collection without a certificate. A valid "
+        "certificate is what lets you offer delivery \u2014 until we have one you will not "
+        "be able to dispatch orders."
+    )
     result = send_custom_email(
         subject="Upload your breeder certificate to offer delivery",
+        reply_to=_reply_to(),
+        html_body=_render_reminder_html(
+            user=user, stage_family="missing",
+            lede="We do not have a breeder certificate on file for your account.",
+            consequence=missing_consequence,
+            already_done_note=(
+                "If you only ever sell for collection in person, you can ignore this."
+            ),
+            email_title="Upload your breeder certificate to offer delivery",
+        ),
         body=(
             f"Hi {name},\n\n"
             "We do not have a breeder certificate on file for your Aqua AI account.\n\n"
@@ -202,11 +217,23 @@ def _remind_breeder_certificate(verification, today) -> bool:
     if stage_key in sent_stages:
         return False  # already reminded for this stage of this certificate
 
+    family = _stage_family(stage_key)
+    subject = _STAGE_SUBJECT[family]
+    rows = _certificate_rows(verification)
     result = send_custom_email(
-        subject=_STAGE_SUBJECT[_stage_family(stage_key)],
+        subject=subject,
         body=_renewal_body(user, detail, stage_key),
         recipients=[user.email.strip()],
         from_email=pick_alias_for_mailbox("providers"),
+        reply_to=_reply_to(),
+        html_body=_render_reminder_html(
+            user=user, stage_family=family,
+            lede=_STAGE_LEDE[family],
+            consequence=_STAGE_CONSEQUENCE[family],
+            certificate_rows=rows,
+            already_done_note="If you have already renewed it, please ignore this message.",
+            email_title=subject,
+        ),
     )
 
     sent_stages.append(stage_key)
@@ -251,6 +278,53 @@ _STAGE_CONSEQUENCE = {
     "reverify": _RECORDS_ONLY,
 }
 
+#: Per-stage presentation for the HTML email: the pill reads as the state the
+#: breeder is in, and the callout colour matches how urgent it is. Red is kept
+#: for the one stage where something has actually stopped working.
+_STAGE_PRESENTATION = {
+    "expiry_30d": {
+        "pill_label": "Renewal Due", "pill_bg": "#FEF3C7", "pill_fg": "#92400E",
+        "callout_bg": "#FFFBEB", "callout_border": "#F59E0B",
+    },
+    "expiry_7d": {
+        "pill_label": "Expires Soon", "pill_bg": "#FEF3C7", "pill_fg": "#92400E",
+        "callout_bg": "#FFFBEB", "callout_border": "#F59E0B",
+    },
+    "expired": {
+        "pill_label": "Delivery Paused", "pill_bg": "#FEE2E2", "pill_fg": "#991B1B",
+        "callout_bg": "#FEF2F2", "callout_border": "#EF4444",
+    },
+    "age_1yr": {
+        "pill_label": "Keep Records Current", "pill_bg": "#DBEAFE", "pill_fg": "#1E40AF",
+        "callout_bg": "#EFF6FF", "callout_border": "#3B82F6",
+    },
+    "age_2yr": {
+        "pill_label": "Renewal Due", "pill_bg": "#FEF3C7", "pill_fg": "#92400E",
+        "callout_bg": "#FFFBEB", "callout_border": "#F59E0B",
+    },
+    "reverify": {
+        "pill_label": "Re-confirmation Needed", "pill_bg": "#DBEAFE", "pill_fg": "#1E40AF",
+        "callout_bg": "#EFF6FF", "callout_border": "#3B82F6",
+    },
+    # Not a renewal stage: there is nothing on file to renew.
+    "missing": {
+        "pill_label": "Certificate Needed", "pill_bg": "#FEF3C7", "pill_fg": "#92400E",
+        "callout_bg": "#FFFBEB", "callout_border": "#F59E0B",
+    },
+}
+
+#: The opening line, which carries the specific fact. The shared body used to
+#: read "your verification certificate <detail>" for every stage, which made
+#: the already-expired case sound like the others.
+_STAGE_LEDE = {
+    "expiry_30d": "Your breeder certificate is coming up for renewal.",
+    "expiry_7d": "Your breeder certificate expires in a few days.",
+    "expired": "Your breeder certificate has expired.",
+    "age_1yr": "We are keeping your verification records up to date.",
+    "age_2yr": "Your breeder certificate is now due for renewal.",
+    "reverify": "We would like to re-confirm your breeder certificate.",
+}
+
 _STAGE_SUBJECT = {
     "expiry_30d": "Your Aqua AI breeder certificate needs renewing to keep delivery on",
     "expiry_7d": "Your Aqua AI breeder certificate expires soon \u2014 renew it to keep delivery on",
@@ -259,6 +333,58 @@ _STAGE_SUBJECT = {
     "age_2yr": "Your Aqua AI breeder certificate is due for renewal",
     "reverify": "Please re-confirm your Aqua AI breeder certificate",
 }
+
+
+def _certificate_rows(verification) -> list[tuple[str, str]]:
+    """The certificate's own details, so the breeder knows which one we mean.
+
+    A breeder may hold certificates for several sites. Naming the licence number
+    saves them opening the app to work out which reminder this is.
+    """
+    rows: list[tuple[str, str]] = []
+    if getattr(verification, "licence_number", ""):
+        rows.append(("Licence number", str(verification.licence_number)))
+    if getattr(verification, "issuing_authority", ""):
+        rows.append(("Issuing authority", str(verification.issuing_authority)))
+    if getattr(verification, "awarded_date", None):
+        rows.append(("Issued", verification.awarded_date.strftime("%d %b %Y")))
+    if getattr(verification, "expiry_date", None):
+        rows.append(("Expires", verification.expiry_date.strftime("%d %b %Y")))
+    else:
+        rows.append(("Expires", "No expiry date printed on the certificate"))
+    return rows
+
+
+def _render_reminder_html(*, user, stage_family: str, lede: str, consequence: str,
+                          certificate_rows=None, already_done_note: str = "",
+                          email_title: str = "") -> str:
+    """Render the branded reminder, matching the provider approval email."""
+    from django.conf import settings
+    from django.template.loader import render_to_string
+
+    presentation = _STAGE_PRESENTATION.get(stage_family) or _STAGE_PRESENTATION["reverify"]
+    name = (getattr(user, "name", "") or getattr(user, "first_name", "") or "there").strip()
+    return render_to_string("emails/breeders/breeder_certificate_reminder.html", {
+        "name": name,
+        "lede": lede,
+        "consequence": consequence,
+        "certificate_rows": certificate_rows or [],
+        "already_done_note": already_done_note,
+        "email_title": email_title or "Your Aqua AI breeder certificate",
+        # Absolute https URL to a PNG or JPG, or blank: the template renders no
+        # <img> at all rather than a broken-image icon.
+        "logo_url": (getattr(settings, "EMAIL_LOGO_URL", "") or "").strip(),
+        "privacy_url": getattr(settings, "PRIVACY_POLICY_URL", "https://aquaai.uk/privacy"),
+        "terms_url": getattr(settings, "TERMS_URL", "https://aquaai.uk/terms"),
+        "support_email": "support@aquaai.uk",
+        **presentation,
+    })
+
+
+def _reply_to() -> str:
+    from django.conf import settings
+
+    return (getattr(settings, "PROVIDER_EMAIL_REPLY_TO", "") or "support@aquaai.uk").strip()
 
 
 def _stage_family(stage_key: str) -> str:

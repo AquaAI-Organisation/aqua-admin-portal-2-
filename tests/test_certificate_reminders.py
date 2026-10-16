@@ -333,6 +333,75 @@ def main():
     check("an unrecognised key falls back rather than raising",
           certs._stage_family("something_new") == "reverify")
 
+    section("16. THE EMAILS ARE BRANDED HTML, NOT BARE TEXT")
+    from django.test import override_settings as _override
+
+    with _override(EMAIL_LOGO_URL="https://aquaai.uk/icon.png",
+                   PROVIDER_EMAIL_REPLY_TO="providers@aquaai.uk"):
+        mail = render("branded", expiry_date=today - timedelta(days=2))
+    html = mail.get("html_body") or ""
+    check("an HTML alternative is attached", bool(html), str(bool(html)))
+    check("the plain-text part is still there", bool(mail.get("body")))
+    check("replies reach a mailbox a person reads",
+          mail.get("reply_to") == "providers@aquaai.uk", str(mail.get("reply_to")))
+    check("the banner matches the approval email", "SMART CARE. HEALTHY AQUARIUMS." in html)
+    check("the logo is rendered when configured", "aquaai.uk/icon.png" in html)
+    check("the certificate is identified by licence number", "BR" in html or "branded-x" in html)
+    check("the expired state is flagged red", "#FEE2E2" in html and "Delivery Paused" in html)
+
+    # Transactional provider mail carries no unsubscribe: it is not marketing,
+    # and the stale base.html template still has one, so this is worth pinning.
+    check("no unsubscribe link", "unsubscribe" not in html.lower())
+
+    with _override(EMAIL_LOGO_URL=""):
+        bare = render("nologo", expiry_date=today + timedelta(days=20))
+    bare_html = bare.get("html_body") or ""
+    check("with no logo configured no img tag is emitted rather than a broken one",
+          "<img" not in bare_html, "img present")
+    check("and the wordmark still carries the brand", "AQUA AI" in bare_html)
+
+    section("17. EACH STAGE IS VISUALLY DISTINCT")
+    seen_pills = {}
+    for label, kw in [
+        ("expiring", dict(expiry_date=today + timedelta(days=20))),
+        ("soon", dict(expiry_date=today + timedelta(days=3))),
+        ("gone", dict(expiry_date=today - timedelta(days=2))),
+        ("old", dict(expiry_date=None, awarded_date=today - timedelta(days=400))),
+    ]:
+        mail = render(f"pill-{label}", **kw)
+        body_html = mail.get("html_body") or ""
+        for family, pres in certs._STAGE_PRESENTATION.items():
+            if pres["pill_label"] in body_html:
+                seen_pills[label] = pres["pill_label"]
+                break
+    check("an expiring certificate is not labelled the same as an expired one",
+          seen_pills.get("expiring") != seen_pills.get("gone"), str(seen_pills))
+    check("an undated certificate is not labelled as expiring",
+          seen_pills.get("old") != seen_pills.get("expiring"), str(seen_pills))
+    check("every stage produced a pill", len(seen_pills) == 4, str(seen_pills))
+
+    section("18. THE MISSING-CERTIFICATE EMAIL IS BRANDED TOO")
+    ExternalBreederVerification.objects.all().delete()
+    ExternalBreederProfile.objects.all().delete()
+    ExternalUser.objects.all().delete()
+    bm = ExternalUser.objects.create(
+        id=uuid.uuid4(), email="brandedmissing@aqua.test", is_active=True)
+    ExternalBreederProfile.objects.create(
+        id=uuid.uuid4(), user_id=bm.id, company_name="Branded Missing", is_active=True,
+        metadata={}, created_at=timezone.now() - timedelta(days=30))
+    SENT.clear()
+    with _override(EMAIL_LOGO_URL="https://aquaai.uk/icon.png",
+                   PROVIDER_EMAIL_REPLY_TO="providers@aquaai.uk"):
+        certs.run_certificate_checks()
+    missing = SENT[0] if SENT else {}
+    mhtml = missing.get("html_body") or ""
+    check("the missing-certificate email has HTML too", bool(mhtml))
+    check("it is labelled as needing a certificate", "Certificate Needed" in mhtml)
+    check("it shows no certificate detail table, having none to show",
+          bool(mhtml) and "Licence number" not in mhtml)
+    check("and replies reach a person",
+          missing.get("reply_to") == "providers@aquaai.uk", str(missing.get("reply_to")))
+
     print(f"\n{'=' * 74}\nRESULT: {len(PASS)} passed, {len(FAIL)} failed\n{'=' * 74}")
     for name in FAIL:
         print("  FAILED:", name)
