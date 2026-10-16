@@ -6,7 +6,9 @@
 <div class="page-header">
   <div>
     <h1>Audit log</h1>
-    <p class="page-subtitle">Complete trail of authentication, reviews, overrides, issue resolutions, reports, and team-access changes.</p>
+    <p class="page-subtitle">Complete trail of authentication, reviews, overrides, issue resolutions,
+      reports and team-access changes &mdash; and of every transition the system made on its own,
+      which carries no actor.</p>
   </div>
 </div>
 
@@ -19,6 +21,14 @@
     <div class="form-group">
       <label for="id_actor">Actor email</label>
       <input id="id_actor" name="actor" value="{{ actor_filter }}" placeholder="Filter by actor">
+    </div>
+    <div class="form-group">
+      <label for="id_source">Made by</label>
+      <select id="id_source" name="source">
+        <option value="">Everything</option>
+        <option value="system"{% if source == "system" %} selected{% endif %}>The system, unattended</option>
+        <option value="people"{% if source == "people" %} selected{% endif %}>A person</option>
+      </select>
     </div>
     <button type="submit">Apply filters</button>
   </form>
@@ -38,8 +48,16 @@
       {% for entry in page.object_list %}
       <tr>
         <td class="mono">{{ entry.created_at|date:"d M Y H:i:s" }}</td>
-        <td>{{ entry.actor.email|default:"system" }}</td>
-        <td><span class="inline-chip mono">{{ entry.action }}</span></td>
+        <td>
+          {% if entry.actor %}{{ entry.actor.email }}
+          {% else %}<span class="muted">system</span>{% endif %}
+        </td>
+        <td>
+          <span class="inline-chip mono">{{ entry.action }}</span>
+          {% with explanation=system_actions|get_item:entry.action %}
+            {% if explanation %}<div class="cell-sub">{{ explanation }}</div>{% endif %}
+          {% endwith %}
+        </td>
         <td>{% if entry.target_type %}{{ entry.target_type }}:{{ entry.target_id|truncatechars:16 }}{% else %}-{% endif %}</td>
         <td class="mono">{{ entry.ip_address|default:"-" }}</td>
         <td>
@@ -62,9 +80,9 @@
   </div>
   {% if page.paginator.num_pages > 1 %}
   <div class="pager">
-    {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}&action={{ action_filter }}&actor={{ actor_filter }}">Previous</a>{% endif %}
+    {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}&action={{ action_filter }}&actor={{ actor_filter }}&source={{ source }}">Previous</a>{% endif %}
     <span>Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
-    {% if page.has_next %}<a href="?page={{ page.next_page_number }}&action={{ action_filter }}&actor={{ actor_filter }}">Next</a>{% endif %}
+    {% if page.has_next %}<a href="?page={{ page.next_page_number }}&action={{ action_filter }}&actor={{ actor_filter }}&source={{ source }}">Next</a>{% endif %}
   </div>
   {% endif %}
 </div>

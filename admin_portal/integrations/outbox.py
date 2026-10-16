@@ -98,6 +98,18 @@ def _mark_attempt(row: V2OutboxEvent, *, status_code: int | None, error: str,
     if row.status == "dead_letter":
         logger.error("v2 outbox dead-letter: %s %s (status=%s error=%s)",
                      row.event_type, row.event_id, status_code, error)
+        # A dead letter means the CRM was never told something we decided. The
+        # log line alone is not enough: this needs to reach the same place an
+        # operator reviews everything else the system did.
+        from ..services.audit import record_system
+
+        record_system(
+            "v2.outbox.dead_letter",
+            target_type="review", target_id=row.correlation_id,
+            event_id=row.event_id, event_type=row.event_type,
+            attempts=row.attempt_count, last_status_code=status_code,
+            last_error=error[:500],
+        )
 
 
 def deliver(row: V2OutboxEvent, *, session=None) -> bool:

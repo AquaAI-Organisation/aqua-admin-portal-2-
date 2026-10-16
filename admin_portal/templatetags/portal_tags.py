@@ -26,3 +26,17 @@ def multiply(value, arg):
         return float(value) * float(arg)
     except (TypeError, ValueError):
         return 0
+
+
+@register.filter
+def get_item(mapping, key):
+    """Look a key up in a dict from a template.
+
+    Django's template language has no subscript syntax, so a lookup keyed on a
+    loop variable — such as explaining an audit action from the vocabulary that
+    defines it — needs a filter.
+    """
+    try:
+        return (mapping or {}).get(key, "")
+    except AttributeError:
+        return ""

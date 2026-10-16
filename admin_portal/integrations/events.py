@@ -371,6 +371,16 @@ def enqueue_erasure(review: AIAccountReview, *, request_id: str, legal_basis: st
     row = enqueue(event)
     AIAccountReview.objects.filter(pk=review.pk).update(erasure_requested_at=timezone.now())
     review.refresh_from_db()
+    # Erasure is irreversible on the CRM side, so the instruction to erase is
+    # itself worth a durable record independent of the DSAR file.
+    from ..services.audit import record_system
+
+    record_system(
+        "v2.erasure.queued",
+        target_type="review", target_id=review.subject_id,
+        event_id=row.event_id, request_id=request_id[:160],
+        legal_basis=legal_basis[:160], aqua_provider_id=provider_id,
+    )
     logger.info("queued erasure %s for %s", row.event_id, review.subject_id)
     return row
 

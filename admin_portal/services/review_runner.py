@@ -550,6 +550,37 @@ def _apply_actions(subject_type: str, profile, user, review) -> list[dict]:
             applied.append({"action": "reject_account", "auto": True})
         except Exception:
             logger.exception("Auto-reject failed")
+
+    # These ran with nobody at the keyboard: the scheduler picked the profile
+    # up, the model scored it, and the account's standing changed. Recorded per
+    # transition rather than per pass, because "this account was activated
+    # automatically on this date" is the question that gets asked later.
+    from .audit import record_system
+
+    names = {a.get("action") for a in applied}
+    if names & {"approve_account"}:
+        record_system(
+            "review.auto_approved",
+            target_type="review", target_id=review.subject_id,
+            subject_type=subject_type,
+            subject_email=getattr(user, "email", ""),
+            decision=review.decision,
+            reason_code=review.reason_code,
+            decision_actor_type=review.decision_actor_type,
+            score=float(review.confidence or 0.0),
+            flags=list(review.unresolved_flag_reasons()),
+        )
+    if names & {"reject_account", "deactivate_pending_docs"}:
+        record_system(
+            "review.auto_deactivated",
+            target_type="review", target_id=review.subject_id,
+            subject_type=subject_type,
+            subject_email=getattr(user, "email", ""),
+            decision=review.decision,
+            reason_code=review.reason_code,
+            decision_actor_type=review.decision_actor_type,
+            actions=sorted(n for n in names if n),
+        )
     return applied
 
 

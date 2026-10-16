@@ -22,6 +22,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
 from ..models import AIAccountReview, V2InboxEvent
+from ..services import audit
 from . import contract as c
 from .schema import Invalid, validate_dossier_event
 
@@ -167,6 +168,12 @@ def _ingest(event: dict, raw_body: bytes, signature_key_id: str) -> dict:
             record.response_code = 422
             record.error = "unknown_application"
             record.save(update_fields=["processing_state", "response_code", "error"])
+            audit.record_system(
+                "v2.dossier.refused",
+                target_type="review", target_id=data.get("application_id", ""),
+                event_id=event.get("event_id", ""), reason="unknown_application",
+                dossier_id=dossier.get("dossier_id", ""),
+            )
             return {"status": "unknown_application"}
 
         # A later revision supersedes an earlier one; an earlier revision that
@@ -192,4 +199,16 @@ def _ingest(event: dict, raw_body: bytes, signature_key_id: str) -> dict:
 
         record.processing_state = "processed"
         record.save(update_fields=["processing_state"])
+        # The dossier is the evidence a later decision rests on, so when it
+        # arrived and which revision it was has to be reconstructable.
+        audit.record_system(
+            "v2.dossier.received",
+            target_type="review", target_id=review.subject_id,
+            event_id=event.get("event_id", ""),
+            dossier_id=review.dossier_id,
+            dossier_revision=review.dossier_revision,
+            dossier_status=review.dossier_status,
+            review_state=review.review_state,
+            signature_key_id=signature_key_id,
+        )
         return {"status": "recorded"}

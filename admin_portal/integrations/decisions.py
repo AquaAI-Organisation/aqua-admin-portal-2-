@@ -170,6 +170,28 @@ def record_decision(
     logger.info("v2 decision recorded: %s %s v%s (%s / %s)",
                 locked.subject_id, locked.decision, locked.decision_version,
                 locked.reason_code, locked.decision_actor_type)
+    # Every durable decision leaves a trail, whoever or whatever made it. This
+    # is the one place all of them pass through, so auditing here is what makes
+    # "who decided this, and on what" answerable for automatic decisions and
+    # safety holds as well as operator ones.
+    from ..services.audit import record_system
+
+    record_system(
+        "v2.decision.safety_hold" if decision_path == "system_safety_hold"
+        else "v2.decision.recorded",
+        target_type="review", target_id=locked.subject_id, actor=actor,
+        decision_id=locked.decision_id,
+        decision_version=locked.decision_version,
+        status=locked.decision,
+        reason_code=locked.reason_code,
+        reason_text=reason_text[:500],
+        actor_type=actor_type,
+        decision_path=decision_path,
+        review_state=locked.review_state,
+        score=float(locked.confidence or 0.0),
+        evidence_dossier_id=locked.dossier_id or "",
+        evidence_dossier_revision=locked.dossier_revision,
+    )
     review.refresh_from_db()
     return locked
 

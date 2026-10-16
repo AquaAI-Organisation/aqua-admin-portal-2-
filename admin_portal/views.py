@@ -1632,18 +1632,34 @@ def daily_report_run_now(request):
 
 @super_admin_required
 def audit_log(request):
+    from .services.audit import SYSTEM_ACTIONS
+
     qs = AdminAuditLog.objects.select_related("actor").all()
     action_filter = request.GET.get("action", "").strip()
     actor_filter = request.GET.get("actor", "").strip()
+    source = (request.GET.get("source", "") or "").strip()
     if action_filter:
         qs = qs.filter(action__icontains=action_filter)
     if actor_filter:
         qs = qs.filter(actor__email__icontains=actor_filter)
+    # Automated transitions are the ones nobody chose, so being able to read
+    # them on their own is the point of recording them: "what did the system do
+    # unattended last night" is otherwise buried among operator clicks.
+    if source == "system":
+        qs = qs.filter(action__in=SYSTEM_ACTIONS)
+    elif source == "people":
+        qs = qs.exclude(action__in=SYSTEM_ACTIONS)
     page = Paginator(qs, 50).get_page(request.GET.get("page"))
     return render(
         request,
         "admin_portal/audit_log.html",
-        {"page": page, "action_filter": action_filter, "actor_filter": actor_filter},
+        {
+            "page": page,
+            "action_filter": action_filter,
+            "actor_filter": actor_filter,
+            "source": source,
+            "system_actions": SYSTEM_ACTIONS,
+        },
     )
 
 
