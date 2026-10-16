@@ -45,11 +45,18 @@ def run_certificate_checks(limit: int = 500) -> dict:
         ExternalBreederVerification.objects
         .exclude(status__iexact="rejected")
         .order_by("seller_id", "-created_at")
+        .iterator()
     )
-    for verification in verifications[:limit]:
+    # ``limit`` counts SELLERS, not certificate rows. Slicing the rows meant a
+    # breeder whose certificates happened to sort past the cut-off was never
+    # scanned at all, and because the ordering is stable it was always the same
+    # breeders being skipped.
+    for verification in verifications:
         # Only the most recent (non-rejected) certificate per seller.
         if verification.seller_id in handled_sellers:
             continue
+        if len(handled_sellers) >= limit:
+            break
         handled_sellers.add(verification.seller_id)
         counts["scanned"] += 1
         try:
@@ -112,7 +119,7 @@ def _remind_breeder_certificate(verification, today) -> bool:
         return False  # already reminded for this stage of this certificate
 
     result = send_custom_email(
-        subject="Your Aqua AI certificate may need renewing",
+        subject="Your Aqua AI breeder certificate needs renewing to keep delivery on",
         body=_renewal_body(user, detail),
         recipients=[user.email.strip()],
         from_email=pick_alias_for_mailbox("providers"),
@@ -135,8 +142,9 @@ def _renewal_body(user, detail: str) -> str:
     return (
         f"Hi {name},\n\n"
         f"This is a friendly reminder from Aqua AI: your verification certificate {detail}.\n\n"
-        "To keep your account fully verified and continue exploring all breeder features on "
-        "Aqua Breeder, please upload a current or renewed certificate in your account settings.\n\n"
+        "Please upload a current or renewed certificate in your account settings. A valid "
+        "certificate is what lets you offer delivery \u2014 without one you can still list "
+        "your stock and sell for collection, but you will not be able to dispatch orders.\n\n"
         "If you have already renewed it, please ignore this message.\n\n"
         "Thank you,\nThe Aqua AI Team"
     )
