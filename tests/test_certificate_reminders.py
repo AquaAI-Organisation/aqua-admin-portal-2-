@@ -115,7 +115,8 @@ def main():
     check("and that listing still works", "list" in body)
     check("it does not claim the account stops being verified",
           "fully verified" not in body)
-    check("the subject says delivery is at stake", "delivery" in subject, subject)
+    check("the subject is the approved one for this stage",
+          subject == certs._STAGE_COPY["expiry_30d"]["subject"].lower(), subject)
 
     section("3. EACH BREEDER IS CHASED ONCE PER STAGE")
     SENT.clear()
@@ -298,33 +299,47 @@ def main():
         return (SENT[0] if SENT else {"subject": "", "body": ""})
 
     at_risk = render("soon", expiry_date=today + timedelta(days=21))
-    check("an expiring certificate warns about losing delivery",
-          "not be able to dispatch" in at_risk["body"])
+    check("an expiring certificate warns that delivery will stop",
+          "delivery will be paused" in at_risk["body"], at_risk["subject"])
 
     already = render("gone", expiry_date=today - timedelta(days=3))
     check("an expired certificate says delivery is already off",
-          "cannot dispatch orders" in already["body"], already["subject"])
+          "delivery from your AQUA AI store is paused" in already["body"],
+          already["subject"])
     check("and its subject says so too", "delivery is paused" in already["subject"],
           already["subject"])
     check("and it promises restoration on approval",
-          "restored as soon as" in already["body"])
+          "switch delivery back on as soon as it's approved" in already["body"])
+    check("while making clear the shopfront is untouched",
+          "Your listings stay live" in already["body"])
 
     for label, kw in [
         ("undated1", dict(expiry_date=None, awarded_date=today - timedelta(days=400))),
         ("undated2", dict(expiry_date=None, awarded_date=today - timedelta(days=760))),
     ]:
         mail = render(label, **kw)
-        check(f"an undated certificate ({label}) does not claim dispatch stops",
-              "dispatch" not in mail["body"], mail["subject"])
-        check(f"and tells them delivery is unaffected ({label})",
-              "delivery are unaffected" in mail["body"])
+        check(f"an undated certificate ({label}) does not say delivery stops",
+              "delivery will be paused" not in mail["body"]
+              and "delivery is paused" not in mail["body"], mail["subject"])
+        check(f"and tells them delivery continues as normal ({label})",
+              "continue as normal" in mail["body"], mail["subject"])
 
     section("15. EVERY STAGE HAS COPY AND A SUBJECT OF ITS OWN")
-    families = sorted(certs._STAGE_CONSEQUENCE)
-    check("consequence copy exists for every stage family",
-          all(certs._STAGE_CONSEQUENCE.get(f) for f in families), str(families))
-    check("a subject exists for every stage family",
-          all(certs._STAGE_SUBJECT.get(f) for f in families), str(families))
+    families = sorted(certs._STAGE_COPY)
+    check("every stage family has a subject, badge and box",
+          all(certs._STAGE_COPY[f].get("subject")
+              and certs._STAGE_COPY[f].get("pill_label")
+              and certs._STAGE_COPY[f].get("consequence") for f in families),
+          str(families))
+    check("every stage the sweep can produce has copy",
+          {"missing", "expiry_30d", "expiry_7d", "expired",
+           "age_1yr", "age_2yr", "reverify"} <= set(families), str(families))
+    check("only the first-contact email carries the licensing signpost",
+          [f for f in families if certs._STAGE_COPY[f].get("licence_note")] == ["missing"],
+          str([f for f in families if certs._STAGE_COPY[f].get("licence_note")]))
+    check("the stages where nothing is at stake offer no reassurance tail",
+          all(not certs._STAGE_COPY[f].get("upload_tail")
+              for f in ("age_1yr", "age_2yr", "reverify")))
     check("the year-suffixed recurring keys resolve to their family",
           certs._stage_family(f"expired_{today.year}") == "expired"
           and certs._stage_family(f"age_2yr_{today.year}") == "age_2yr"
@@ -347,7 +362,9 @@ def main():
     check("the banner matches the approval email", "SMART CARE. HEALTHY AQUARIUMS." in html)
     check("the logo is rendered when configured", "aquaai.uk/icon.png" in html)
     check("the certificate is identified by licence number", "BR" in html or "branded-x" in html)
-    check("the expired state is flagged red", "#FEE2E2" in html and "Delivery Paused" in html)
+    check("the expired state is flagged red",
+          certs._STAGE_COPY["expired"]["pill_bg"] in html
+          and certs._STAGE_COPY["expired"]["pill_label"] in html)
 
     # Transactional provider mail carries no unsubscribe: it is not marketing,
     # and the stale base.html template still has one, so this is worth pinning.
@@ -370,7 +387,7 @@ def main():
     ]:
         mail = render(f"pill-{label}", **kw)
         body_html = mail.get("html_body") or ""
-        for family, pres in certs._STAGE_PRESENTATION.items():
+        for family, pres in certs._STAGE_COPY.items():
             if pres["pill_label"] in body_html:
                 seen_pills[label] = pres["pill_label"]
                 break
@@ -396,11 +413,72 @@ def main():
     missing = SENT[0] if SENT else {}
     mhtml = missing.get("html_body") or ""
     check("the missing-certificate email has HTML too", bool(mhtml))
-    check("it is labelled as needing a certificate", "Certificate Needed" in mhtml)
+    check("it is labelled as needing a certificate",
+          certs._STAGE_COPY["missing"]["pill_label"] in mhtml)
     check("it shows no certificate detail table, having none to show",
           bool(mhtml) and "Licence number" not in mhtml)
     check("and replies reach a person",
           missing.get("reply_to") == "providers@aquaai.uk", str(missing.get("reply_to")))
+
+    section("19. THE EMAILS STILL MATCH THE APPROVED PREVIEWS, WORD FOR WORD")
+    # The previews in tests/fixtures/approved_emails were signed off on
+    # 16 Oct 2026. Comparing the visible text against them is what stops a
+    # later edit quietly drifting from what was approved; a wording change is
+    # meant to update the fixture in the same commit, deliberately.
+    import html as htmlmod
+    import re as _re
+
+    def visible_text(markup: str):
+        body = _re.sub(r"<(script|style)[^>]*>.*?</\1>", "", markup, flags=_re.S)
+        body = _re.sub(r"<(p|td|div|tr|table|br)\b[^>]*/?>", "\n", body)
+        body = _re.sub(r"<[^>]+>", "", body)
+        return [l.strip() for l in htmlmod.unescape(body).split("\n") if l.strip()]
+
+    fixtures = pathlib.Path(__file__).resolve().parent / "fixtures" / "approved_emails"
+    sample_today = today
+    scenarios = [
+        ("1-no-certificate.html", None),
+        ("2-expiring-30d.html", dict(expiry_date=sample_today + timedelta(days=21),
+                                     awarded_date=sample_today - timedelta(days=700))),
+        ("3-expiring-7d.html", dict(expiry_date=sample_today + timedelta(days=5),
+                                    awarded_date=sample_today - timedelta(days=720))),
+        ("4-expired.html", dict(expiry_date=sample_today - timedelta(days=4),
+                                awarded_date=sample_today - timedelta(days=740))),
+        ("5-undated-1yr.html", dict(expiry_date=None,
+                                    awarded_date=sample_today - timedelta(days=400))),
+        ("6-undated-2yr.html", dict(expiry_date=None,
+                                    awarded_date=sample_today - timedelta(days=760))),
+        ("7-no-dates.html", dict(expiry_date=None, awarded_date=None)),
+    ]
+    with _override(EMAIL_LOGO_URL="", PROVIDER_EMAIL_REPLY_TO="support@aquaai.uk"):
+        for filename, cert_kw in scenarios:
+            ExternalBreederVerification.objects.all().delete()
+            ExternalBreederProfile.objects.all().delete()
+            ExternalUser.objects.all().delete()
+            u = ExternalUser.objects.create(
+                id=uuid.uuid4(), email="d@example.com", name="Daniel", is_active=True)
+            ExternalBreederProfile.objects.create(
+                id=uuid.uuid4(), user_id=u.id, company_name="Coral Cove Aquatics",
+                is_active=True, metadata={},
+                created_at=timezone.now() - timedelta(days=60))
+            if cert_kw is not None:
+                ExternalBreederVerification.objects.create(
+                    seller_id=u.id, licence_number="BR-2024-5512",
+                    issuing_authority="Kent County Council", status="approved", **cert_kw)
+            SENT.clear()
+            certs.run_certificate_checks()
+            if not SENT:
+                check(f"{filename} is produced at all", False, "no email sent")
+                continue
+            expected = visible_text((fixtures / filename).read_text())
+            actual = visible_text(SENT[0]["html_body"])
+            if expected == actual:
+                check(f"{filename} matches the approved preview", True)
+            else:
+                extra = [l for l in actual if l not in expected][:2]
+                missing = [l for l in expected if l not in actual][:2]
+                check(f"{filename} matches the approved preview", False,
+                      f"missing={missing} unexpected={extra}")
 
     print(f"\n{'=' * 74}\nRESULT: {len(PASS)} passed, {len(FAIL)} failed\n{'=' * 74}")
     for name in FAIL:
